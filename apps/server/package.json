@@ -1,0 +1,33 @@
+{
+  "name": "@farmrise/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authoritative game backend for FarmRise Tycoon: accounts, saves, market orders and the economy.",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "clean": "rm -rf .next dist-types .tsbuildinfo",
+    "db:migrate": "tsx scripts/migrate.ts up",
+    "db:rollback": "tsx scripts/migrate.ts down",
+    "db:seed": "tsx scripts/seed.ts",
+    "test": "vitest run --project server",
+    "predb:seed": "npm run build --workspace @farmrise/shared"
+  },
+  "dependencies": {
+    "@farmrise/shared": "*",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.2",
+    "jose": "^6.2.8",
+    "next": "^16.3.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "tsx": "^4.20.0"
+  }
+}

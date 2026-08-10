@@ -1,0 +1,68 @@
+{
+  "verifiedAt": "2026-08-10T16:36:27.962Z",
+  "thresholds": {
+    "minimumDurationSeconds": 240,
+    "maximumSampleJump": 0.05,
+    "maximumNearSilentRunMs": 5,
+    "minimumEdgeRmsDb": -60,
+    "maximumEndFadeDb": -18
+  },
+  "tracks": [
+    {
+      "file": "golden_harvest.mp3",
+      "decodedFrames": 11867834,
+      "durationSeconds": 247.24654166666667,
+      "sampleJump": 0.02132565528154373,
+      "startRmsDb": -18.864122989768997,
+      "endRmsDb": -22.177150837006106,
+      "endFadeDb": -1.4596745419757795,
+      "maximumNearSilentRunMs": 0,
+      "failures": []
+    },
+    {
+      "file": "market_day.mp3",
+      "decodedFrames": 11521152,
+      "durationSeconds": 240.024,
+      "sampleJump": 0.005592177622020245,
+      "startRmsDb": -21.75871342278588,
+      "endRmsDb": -27.320512905372283,
+      "endFadeDb": -3.3026576044998386,
+      "maximumNearSilentRunMs": 0,
+      "failures": []
+    },
+    {
+      "file": "quiet_outback.mp3",
+      "decodedFrames": 11520823,
+      "durationSeconds": 240.01714583333333,
+      "sampleJump": 0.015779588371515274,
+      "startRmsDb": -18.564035327787597,
+      "endRmsDb": -28.114547129187592,
+      "endFadeDb": -2.6595018120808653,
+      "maximumNearSilentRunMs": 0,
+      "failures": []
+    },
+    {
+      "file": "rain_on_tin.mp3",
+      "decodedFrames": 11924749,
+      "durationSeconds": 248.43227083333332,
+      "sampleJump": 0.002555079758167267,
+      "startRmsDb": -20.04614178647758,
+      "endRmsDb": -22.311726549523687,
+      "endFadeDb": -1.8514490998509032,
+      "maximumNearSilentRunMs": 0,
+      "failures": []
+    },
+    {
+      "file": "sunrise_rows.mp3",
+      "decodedFrames": 11521536,
+      "durationSeconds": 240.032,
+      "sampleJump": 0.0015516215935349464,
+      "startRmsDb": -16.611055095927327,
+      "endRmsDb": -23.190836219879415,
+      "endFadeDb": -1.80976873461195,
+      "maximumNearSilentRunMs": 0,
+      "failures": []
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,59 @@
+{
+  "name": "farmrise-tycoon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FarmRise Tycoon - a single-player farming and city-building sandbox built on Three.js with a server-authoritative Next.js backend.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "art:build": "blender --background --python tools/blender/build_assets.py",
+    "art:check": "python3 tools/blender/check_palette.py",
+    "art:review": "blender --background --python tools/blender/review_render.py",
+    "art:ui-icons": "blender --background art/source/farmrise_assets.blend --python tools/blender/render_ui_icons.py",
+    "art:test": "blender --background --python tools/blender/test_guards.py",
+    "audio:generate": "node tools/audio/generateAudio.mjs",
+    "audio:verify": "node tools/audio/verifyAudio.mjs",
+    "build": "npm run build --workspace @farmrise/shared && npm run build --workspace @farmrise/game && npm run build --workspace @farmrise/server",
+    "build:hosting": "npm run build",
+    "db:migrate": "npm run db:migrate --workspace @farmrise/server",
+    "db:rollback": "npm run db:rollback --workspace @farmrise/server",
+    "db:seed": "npm run db:seed --workspace @farmrise/server",
+    "dev": "npm-run-all --parallel dev:server dev:game",
+    "dev:game": "npm run dev --workspace @farmrise/game",
+    "dev:server": "npm run dev --workspace @farmrise/server",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run --project shared --project game --project server",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:watch": "vitest --project shared --project game --project server",
+    "start:hosting": "node tools/hosting/server.mjs",
+    "typecheck": "tsc --build --force",
+    "verify:glitch-artifacts": "node tools/hosting/validate-glitch-artifacts.mjs",
+    "verify": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.15.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^9.39.0",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import": "^2.32.0",
+    "globals": "^16.5.0",
+    "npm-run-all2": "^8.0.4",
+    "prettier": "^3.6.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^4.1.10"
+  }
+}

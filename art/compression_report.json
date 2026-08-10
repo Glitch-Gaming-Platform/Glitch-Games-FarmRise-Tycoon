@@ -1,0 +1,75 @@
+{
+  "rows": [
+    {
+      "family": "crops",
+      "raw": 422796,
+      "raw_gz": 99238,
+      "draco": 71072,
+      "draco_gz": 58447,
+      "meshopt": 159248,
+      "meshopt_gz": 69533
+    },
+    {
+      "family": "ground",
+      "raw": 19876,
+      "raw_gz": 2849,
+      "draco": 2600,
+      "draco_gz": 1892,
+      "meshopt": 7044,
+      "meshopt_gz": 1782
+    },
+    {
+      "family": "buildings",
+      "raw": 236316,
+      "raw_gz": 31317,
+      "draco": 27176,
+      "draco_gz": 22128,
+      "meshopt": 72848,
+      "meshopt_gz": 17778
+    },
+    {
+      "family": "characters",
+      "raw": 60840,
+      "raw_gz": 15740,
+      "draco": 10452,
+      "draco_gz": 9423,
+      "meshopt": 25008,
+      "meshopt_gz": 16062
+    },
+    {
+      "family": "animals",
+      "raw": 62188,
+      "raw_gz": 14494,
+      "draco": 11620,
+      "draco_gz": 9738,
+      "meshopt": 27968,
+      "meshopt_gz": 17232
+    },
+    {
+      "family": "props",
+      "raw": 97924,
+      "raw_gz": 19187,
+      "draco": 20156,
+      "draco_gz": 13397,
+      "meshopt": 46500,
+      "meshopt_gz": 20167
+    }
+  ],
+  "totals": {
+    "raw": 899940,
+    "raw_gz": 182825,
+    "draco": 143076,
+    "draco_gz": 115025,
+    "meshopt": 338616,
+    "meshopt_gz": 142554
+  },
+  "decoder_bytes": {
+    "draco": 230000,
+    "meshopt": 5000
+  },
+  "first_load": {
+    "raw glb + gzip (no decoder)": 182825,
+    "meshopt + gzip + decoder": 147554,
+    "draco + gzip + decoder": 345025
+  }
+}

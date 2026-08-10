@@ -1,0 +1,23 @@
+{
+  "name": "@farmrise/game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "FarmRise Tycoon browser client: a reusable Three.js engine layer plus the game-specific simulation on top of it.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --build && vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist .tsbuildinfo",
+    "test": "vitest run --project game"
+  },
+  "dependencies": {
+    "@farmrise/shared": "*",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@types/three": "^0.185.4",
+    "jsdom": "^30.0.1",
+    "vite": "^8.2.1"
+  }
+}

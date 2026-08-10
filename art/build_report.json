@@ -1,0 +1,272 @@
+{
+  "generated_at": "2026-08-10T15:29:30",
+  "blender": "5.2.0 LTS",
+  "duration_seconds": 0.92,
+  "palette_entries": 77,
+  "palette_contrast_failures": [],
+  "budgets": {
+    "crop": 900,
+    "building": 900,
+    "character": 2600,
+    "animal": 700,
+    "prop": 300
+  },
+  "assets": [
+    {
+      "name": "SM_crop_wheat_s1",
+      "asset": "crop_wheat_s1",
+      "triangles": 96,
+      "vertices": 120
+    },
+    {
+      "name": "SM_crop_wheat_s2",
+      "asset": "crop_wheat_s2",
+      "triangles": 192,
+      "vertices": 240
+    },
+    {
+      "name": "SM_crop_wheat_s3",
+      "asset": "crop_wheat_s3",
+      "triangles": 720,
+      "vertices": 648
+    },
+    {
+      "name": "SM_crop_wheat_s4",
+      "asset": "crop_wheat_s4",
+      "triangles": 720,
+      "vertices": 648
+    },
+    {
+      "name": "SM_crop_corn_s1",
+      "asset": "crop_corn_s1",
+      "triangles": 96,
+      "vertices": 120
+    },
+    {
+      "name": "SM_crop_corn_s2",
+      "asset": "crop_corn_s2",
+      "triangles": 288,
+      "vertices": 300
+    },
+    {
+      "name": "SM_crop_corn_s3",
+      "asset": "crop_corn_s3",
+      "triangles": 336,
+      "vertices": 360
+    },
+    {
+      "name": "SM_crop_corn_s4",
+      "asset": "crop_corn_s4",
+      "triangles": 684,
+      "vertices": 744
+    },
+    {
+      "name": "SM_crop_pumpkin_s1",
+      "asset": "crop_pumpkin_s1",
+      "triangles": 96,
+      "vertices": 90
+    },
+    {
+      "name": "SM_crop_pumpkin_s2",
+      "asset": "crop_pumpkin_s2",
+      "triangles": 456,
+      "vertices": 336
+    },
+    {
+      "name": "SM_crop_pumpkin_s3",
+      "asset": "crop_pumpkin_s3",
+      "triangles": 642,
+      "vertices": 429
+    },
+    {
+      "name": "SM_crop_pumpkin_s4",
+      "asset": "crop_pumpkin_s4",
+      "triangles": 642,
+      "vertices": 429
+    },
+    {
+      "name": "SM_ground_plot",
+      "asset": "ground_plot",
+      "triangles": 220,
+      "vertices": 120
+    },
+    {
+      "name": "SM_building_barn",
+      "asset": "building_barn",
+      "triangles": 880,
+      "vertices": 480
+    },
+    {
+      "name": "SM_building_irrigation",
+      "asset": "building_irrigation",
+      "triangles": 688,
+      "vertices": 366
+    },
+    {
+      "name": "SM_building_road",
+      "asset": "building_road",
+      "triangles": 108,
+      "vertices": 64
+    },
+    {
+      "name": "SM_building_fence",
+      "asset": "building_fence",
+      "triangles": 352,
+      "vertices": 192
+    },
+    {
+      "name": "SM_building_coop",
+      "asset": "building_coop",
+      "triangles": 748,
+      "vertices": 408
+    },
+    {
+      "name": "SM_char_farmer",
+      "asset": "char_farmer",
+      "triangles": 2438,
+      "vertices": 1341
+    },
+    {
+      "name": "SM_animal_chicken",
+      "asset": "animal_chicken",
+      "triangles": 508,
+      "vertices": 328
+    },
+    {
+      "name": "SM_animal_fox",
+      "asset": "animal_fox",
+      "triangles": 562,
+      "vertices": 321
+    },
+    {
+      "name": "SM_prop_rock",
+      "asset": "prop_rock",
+      "triangles": 66,
+      "vertices": 37
+    },
+    {
+      "name": "SM_prop_grass_tuft",
+      "asset": "prop_grass_tuft",
+      "triangles": 56,
+      "vertices": 70
+    },
+    {
+      "name": "SM_prop_bush",
+      "asset": "prop_bush",
+      "triangles": 114,
+      "vertices": 63
+    },
+    {
+      "name": "SM_prop_eucalyptus",
+      "asset": "prop_eucalyptus",
+      "triangles": 272,
+      "vertices": 162
+    },
+    {
+      "name": "SM_prop_eucalyptus_tall",
+      "asset": "prop_eucalyptus_tall",
+      "triangles": 212,
+      "vertices": 126
+    },
+    {
+      "name": "SM_prop_dead_tree",
+      "asset": "prop_dead_tree",
+      "triangles": 100,
+      "vertices": 62
+    },
+    {
+      "name": "SM_prop_rock_cluster",
+      "asset": "prop_rock_cluster",
+      "triangles": 96,
+      "vertices": 56
+    },
+    {
+      "name": "SM_prop_wildflowers",
+      "asset": "prop_wildflowers",
+      "triangles": 210,
+      "vertices": 155
+    },
+    {
+      "name": "SM_prop_scrub_patch",
+      "asset": "prop_scrub_patch",
+      "triangles": 27,
+      "vertices": 30
+    },
+    {
+      "name": "SM_prop_water_trough",
+      "asset": "prop_water_trough",
+      "triangles": 220,
+      "vertices": 120
+    },
+    {
+      "name": "SM_tool_watering_can",
+      "asset": "tool_watering_can",
+      "triangles": 204,
+      "vertices": 122
+    },
+    {
+      "name": "SM_tool_sickle",
+      "asset": "tool_sickle",
+      "triangles": 112,
+      "vertices": 64
+    },
+    {
+      "name": "SM_tool_trowel",
+      "asset": "tool_trowel",
+      "triangles": 80,
+      "vertices": 48
+    }
+  ],
+  "total_triangles": 13241,
+  "family_bytes": {
+    "crops": {
+      "raw": 424668,
+      "raw_gzip": 128926,
+      "draco": 102568,
+      "draco_gzip": 89140,
+      "meshopt": 204036,
+      "meshopt_gzip": 112785
+    },
+    "ground": {
+      "raw": 19876,
+      "raw_gzip": 3182,
+      "draco": 3936,
+      "draco_gzip": 3160,
+      "meshopt": 9156,
+      "meshopt_gzip": 2881
+    },
+    "buildings": {
+      "raw": 236316,
+      "raw_gzip": 38774,
+      "draco": 41388,
+      "draco_gzip": 36023,
+      "meshopt": 95328,
+      "meshopt_gzip": 31814
+    },
+    "characters": {
+      "raw": 130680,
+      "raw_gzip": 34814,
+      "draco": 26856,
+      "draco_gzip": 24785,
+      "meshopt": 58484,
+      "meshopt_gzip": 38967
+    },
+    "animals": {
+      "raw": 69052,
+      "raw_gzip": 19097,
+      "draco": 16828,
+      "draco_gzip": 14768,
+      "meshopt": 35040,
+      "meshopt_gzip": 23547
+    },
+    "props": {
+      "raw": 146336,
+      "raw_gzip": 33814,
+      "draco": 39232,
+      "draco_gzip": 29351,
+      "meshopt": 79212,
+      "meshopt_gzip": 38713
+    }
+  },
+  "blend": "art/source/farmrise_assets.blend"
+}

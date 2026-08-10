@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist-types",
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM", "DOM.Iterable", "WebWorker"],
+    "types": ["vite/client", "node"],
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "paths": {
+      "@engine/*": ["./src/engine/*"],
+      "@game/*": ["./src/game/*"],
+      "@assets/*": ["./src/assets/*"],
+      "@analytics/*": ["./src/analytics/*"],
+      "@platform/*": ["./src/platform/*"],
+      "@net/*": ["./src/net/*"],
+      "@ui/*": ["./src/ui/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "vite.config.ts"],
+  "references": [{ "path": "../../packages/shared" }]
+}

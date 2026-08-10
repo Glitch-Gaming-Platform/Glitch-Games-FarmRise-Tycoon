@@ -1,0 +1,30 @@
+FROM node:24-bookworm-slim AS build
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install --yes --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+COPY apps/game/package.json apps/game/package.json
+COPY apps/server/package.json apps/server/package.json
+COPY packages/shared/package.json packages/shared/package.json
+RUN npm ci
+
+COPY . .
+RUN npm run build:hosting
+
+FROM node:24-bookworm-slim AS runtime
+
+WORKDIR /app
+
+COPY --from=build /app /app
+
+ENV NODE_ENV=production
+ENV HOST=0.0.0.0
+ENV PORT=8787
+
+EXPOSE 8787
+
+CMD ["npm", "run", "start:hosting"]

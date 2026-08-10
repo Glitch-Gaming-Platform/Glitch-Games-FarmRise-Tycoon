@@ -1,0 +1,44 @@
+{
+  "name": "@farmrise/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Contract package: wire schemas, domain definitions and the pure simulation rules that both the client and the authoritative server must agree on.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol/index.d.ts",
+      "import": "./dist/protocol/index.js",
+      "default": "./dist/protocol/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas/index.d.ts",
+      "import": "./dist/schemas/index.js",
+      "default": "./dist/schemas/index.js"
+    },
+    "./domain": {
+      "types": "./dist/domain/index.d.ts",
+      "import": "./dist/domain/index.js",
+      "default": "./dist/domain/index.js"
+    },
+    "./rules": {
+      "types": "./dist/rules/index.d.ts",
+      "import": "./dist/rules/index.js",
+      "default": "./dist/rules/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "test": "vitest run --project shared"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  }
+}

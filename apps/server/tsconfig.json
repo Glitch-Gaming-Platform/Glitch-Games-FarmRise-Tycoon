@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist-types",
+    "rootDir": ".",
+    "lib": ["ES2022", "DOM"],
+    "jsx": "preserve",
+    "types": ["node"],
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "allowJs": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@app/*": ["./app/*"]
+    },
+    "plugins": [{ "name": "next" }]
+  },
+  "include": [
+    "src/**/*.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "scripts/**/*.ts",
+    "tests/**/*.ts",
+    "next-env.d.ts"
+  ],
+  "exclude": ["node_modules", ".next"],
+  "references": [{ "path": "../../packages/shared" }]
+}

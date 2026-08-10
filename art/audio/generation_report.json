@@ -1,0 +1,429 @@
+{
+  "generatedAt": "2026-08-10T16:33:21.897Z",
+  "models": {
+    "soundEffects": "eleven_text_to_sound_v2",
+    "music": "music_v2"
+  },
+  "delivery": {
+    "soundEffects": "MP3, mono, 44.1 kHz, 96 kbps",
+    "music": "MP3, stereo, 48 kHz, 128 kbps, tempo-aligned four-bar circular crossfade"
+  },
+  "soundEffects": [
+    {
+      "id": "ui.click",
+      "file": "apps/game/public/assets/audio/sfx/ui_click.mp3",
+      "prompt": "One isolated soft muted wooden UI tick, very short and low velocity, dry close recording, rounded transient, no tail, no reverb, no music, no speech, silence otherwise.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.5,
+        "promptInfluence": 0.72,
+        "requestId": null
+      },
+      "bytes": 2866,
+      "durationSeconds": 0.18
+    },
+    {
+      "id": "ui.confirm",
+      "file": "apps/game/public/assets/audio/sfx/ui_confirm.mp3",
+      "prompt": "One isolated warm two-note rising confirmation chime on small wooden marimba bars, gentle and rustic, soft attack, dry, no reverb, no music bed, no speech.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.7,
+        "promptInfluence": 0.68,
+        "requestId": null
+      },
+      "bytes": 8508,
+      "durationSeconds": 0.65
+    },
+    {
+      "id": "ui.deny",
+      "file": "apps/game/public/assets/audio/sfx/ui_deny.mp3",
+      "prompt": "One isolated low soft wooden thud with a slight downward pitch bend, discouraging but friendly and never harsh, dry, no buzzer, no reverb, no music, no speech.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.6,
+        "promptInfluence": 0.72,
+        "requestId": null
+      },
+      "bytes": 6941,
+      "durationSeconds": 0.5
+    },
+    {
+      "id": "ui.open",
+      "file": "apps/game/public/assets/audio/sfx/ui_open.mp3",
+      "prompt": "One isolated light canvas satchel flap and paper rustle opening, short and airy, tactile rustic interface sound, dry close recording, no reverb, no music, no speech.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.7,
+        "promptInfluence": 0.66,
+        "requestId": null
+      },
+      "bytes": 8508,
+      "durationSeconds": 0.65
+    },
+    {
+      "id": "farm.plant",
+      "file": "apps/game/public/assets/audio/sfx/farm_plant.mp3",
+      "prompt": "A farmer hand presses one seed into loose slightly damp soil: a soft granular earth crunch with a tiny low palm thump, close and tactile, dry outdoor Foley, no footsteps, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.8,
+        "promptInfluence": 0.7,
+        "requestId": null
+      },
+      "bytes": 9762,
+      "durationSeconds": 0.75
+    },
+    {
+      "id": "farm.tend",
+      "file": "apps/game/public/assets/audio/sfx/farm_tend.mp3",
+      "prompt": "One short pour from a metal watering can over broad crop leaves, wet hiss and light droplet patter tail, close dry farm Foley, gentle, no river ambience, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1,
+        "promptInfluence": 0.68,
+        "requestId": null
+      },
+      "bytes": 12270,
+      "durationSeconds": 0.95
+    },
+    {
+      "id": "farm.harvest",
+      "file": "apps/game/public/assets/audio/sfx/farm_harvest.mp3",
+      "prompt": "Harvesting one ripe crop by hand: crisp stalk snap, brief leafy rustle, then a small satisfied wooden basket knock, close dry farm Foley, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.2,
+        "promptInfluence": 0.7,
+        "requestId": null
+      },
+      "bytes": 14151,
+      "durationSeconds": 1.1
+    },
+    {
+      "id": "farm.footstep",
+      "file": "apps/game/public/assets/audio/sfx/farm_footstep.mp3",
+      "prompt": "Exactly one soft leather work boot step on dry packed red earth, dusty compact impact, no second step, no gravel scatter, no reverb, no ambience, no music, no speech.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.5,
+        "promptInfluence": 0.76,
+        "requestId": null
+      },
+      "bytes": 5060,
+      "durationSeconds": 0.35
+    },
+    {
+      "id": "farm.build_place",
+      "file": "apps/game/public/assets/audio/sfx/farm_build_place.mp3",
+      "prompt": "One timber fence post dropped firmly into an earth socket, solid low wooden thunk followed by one short settling knock, dry close farm Foley, no construction ambience, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.8,
+        "promptInfluence": 0.72,
+        "requestId": null
+      },
+      "bytes": 9135,
+      "durationSeconds": 0.7
+    },
+    {
+      "id": "farm.build_complete",
+      "file": "apps/game/public/assets/audio/sfx/farm_build_complete.mp3",
+      "prompt": "Three quick hand-hammer strikes on timber followed by a warm two-note rising wooden marimba chime, modest rustic accomplishment, dry and compact, no fanfare, no voice, no background music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.7,
+        "requestId": null
+      },
+      "bytes": 18853,
+      "durationSeconds": 1.5
+    },
+    {
+      "id": "market.sell",
+      "file": "apps/game/public/assets/audio/sfx/market_sell.mp3",
+      "prompt": "A few small metal coins dropped into a wooden farmstand bowl, bright warm clinks with a short wood resonance, isolated dry Foley, modest payout, no cash register, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1,
+        "promptInfluence": 0.7,
+        "requestId": null
+      },
+      "bytes": 12270,
+      "durationSeconds": 0.95
+    },
+    {
+      "id": "market.contract",
+      "file": "apps/game/public/assets/audio/sfx/market_contract.mp3",
+      "prompt": "Several coins land in a wooden bowl, then one firm paper contract stamp thump, heavier and more official than a small sale, isolated dry farmstand Foley, no cash register, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.4,
+        "promptInfluence": 0.72,
+        "requestId": null
+      },
+      "bytes": 16345,
+      "durationSeconds": 1.3
+    },
+    {
+      "id": "market.big_payout",
+      "file": "apps/game/public/assets/audio/sfx/market_big_payout.mp3",
+      "prompt": "A generous handful of small coins cascades into a wooden bowl with a subtle warm low bell underneath, rewarding but not casino-like, isolated dry Foley, no cash register, no voice, no music bed.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.8,
+        "promptInfluence": 0.68,
+        "requestId": null
+      },
+      "bytes": 21360,
+      "durationSeconds": 1.7
+    },
+    {
+      "id": "event.warning",
+      "file": "apps/game/public/assets/audio/sfx/event_warning.mp3",
+      "prompt": "Two slow distant low wooden wind-chime knocks outdoors with a faint hollow resonance, uneasy and unmistakable but not frightening, plenty of space between strikes, no melody, no voice, no storm ambience.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.9,
+        "promptInfluence": 0.74,
+        "requestId": null
+      },
+      "bytes": 22301,
+      "durationSeconds": 1.8
+    },
+    {
+      "id": "event.impact",
+      "file": "apps/game/public/assets/audio/sfx/event_impact.mp3",
+      "prompt": "A sudden dry outback wind gust passes over crops with a restrained low earth rumble, something has gone wrong outdoors, serious but not cinematic, no thunder crack, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 2.1,
+        "promptInfluence": 0.68,
+        "requestId": null
+      },
+      "bytes": 24809,
+      "durationSeconds": 1.986871
+    },
+    {
+      "id": "event.prevented",
+      "file": "apps/game/public/assets/audio/sfx/event_prevented.mp3",
+      "prompt": "A solid wooden gate latch closes securely, followed by a short reassuring low two-note wooden chime, safe and resolved, isolated dry Foley, no voice, no music bed.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.3,
+        "promptInfluence": 0.72,
+        "requestId": null
+      },
+      "bytes": 15091,
+      "durationSeconds": 1.2
+    },
+    {
+      "id": "animal.fox_alert",
+      "file": "apps/game/public/assets/audio/sfx/animal_fox_alert.mp3",
+      "prompt": "One short sharp red fox bark from medium distance, thin urgent slightly panicked call, isolated outdoors with almost no ambience, no growl sequence, no other animals, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.8,
+        "promptInfluence": 0.78,
+        "requestId": null
+      },
+      "bytes": 9762,
+      "durationSeconds": 0.75
+    },
+    {
+      "id": "animal.fox_flee",
+      "file": "apps/game/public/assets/audio/sfx/animal_fox_flee.mp3",
+      "prompt": "A startled fox gives one quick receding yelp while dry grass and scrub rustle as it bolts away, brief and relieving rather than alarming, no other animals, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1,
+        "promptInfluence": 0.72,
+        "requestId": null
+      },
+      "bytes": 12270,
+      "durationSeconds": 0.95
+    },
+    {
+      "id": "animal.chicken",
+      "file": "apps/game/public/assets/audio/sfx/animal_chicken.mp3",
+      "prompt": "One soft contented hen cluck at close range, dry and friendly, no rooster, no flock chorus, no barn ambience, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.8,
+        "promptInfluence": 0.76,
+        "requestId": null
+      },
+      "bytes": 9762,
+      "durationSeconds": 0.746757
+    },
+    {
+      "id": "animal.raid_loss",
+      "file": "apps/game/public/assets/audio/sfx/animal_raid_loss.mp3",
+      "prompt": "A brief startled chicken wing flutter and two distressed clucks scattering away, gentle game loss cue without injury sounds, dry farm Foley, no predator growl, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.4,
+        "promptInfluence": 0.7,
+        "requestId": null
+      },
+      "bytes": 16345,
+      "durationSeconds": 1.3
+    },
+    {
+      "id": "goal.land_purchased",
+      "file": "apps/game/public/assets/audio/sfx/goal_land_purchased.mp3",
+      "prompt": "A warm ascending four-note phrase played by wooden marimba and soft acoustic strings, ending with one low bell, earned and expansive rustic achievement, no orchestra, no voice, no background music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 2.4,
+        "promptInfluence": 0.66,
+        "requestId": null
+      },
+      "bytes": 28570,
+      "durationSeconds": 2.3
+    },
+    {
+      "id": "run.success",
+      "file": "apps/game/public/assets/audio/sfx/run_success.mp3",
+      "prompt": "A compact bright major success sting on acoustic guitar, wooden percussion and soft fiddle, warm rustic farm character, about two seconds, celebratory without sounding epic, no voice, no ongoing music bed.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 2.6,
+        "promptInfluence": 0.64,
+        "requestId": null
+      },
+      "bytes": 30765,
+      "durationSeconds": 2.5
+    },
+    {
+      "id": "run.fail",
+      "file": "apps/game/public/assets/audio/sfx/run_fail.mp3",
+      "prompt": "A short slow descending minor phrase on muted wooden marimba and soft cello, gentle sympathetic setback cue, never mocking or ominous, no voice, no ongoing music bed.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 2.3,
+        "promptInfluence": 0.66,
+        "requestId": null
+      },
+      "bytes": 27316,
+      "durationSeconds": 2.2
+    }
+  ],
+  "music": [
+    {
+      "id": "music.sunrise_rows",
+      "title": "Sunrise Rows",
+      "file": "apps/game/public/assets/audio/music/sunrise_rows.mp3",
+      "prompt": "Long-form instrumental background music for a warm stylized low-poly farming game. Continuous cyclical underscore in 4/4 with clear four-bar phrases and a steady unhurried pulse. No vocals, no spoken words, no sound effects, no dramatic hits, no cinematic trailer build, and no large arrangement changes. Begin immediately inside the established groove with no intro. Sustain subtle variation without building to a climax. Finish on the same tonic harmony, pulse, instrumentation, and texture as the opening, with no outro, final cadence, ritardando, held ending note, or fade-out, so a four-bar circular crossfade returns naturally to the opening. Keep the midrange clear for UI and warning sounds. Strict 60 BPM in C major. Fingerpicked acoustic guitar, soft wooden marimba, upright bass, and very light brushed hand percussion. Optimistic early-morning mood, simple memorable pentatonic motif, sparse arrangement.",
+      "request": {
+        "modelId": "music_v2",
+        "requestedSourceMilliseconds": 256000,
+        "requestedSourceBars": 64,
+        "bpm": 60,
+        "forceInstrumental": true,
+        "songId": "Y0FVxWtfjjghRix4xbzx",
+        "requestId": null
+      },
+      "deliveredBars": 60,
+      "crossfadeSeconds": 16,
+      "crossfadeBars": 4,
+      "loopRotationSeconds": 120,
+      "loopRotationBars": 30,
+      "bytes": 3841581,
+      "durationSeconds": 240.032,
+      "seamDelta": 0.0015516215935349464
+    },
+    {
+      "id": "music.market_day",
+      "title": "Market Day",
+      "file": "apps/game/public/assets/audio/music/market_day.mp3",
+      "prompt": "Long-form instrumental background music for a warm stylized low-poly farming game. Continuous cyclical underscore in 4/4 with clear four-bar phrases and a steady unhurried pulse. No vocals, no spoken words, no sound effects, no dramatic hits, no cinematic trailer build, and no large arrangement changes. Begin immediately inside the established groove with no intro. Sustain subtle variation without building to a climax. Finish on the same tonic harmony, pulse, instrumentation, and texture as the opening, with no outro, final cadence, ritardando, held ending note, or fade-out, so a four-bar circular crossfade returns naturally to the opening. Keep the midrange clear for UI and warning sounds. Strict 64 BPM in D major. Gentle mandolin, muted acoustic guitar, pizzicato upright bass, and restrained shaker. Friendly productive daytime mood, playful but never busy, no bluegrass virtuosity.",
+      "request": {
+        "modelId": "music_v2",
+        "requestedSourceMilliseconds": 255000,
+        "requestedSourceBars": 68,
+        "bpm": 64,
+        "forceInstrumental": true,
+        "songId": "ozrCH15rYlREgdDnymDm",
+        "requestId": null
+      },
+      "deliveredBars": 64,
+      "crossfadeSeconds": 15,
+      "crossfadeBars": 4,
+      "loopRotationSeconds": 120,
+      "loopRotationBars": 32,
+      "bytes": 3841197,
+      "durationSeconds": 240.024,
+      "seamDelta": 0.005592177622020245
+    },
+    {
+      "id": "music.rain_on_tin",
+      "title": "Rain on Tin",
+      "file": "apps/game/public/assets/audio/music/rain_on_tin.mp3",
+      "prompt": "Long-form instrumental background music for a warm stylized low-poly farming game. Continuous cyclical underscore in 4/4 with clear four-bar phrases and a steady unhurried pulse. No vocals, no spoken words, no sound effects, no dramatic hits, no cinematic trailer build, and no large arrangement changes. Begin immediately inside the established groove with no intro. Sustain subtle variation without building to a climax. Finish on the same tonic harmony, pulse, instrumentation, and texture as the opening, with no outro, final cadence, ritardando, held ending note, or fade-out, so a four-bar circular crossfade returns naturally to the opening. Keep the midrange clear for UI and warning sounds. Strict 58 BPM in G major with a touch of E minor warmth. Nylon-string guitar, soft accordion breaths, bowed fiddle harmonics, and low upright bass. Reflective sheltered afternoon mood, calm and comforting, no literal rain audio.",
+      "request": {
+        "modelId": "music_v2",
+        "requestedSourceMilliseconds": 264828,
+        "requestedSourceBars": 64,
+        "bpm": 58,
+        "forceInstrumental": true,
+        "songId": "VkGJ0gAJCSGWYt9VPRqC",
+        "requestId": null
+      },
+      "deliveredBars": 60,
+      "crossfadeSeconds": 16.551724137931036,
+      "crossfadeBars": 4,
+      "loopRotationSeconds": 124.13793103448276,
+      "loopRotationBars": 30,
+      "bytes": 3975981,
+      "durationSeconds": 248.432271,
+      "seamDelta": 0.002555079758167267
+    },
+    {
+      "id": "music.golden_harvest",
+      "title": "Golden Harvest",
+      "file": "apps/game/public/assets/audio/music/golden_harvest.mp3",
+      "prompt": "Long-form instrumental background music for a warm stylized low-poly farming game. Continuous cyclical underscore in 4/4 with clear four-bar phrases and a steady unhurried pulse. No vocals, no spoken words, no sound effects, no dramatic hits, no cinematic trailer build, and no large arrangement changes. Begin immediately inside the established groove with no intro. Sustain subtle variation without building to a climax. Finish on the same tonic harmony, pulse, instrumentation, and texture as the opening, with no outro, final cadence, ritardando, held ending note, or fade-out, so a four-bar circular crossfade returns naturally to the opening. Keep the midrange clear for UI and warning sounds. Strict 66 BPM in A major. Dulcimer or muted banjo plucks, acoustic guitar, cello pizzicato, and small wooden hand percussion. Satisfied harvest-time warmth, gently buoyant, rustic rather than country-pop.",
+      "request": {
+        "modelId": "music_v2",
+        "requestedSourceMilliseconds": 261818,
+        "requestedSourceBars": 72,
+        "bpm": 66,
+        "forceInstrumental": true,
+        "songId": "bsMox5TVSUbGbfJc3O4a",
+        "requestId": null
+      },
+      "deliveredBars": 68,
+      "crossfadeSeconds": 14.545454545454545,
+      "crossfadeBars": 4,
+      "loopRotationSeconds": 123.63636363636363,
+      "loopRotationBars": 34,
+      "bytes": 3956781,
+      "durationSeconds": 247.246542,
+      "seamDelta": 0.02132565528154373
+    },
+    {
+      "id": "music.quiet_outback",
+      "title": "Quiet Outback",
+      "file": "apps/game/public/assets/audio/music/quiet_outback.mp3",
+      "prompt": "Long-form instrumental background music for a warm stylized low-poly farming game. Continuous cyclical underscore in 4/4 with clear four-bar phrases and a steady unhurried pulse. No vocals, no spoken words, no sound effects, no dramatic hits, no cinematic trailer build, and no large arrangement changes. Begin immediately inside the established groove with no intro. Sustain subtle variation without building to a climax. Finish on the same tonic harmony, pulse, instrumentation, and texture as the opening, with no outro, final cadence, ritardando, held ending note, or fade-out, so a four-bar circular crossfade returns naturally to the opening. Keep the midrange clear for UI and warning sounds. Strict 56 BPM in F major. Sparse fingerpicked guitar, soft viola, wooden flute used very lightly, and a warm low drone. Wide peaceful evening feeling, contemplative and comfortable for long play sessions, no ambient wind audio.",
+      "request": {
+        "modelId": "music_v2",
+        "requestedSourceMilliseconds": 257143,
+        "requestedSourceBars": 60,
+        "bpm": 56,
+        "forceInstrumental": true,
+        "songId": "Xvkg1PkxmfpweRUZrOlq",
+        "requestId": null
+      },
+      "deliveredBars": 56,
+      "crossfadeSeconds": 17.142857142857142,
+      "crossfadeBars": 4,
+      "loopRotationSeconds": 120,
+      "loopRotationBars": 28,
+      "bytes": 3841197,
+      "durationSeconds": 240.017146,
+      "seamDelta": 0.015779588371515274
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "generated_at": "2026-08-10T14:59:55",
+  "blender": "5.2.0 LTS",
+  "duration_seconds": 11.38,
+  "icons": [
+    {
+      "file": "hero-farm.webp",
+      "bytes": 11080
+    },
+    {
+      "file": "farmer.webp",
+      "bytes": 4330
+    },
+    {
+      "file": "settings.webp",
+      "bytes": 4424
+    },
+    {
+      "file": "market.webp",
+      "bytes": 5804
+    },
+    {
+      "file": "contract.webp",
+      "bytes": 4060
+    },
+    {
+      "file": "wheat.webp",
+      "bytes": 9128
+    },
+    {
+      "file": "corn.webp",
+      "bytes": 8348
+    },
+    {
+      "file": "pumpkin.webp",
+      "bytes": 2780
+    },
+    {
+      "file": "eggs.webp",
+      "bytes": 2532
+    },
+    {
+      "file": "barn.webp",
+      "bytes": 3038
+    },
+    {
+      "file": "irrigation.webp",
+      "bytes": 3210
+    },
+    {
+      "file": "road.webp",
+      "bytes": 1656
+    },
+    {
+      "file": "fence.webp",
+      "bytes": 3280
+    },
+    {
+      "file": "chicken.webp",
+      "bytes": 3384
+    },
+    {
+      "file": "land.webp",
+      "bytes": 3120
+    },
+    {
+      "file": "warning.webp",
+      "bytes": 2828
+    },
+    {
+      "file": "watering.webp",
+      "bytes": 3068
+    },
+    {
+      "file": "harvest.webp",
+      "bytes": 2598
+    },
+    {
+      "file": "tools.webp",
+      "bytes": 3482
+    }
+  ],
+  "total_bytes": 82150
+}
