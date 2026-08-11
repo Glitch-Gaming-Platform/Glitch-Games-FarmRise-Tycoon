@@ -22,8 +22,8 @@ no prompts, no goal, and no way to sell anything or spend money. Measured from t
   Nothing is watched, and there is no cutscene.
 - **Taught by doing.** Every beat completes when the player performs the *real* command in the *real*
   game. There is no tutorial level and no sandbox.
-- **One concept at a time**, then combined: move → plant → tend → harvest → haul → sell → reinvest,
-  with egg collection shown when the starter hens' first clutch is ready.
+- **One concept at a time**, then combined: move → plant → tend → harvest → haul → sell → reinvest →
+  collect eggs → buy the three-bed Starter Extension.
 - **Never punished for the untaught.** Random incidents are paused during onboarding. After the
   egg lesson, one minor fox warning is scheduled so the response mechanic is taught against a real,
   actionable event before ordinary incident scheduling begins.
@@ -44,13 +44,15 @@ no prompts, no goal, and no way to sell anything or spend money. Measured from t
 | 5 | `haul` | "Carry it home — Carry the crop to the shelter. When Put down appears, press E to store it." | Any goods deposited into storage | storage |
 | 6 | `sell` | "Turn crops into money — Press M or click Market, then choose Sell all beside the crop you stored." | Any sale made | — |
 | 7 | `reinvest` | "Spend it on the farm — Press B or click Build, then buy a hen or place a building on open ground." | Any building placed or hen bought | objective |
-| 8 | `eggs` | "Collect the eggs — Hens need stored corn to lay eggs. Walk to the basket and press E when Pick up Eggs appears." | Eggs picked up from the shelter stack | — |
-| 9 | `setback` | "Something is coming — Pay to prevent it, or take the hit." | Warning resolves | warning |
-| 10 | `goal` | "The field next door — Keep growing and selling. At $75, press B or click Build to buy the neighbouring parcel." | Immediately; it is a hand-off | objective |
+| 8 | `eggs` | "Collect the eggs — This first clutch is fed. Hens need stored corn later. Walk to the basket and press E at Pick up Eggs." | Eggs picked up from the shelter stack | — |
+| 9 | `expand` | "Open three more beds — Press B, then buy the $20 Starter Extension. Its gate opens three new crop beds nearby." | Starter Extension owned | objective |
+| 10 | `setback` | "Something is coming — Pay to prevent it, or take the hit." | Warning resolves | warning |
+| 11 | `goal` | "The North Field is next — Keep growing and selling. At $75, press B or click Build to buy the larger North Field." | Immediately; it is a hand-off | objective |
 
 `eggs` pauses animal production until that lesson is current, then lets the starter hens finish the
-clutch already near completion. The starter store carries enough corn for the original hens plus the
-hen suggested by the reinvestment lesson. Feed must be in collected storage: corn left in a field
+clutch already near completion. That first clutch is treated as already fed so a resumed career,
+an older save or an accidentally sold starter feed stack cannot deadlock onboarding. Every later
+cycle consumes one stored corn per hen. Feed must be in collected storage: corn left in a field
 pile or carried in the player's hands is not available to the hens. A camera-facing **Pick up Eggs ·
 E / Work** badge sits over a reserved, walkable basket tile beside the shelter; buildings and crop
 beds cannot cover it. The basket is not market inventory until the player physically collects it.
@@ -60,7 +62,10 @@ been deposited. Tutorial eggs cannot spoil away while onboarding is active.
 The same rule applies to later livestock. Cows consume stored clover and leave collectible milk;
 each livestock row states its feed amount, production time and output before purchase. A hunger
 warning names the missing feed and the product that has stopped. Once the player collects the first
-eggs, the session schedules a real minor fox warning and shows `setback`. The beat resolves against
+eggs, onboarding asks them to buy the $20 Starter Extension. Its three beds sit in the reserved strip
+between the original six beds and North Field, so no existing structure can cover them. The Build
+panel lists Starter Extension immediately above the locked North Field row. Once the extension is
+owned, the session schedules a real minor fox warning and shows `setback`. The beat resolves against
 that live incident; it is never resurrected after onboarding has completed or been skipped. See ADR
 0013.
 
@@ -85,7 +90,8 @@ sentence and length budgets to both variants.
 | 40–55 s | Coach: *"Carry it home"* | Walks to the shelter and presses `E`/Work at **Put down** | Load leaves the carrier, storage increases, `goods_hauled` fires |
 | 55–75 s | Coach names the exact Market and Build actions | Opens **Market**, chooses **Sell all**, then opens **Build** | Money updates; an affordable purchase or placed building advances the tutorial immediately |
 | 60–90 s | A visible egg basket appears in front of the shelter | Walks to it and presses `E`/Work at **Pick up Eggs** | Basket empties into the active carrier; the egg beat completes |
-| 75–105 s | A minor fox warning and countdown appear | Presses `F`/Protect or accepts the warned consequence | The real incident resolves, then the goal hand-off completes onboarding |
+| 75–100 s | Starter Extension appears above North Field in Build | Buys the $20 parcel | Gate opens; exactly three nearby crop beds appear |
+| 90–120 s | A minor fox warning and countdown appear | Presses `F`/Protect or accepts the warned consequence | The real incident resolves, then the North Field goal hand-off completes onboarding |
 
 Only the first crop watered while the `tend` beat is active receives the approximately
 three-simulation-second onboarding boost.
@@ -98,7 +104,7 @@ seconds, the hint points directly at the gold/orange colour and the Harvest prom
 | --- | --- | --- |
 | Learn | 0–2 min | Beats 1–5. First harvest is physically carried home. |
 | Earn | 2–3 min | Beat 6. Market opens; spot vs contract is presented with the premium shown. |
-| Choose | 3–4 min | Beat 7. Reinvestment options and the goal are priced and visible. |
+| Choose | 3–4 min | Beats 7–9. Buy livestock, collect eggs, then open the three-bed Starter Extension. |
 | Run | 4–10 min | Free loop. Random incidents begin only after the taught fox warning is resolved. |
 | Resolve | 3–6 min | Parcel bought, or the run ends broke. Depends on crop choice and travel time. |
 
@@ -116,10 +122,11 @@ seconds, the hint points directly at the gold/orange colour and the Harvest prom
 | Selling | hauling | Coach + `M` / Market shortcut | Panel is non-blocking; nothing is forced | Every cycle | A sale | "Press M or click Market. Contracts pay more than spot." |
 | Contracts vs spot | selling | Premium shown as a % next to each | Spot is always available as the safe option | Every market visit | Fulfils a contract | — |
 | Reinvestment | a sale | Coach + `B` / Build shortcut; all options priced | Nothing is irreversible except spending | Every surplus | A purchase | "Press B or click Build. A barn holds more; irrigation loses less." |
-| Egg collection | starter hens finish a cycle | Visible basket + contextual **Pick up Eggs** prompt | Starter feed guarantees the first clutch | Every later animal cycle | Eggs enter the active carrier | Walk in front of the shelter and use `E`/Work. |
+| Egg collection | starter hens finish a cycle | Visible basket + contextual **Pick up Eggs** prompt | The first clutch is already fed; later cycles require stored corn | Every later animal cycle | Eggs enter the active carrier | Walk in front of the shelter and use `E`/Work. |
+| Starter expansion | egg collection | Build panel shows Starter Extension above North Field | Costs $20 and adds exactly three nearby beds | North Field remains visible as the next $75 goal | Starter Extension owned | Open Build and choose Starter Extension. |
 | Building placement | reinvestment | Ghost preview, green/red | Esc or **Cancel** exits; no cost until confirmed | Each build | A placed building | Desktop says click/Esc; mobile says tap/Cancel. |
-| Warned events | egg collection | A deterministic minor fox warning with a real countdown | Random incidents stay paused until the lesson resolves | Every later event | Uses `F`/Protect, or accepts the hit | Doing nothing remains valid. |
-| The goal | a sale | Objective meter + the panel's last row | Purely additive | Meter fills constantly | Buys the parcel | Meter shows % saved |
+| Warned events | starter expansion | A deterministic minor fox warning with a real countdown | Random incidents stay paused until the lesson resolves | Every later event | Uses `F`/Protect, or accepts the hit | Doing nothing remains valid. |
+| The goal | starter expansion | Objective meter + the North Field row | Purely additive | Meter fills constantly | Buys North Field | Meter shows % saved |
 
 ## Rules the implementation enforces
 

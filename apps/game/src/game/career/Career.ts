@@ -21,6 +21,7 @@ import {
   createRng,
   decayProsperity,
   interestForTicks,
+  normalizeEstateLayout,
   premiumForTicks,
   seasonAt,
   seasonsBetween,
@@ -28,6 +29,7 @@ import {
   townStageFor,
   type BuyerId,
   type BuyerRelationship,
+  type AnimalSpecies,
   type CalendarDate,
   type CareerSaveState,
   type CareerStage,
@@ -87,10 +89,12 @@ export class Career {
 
   /** Builds a career and its active site from a validated save document. */
   static fromSaveState(state: CareerSaveState): Career {
-    const site = state.sites.find((entry) => entry.id === state.activeSiteId) ?? state.sites[0];
+    const normalized = normalizeEstateLayout(state).state;
+    const site =
+      normalized.sites.find((entry) => entry.id === normalized.activeSiteId) ?? normalized.sites[0];
     if (!site) throw new Error('A career save must contain at least one site.');
     const level = getLevel(site.levelId) ?? STARTER_FARM;
-    return new Career(state, FarmWorld.fromSaveState(level, site));
+    return new Career(normalized, FarmWorld.fromSaveState(level, site));
   }
 
   // -- projections ---------------------------------------------------------
@@ -335,6 +339,7 @@ export class Career {
     dtTicks: number,
     protectedFieldItems: readonly string[] = [],
     animalProductionEnabled = true,
+    animalFeedWaiverSpecies: readonly AnimalSpecies[] = [],
   ): void {
     const before = this.#state.tick;
     this.#state.tick += dtTicks;
@@ -345,6 +350,7 @@ export class Career {
       workBoard: this.#workBoard,
       protectedFieldItems,
       animalProductionEnabled,
+      animalFeedWaiverSpecies,
     });
     if (report.processedUnits > 0) this.bump('goodsProcessed', report.processedUnits);
 

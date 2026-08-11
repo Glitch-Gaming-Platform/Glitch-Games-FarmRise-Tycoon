@@ -24,11 +24,7 @@ describe('progression management panels', () => {
         { species: 'cow', affordable: true, shelterRequired: 4 },
       ],
       shelterFree: 8,
-      landCost: cents(0),
-      canAffordLand: false,
-      landAvailable: false,
-      landProgress: 1,
-      landName: null,
+      land: [],
       carriers: [{ kind: 'wagon', affordable: true }],
     });
 
@@ -38,6 +34,65 @@ describe('progression management panels', () => {
     expect(onBuyCarrier).toHaveBeenCalledWith('wagon');
     expect(panel.root.textContent).toMatch(/stored Corn.*Eggs.*sell them at Market/i);
     expect(panel.root.textContent).toMatch(/stored Clover.*Milk.*sell them at Market/i);
+  });
+
+  it('lists the $20 three-bed extension above the locked North Field', () => {
+    const onBuyLand = vi.fn();
+    const panel = new BuildPanel({
+      onSelectBuilding: vi.fn(),
+      onBuyAnimal: vi.fn(),
+      onBuyLand,
+      onBuyCarrier: vi.fn(),
+      onClose: vi.fn(),
+    });
+    panel.update({
+      balance: cents(4_880),
+      options: [],
+      animals: [],
+      shelterFree: 2,
+      land: [
+        {
+          parcelId: 'parcel-starter-extension',
+          displayName: 'Starter Extension',
+          cost: cents(2_000),
+          bedCount: 3,
+          description: 'Three nearby beds.',
+          affordable: true,
+          available: true,
+          progress: 1,
+          requirement: null,
+        },
+        {
+          parcelId: 'parcel-north-field',
+          displayName: 'North Field',
+          cost: cents(7_500),
+          bedCount: 8,
+          description: 'The larger field.',
+          affordable: false,
+          available: false,
+          progress: 0.65,
+          requirement: 'Buy Starter Extension first',
+        },
+      ],
+      carriers: [],
+    });
+
+    const extension = panel.root.querySelector<HTMLElement>(
+      '[data-testid="build-land-row-parcel-starter-extension"]',
+    )!;
+    const north = panel.root.querySelector<HTMLElement>(
+      '[data-testid="build-land-row-parcel-north-field"]',
+    )!;
+    expect(
+      extension.compareDocumentPosition(north) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(extension.textContent).toMatch(/\$20\.00.*3 crop beds/i);
+    expect(north.textContent).toMatch(/Buy Starter Extension first.*Locked/i);
+
+    panel.root
+      .querySelector<HTMLButtonElement>('[data-testid="build-land-parcel-starter-extension"]')!
+      .click();
+    expect(onBuyLand).toHaveBeenCalledWith('parcel-starter-extension');
   });
 
   it('routes milestone, processor, worker and town actions through their panels', () => {

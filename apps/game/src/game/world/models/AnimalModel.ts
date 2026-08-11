@@ -115,7 +115,11 @@ export class AnimalModel {
    * rather than losing the animals, which would make a supply gap
    * unrecoverable and contradict the disruption pillar.
    */
-  advance(dtTicks: number, feed: FeedSource): readonly AnimalProduce[] {
+  advance(
+    dtTicks: number,
+    feed: FeedSource,
+    feedWaiverSpecies: readonly AnimalSpecies[] = [],
+  ): readonly AnimalProduce[] {
     const produced: AnimalProduce[] = [];
     for (const group of this.#groups) {
       if (group.count <= 0) continue;
@@ -128,7 +132,8 @@ export class AnimalModel {
 
       const needed = definition.feedPerCycle * group.count;
       const available = feed.available(definition.feedItemId);
-      if (available < needed) {
+      const feedWaived = feedWaiverSpecies.includes(group.species);
+      if (available < needed && !feedWaived) {
         this.events.emit('animal:hungry', {
           species: group.species,
           feedItemId: definition.feedItemId,
@@ -137,7 +142,7 @@ export class AnimalModel {
         });
         continue;
       }
-      feed.consume(definition.feedItemId, needed);
+      if (!feedWaived) feed.consume(definition.feedItemId, needed);
 
       const quantity = definition.producePerCycle * group.count;
       produced.push({

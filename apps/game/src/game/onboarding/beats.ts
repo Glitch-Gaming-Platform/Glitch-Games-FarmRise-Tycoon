@@ -33,6 +33,7 @@ export interface OnboardingContext {
   readonly eggsReady: number;
   readonly eggsCollected: number;
   readonly eggsHandled: boolean;
+  readonly starterExtensionOwned: boolean;
   readonly warningActive: boolean;
   readonly eventsResolved: number;
   readonly marketOpen: boolean;
@@ -186,10 +187,10 @@ export const BEATS: readonly Beat[] = [
   {
     id: 'eggs',
     title: 'Collect the eggs',
-    body: 'Hens need stored corn to lay eggs. Walk to the basket and press E when Pick up Eggs appears.',
+    body: 'This first clutch is fed. Hens need stored corn later. Walk to the basket and press E at Pick up Eggs.',
     key: 'E',
     touch: {
-      body: 'Hens need stored corn to lay eggs. Walk to the basket and tap Work when Pick up Eggs appears.',
+      body: 'This first clutch is fed. Hens need stored corn later. Walk to the basket and tap Work at Pick up Eggs.',
       key: 'WORK',
       hintBody: 'Look just in front of the shelter, then tap Work beside the egg basket.',
     },
@@ -197,6 +198,23 @@ export const BEATS: readonly Beat[] = [
     hint: {
       afterMs: 14_000,
       body: 'Look just in front of the shelter, then press E beside the egg basket.',
+    },
+  },
+  {
+    id: 'expand',
+    title: 'Open three more beds',
+    body: 'Press B, then buy the $20 Starter Extension. Its gate opens three new crop beds nearby.',
+    key: 'B',
+    touch: {
+      body: 'Tap Build, then buy the $20 Starter Extension. Its gate opens three new crop beds nearby.',
+      key: 'BUILD',
+      hintBody: 'Open Build and choose Starter Extension in the Expand section.',
+    },
+    reveals: ['objective'],
+    isDone: (c) => c.starterExtensionOwned,
+    hint: {
+      afterMs: 18_000,
+      body: 'Press B and choose Starter Extension in the Expand section.',
     },
   },
   {
@@ -222,10 +240,10 @@ export const BEATS: readonly Beat[] = [
   },
   {
     id: 'goal',
-    title: 'The field next door',
-    body: 'Keep growing and selling. At $75, press B or click Build to buy the neighbouring parcel.',
+    title: 'The North Field is next',
+    body: 'Keep growing and selling. At $75, press B or click Build to buy the larger North Field.',
     touch: {
-      body: 'Keep growing and selling. At $75, tap Build to buy the neighbouring parcel.',
+      body: 'Keep growing and selling. At $75, tap Build to buy the larger North Field.',
       key: 'BUILD',
     },
     reveals: ['objective'],

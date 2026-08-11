@@ -42,27 +42,27 @@ describe('career health', () => {
 });
 
 describe('named land purchase', () => {
-  const north = PARCELS_BY_ID['parcel-north-field']!;
+  const extension = PARCELS_BY_ID['parcel-starter-extension']!;
 
   it('deducts exactly the selected parcel cost and exposes its beds', () => {
     const result = validateLandPurchase(
-      north.id,
+      extension.id,
       [HOMESTEAD_PARCEL_ID],
-      cents(north.purchaseCost + 500),
+      cents(extension.purchaseCost + 500),
       0,
     );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.balance).toBe(500);
-      expect(result.value.ownedParcelIds).toContain(north.id);
-      expect(result.value.newBedIds).toEqual(north.beds.map((bed) => bed.id));
+      expect(result.value.ownedParcelIds).toContain(extension.id);
+      expect(result.value.newBedIds).toEqual(extension.beds.map((bed) => bed.id));
     }
   });
 
   it('rejects insufficient funds, duplicates and stage-gated land', () => {
-    expect(validateLandPurchase(north.id, [HOMESTEAD_PARCEL_ID], cents(10), 0).ok).toBe(false);
+    expect(validateLandPurchase(extension.id, [HOMESTEAD_PARCEL_ID], cents(10), 0).ok).toBe(false);
     expect(
-      validateLandPurchase(north.id, [HOMESTEAD_PARCEL_ID, north.id], cents(999_999), 0).ok,
+      validateLandPurchase(extension.id, [HOMESTEAD_PARCEL_ID, extension.id], cents(999_999), 0).ok,
     ).toBe(false);
     expect(
       validateLandPurchase('parcel-east-pasture', [HOMESTEAD_PARCEL_ID], cents(999_999), 0).ok,
@@ -72,7 +72,7 @@ describe('named land purchase', () => {
 
 describe('career presentation helpers', () => {
   it('clamps progress toward the next legal parcel', () => {
-    const north = PARCELS_BY_ID['parcel-north-field']!;
+    const north = PARCELS_BY_ID['parcel-starter-extension']!;
     expect(landProgress(cents(0), [HOMESTEAD_PARCEL_ID], 0)).toBe(0);
     expect(landProgress(cents(north.purchaseCost * 3), [HOMESTEAD_PARCEL_ID], 0)).toBe(1);
     expect(landProgress(cents(north.purchaseCost / 2), [HOMESTEAD_PARCEL_ID], 0)).toBeCloseTo(

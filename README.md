@@ -5,7 +5,7 @@ upgrade, trade and expand — with limited money and time forcing trade-offs bet
 resilience and recovery from disruptive events.
 
 This repository contains a playable persistent-career build. The original farm loop now expands
-across four physical parcels through hauling, buyer contracts, specialization, processing, soil and
+across five physical parcels through hauling, buyer contracts, specialization, processing, soil and
 quality management, workers, finance, incidents, seasons and town projects. The engine, simulation,
 save migration, asset pipeline, UI and transition-validating backend are kept as separate layers.
 

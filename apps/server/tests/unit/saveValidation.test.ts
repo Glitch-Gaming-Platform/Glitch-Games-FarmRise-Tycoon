@@ -84,15 +84,16 @@ describe('validateSaveTransition', () => {
     const base = fresh();
     const several = updateSite(later(base), (site) => ({
       ...site,
-      ownedParcelIds: [site.ownedParcelIds[0]!, 'parcel-north-field', 'parcel-east-pasture'],
+      ownedParcelIds: [site.ownedParcelIds[0]!, 'parcel-starter-extension', 'parcel-north-field'],
     }));
     expect(validateSaveTransition(base, several, several.tick).ok).toBe(false);
 
     const previous = updateSite(base, (site) => ({
       ...site,
-      ownedParcelIds: [...site.ownedParcelIds, 'parcel-north-field'],
+      ownedParcelIds: [...site.ownedParcelIds, 'parcel-starter-extension', 'parcel-north-field'],
       plots: [
         ...site.plots,
+        ...PARCEL('parcel-starter-extension').beds.map(emptyBed),
         ...PARCEL('parcel-north-field').beds.map((bed) => ({
           id: bed.id as never,
           cropId: null,
@@ -113,6 +114,59 @@ describe('validateSaveTransition', () => {
       ownedParcelIds: ['parcel-homestead'],
     }));
     expect(validateSaveTransition(previous, removed, removed.tick).ok).toBe(false);
+  });
+
+  it('accepts exactly the paid $20 Starter Extension and its three beds', () => {
+    const base = fresh();
+    const extension = PARCEL('parcel-starter-extension');
+    const purchased = updateSite(
+      later(base, { balance: cents(base.balance - extension.purchaseCost) }),
+      (site) => ({
+        ...site,
+        ownedParcelIds: [...site.ownedParcelIds, extension.id],
+        plots: [...site.plots, ...extension.beds.map(emptyBed)],
+      }),
+    );
+
+    expect(validateSaveTransition(base, purchased, purchased.tick)).toEqual({ ok: true });
+
+    const missingBed = updateSite(purchased, (site) => ({
+      ...site,
+      plots: site.plots.filter((plot) => String(plot.id) !== extension.beds[0]?.id),
+    }));
+    expect(validateSaveTransition(base, missingBed, missingBed.tick).reason).toMatch(
+      /crop bed.*missing/i,
+    );
+
+    const northFirst = updateSite(later(base), (site) => ({
+      ...site,
+      ownedParcelIds: [...site.ownedParcelIds, 'parcel-north-field'],
+      plots: [...site.plots, ...PARCEL('parcel-north-field').beds.map(emptyBed)],
+    }));
+    expect(validateSaveTransition(base, northFirst, northFirst.tick).reason).toMatch(
+      /More than one parcel|Starter Extension first/i,
+    );
+  });
+
+  it('normalizes an old North Field save without charging for its connecting strip', () => {
+    const base = fresh();
+    const oldNorth = updateSite(base, (site) => ({
+      ...site,
+      ownedParcelIds: [...site.ownedParcelIds, 'parcel-north-field'],
+      plots: [...site.plots, ...PARCEL('parcel-north-field').beds.map(emptyBed)],
+    }));
+    const continued = later(oldNorth);
+
+    expect(validateSaveTransition(oldNorth, continued, continued.tick)).toEqual({ ok: true });
+  });
+
+  it('still rejects unknown parcel ids after layout normalization', () => {
+    const base = fresh();
+    const forged = updateSite(later(base), (site) => ({
+      ...site,
+      ownedParcelIds: [...site.ownedParcelIds, 'parcel-forged'],
+    }));
+    expect(validateSaveTransition(base, forged, forged.tick).reason).toMatch(/no parcel|unknown/i);
   });
 
   it('rejects impossible crop growth but permits replanting', () => {
@@ -155,9 +209,10 @@ describe('validateSaveTransition', () => {
 
     const qualified = updateSite(base, (site) => ({
       ...site,
-      ownedParcelIds: [...site.ownedParcelIds, 'parcel-north-field'],
+      ownedParcelIds: [...site.ownedParcelIds, 'parcel-starter-extension', 'parcel-north-field'],
       plots: [
         ...site.plots,
+        ...PARCEL('parcel-starter-extension').beds.map(emptyBed),
         ...PARCEL('parcel-north-field').beds.map((bed) => ({
           id: bed.id as never,
           cropId: null,
@@ -339,4 +394,20 @@ function PARCEL(id: string) {
   const parcel = PARCELS_BY_ID[id];
   if (!parcel) throw new Error(`Missing parcel ${id}`);
   return parcel;
+}
+
+function emptyBed(bed: { id: string }) {
+  return {
+    id: bed.id as never,
+    cropId: null,
+    grownTicks: 0,
+    tendCount: 0,
+    water: 1,
+    irrigated: false,
+    diseased: false,
+    eventMultiplier: 1,
+    soil: 1,
+    quality: 1,
+    previousCropId: null,
+  };
 }

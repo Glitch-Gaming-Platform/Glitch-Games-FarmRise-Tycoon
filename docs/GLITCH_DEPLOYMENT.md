@@ -286,6 +286,44 @@ release both reached `ready` without a release error. Publication is still queue
 `HOST-DNS-01KZQZ0TXJA6QDAYEQ2H8ANMGM`. Preserve this exact release for retry after AWS approves case
 `178639262100188`; until then, the public Webhosting hostname does not pass TLS name verification.
 
+### Redeployment — version 0.1.5 on August 11, 2026
+
+Distribution version `0.1.5-20260811`, build `019ff12d-308f-720e-b300-8b39e3b5dfe0`, is ready and
+live. Its real nested CDN URL returned HTTP 200 for `index.html` and both hashed JavaScript files.
+The public Glitch Play page loaded that exact build and reached the interactive farm screen without
+browser console errors.
+
+The matching Webhosting Node build is `019ff134-0662-7056-91f3-af28bef86e44`, and Hosting release
+`019ff138-cec2-721b-90e4-71cdd0295444` uses `tools/hosting/server.mjs`. The local and remote Node 24
+Linux builds and the Hosting release reached `ready` without a release error. Publication remains
+queued because the Route 53 hosted zone is still at its 50-of-50 record limit. The site remains
+`draft`, the domain is `provisioning`, and certificate status is `Retrying`. The support reference
+for this attempt is `HOST-DNS-01KZRKHSF3P7TMSGT19SF001PN`. Preserve this exact release for retry
+after AWS approves case `178639262100188`; the public Webhosting hostname still does not pass TLS
+name verification.
+
+### Redeployment — version 0.1.6 on August 11, 2026
+
+Distribution version `0.1.6-20260811`, build `019ff193-9318-708f-ae07-8e4c08cfcc3d`, is ready and
+live. Its real nested CDN URL returned HTTP 200 for `index.html` and both hashed JavaScript files.
+The public Glitch Play page loaded that exact build, **Work the farm** reached the interactive farm
+screen, the gameplay menus appeared, and the browser reported no console errors.
+
+The matching Webhosting Node build is `019ff197-3506-72ee-9681-b672e73d0c92`, and Hosting release
+`019ff19b-dd0f-73aa-8453-97c932229777` uses the executable entry
+`tools/hosting/server.mjs`. The Node 24 verification suite, credentialed browser build, artifact
+validation, local Linux container build, all five local health checks, remote Node build, and
+Hosting release completed successfully. The release is `ready` with no build error, but it is not
+active.
+
+Publication remains queued because the shared Route 53 hosted zone is still at its 50-of-50 record
+limit. AWS quota case `178639262100188`, requesting a limit of 10,000 records, remains
+`CASE_OPENED`. The Hosting site is `draft` with no active release, its generated domain is
+`provisioning`, and certificate status is `Retrying`. Glitch recorded support reference
+`HOST-DNS-01KZRSQX6XJYGXC17NYE71XXZH`. Preserve this exact release for retry after the quota is
+approved; the public hostname currently fails TLS name verification and must not be reported as a
+working Webhosting deployment.
+
 ## Rollback
 
 Distribution and Hosting release state are separate. To restore a previous website release:

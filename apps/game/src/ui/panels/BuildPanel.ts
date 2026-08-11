@@ -40,24 +40,31 @@ export interface CarrierOption {
   readonly affordable: boolean;
 }
 
+export interface LandOption {
+  readonly parcelId: string;
+  readonly displayName: string;
+  readonly cost: Cents;
+  readonly bedCount: number;
+  readonly description: string;
+  readonly affordable: boolean;
+  readonly available: boolean;
+  readonly progress: number;
+  readonly requirement: string | null;
+}
+
 export interface BuildSnapshot {
   readonly balance: Cents;
   readonly options: readonly BuildOption[];
   readonly animals: readonly AnimalOption[];
   readonly shelterFree: number;
-  readonly landCost: Cents;
-  readonly canAffordLand: boolean;
-  readonly landAvailable: boolean;
-  readonly landProgress: number;
-  /** Name of the parcel currently for sale, so the row says what it is buying. */
-  readonly landName: string | null;
+  readonly land: readonly LandOption[];
   readonly carriers: readonly CarrierOption[];
 }
 
 export interface BuildPanelCallbacks {
   readonly onSelectBuilding: (kind: BuildingKind) => void;
   readonly onBuyAnimal: (species: AnimalSpecies) => void;
-  readonly onBuyLand: () => void;
+  readonly onBuyLand: (parcelId: string) => void;
   readonly onBuyCarrier: (kind: Exclude<CarrierKind, 'arms'>) => void;
   readonly onClose: () => void;
 }
@@ -180,29 +187,38 @@ export class BuildPanel {
       );
     }
 
-    // Land, listed last and visually distinct. It is the row that changes the
-    // shape of the farm rather than what stands on it, so it reads as a
-    // destination rather than as another purchase.
-    const progress = Math.round(snapshot.landProgress * 100);
+    // Land, listed last and visually distinct. Starter Extension deliberately
+    // appears immediately above North Field so onboarding and the long-term
+    // objective remain visible together.
     this.#list.append(el('h3', { class: 'fr-panel-card__section', text: 'Expand' }));
-    this.#list.append(
-      this.#row({
-        testId: 'build-land',
-        icon: 'land',
-        title: snapshot.landName ?? 'Neighbouring parcel',
-        meta: snapshot.landAvailable
-          ? `${formatCents(snapshot.landCost)}  ·  ${progress}% saved  ·  Opens the gate`
-          : 'You own every field on the estate.',
-        action: snapshot.canAffordLand ? 'Buy land' : `${progress}%`,
-        enabled: snapshot.canAffordLand && snapshot.landAvailable,
-        onClick: () => this.callbacks.onBuyLand(),
-        highlight: snapshot.canAffordLand && snapshot.landAvailable,
-      }),
-    );
+    if (snapshot.land.length === 0) {
+      this.#list.append(el('p', { class: 'fr-market__empty', text: 'You own every field.' }));
+    }
+    for (const parcel of snapshot.land) {
+      const progress = Math.round(parcel.progress * 100);
+      this.#list.append(
+        this.#row({
+          testId: `build-land-${parcel.parcelId}`,
+          rowTestId: `build-land-row-${parcel.parcelId}`,
+          icon: 'land',
+          title: parcel.displayName,
+          meta:
+            `${formatCents(parcel.cost)}  ·  ${parcel.bedCount} crop beds  ·  ` +
+            (parcel.available
+              ? `${progress}% saved  ·  ${parcel.description}`
+              : (parcel.requirement ?? 'Not available yet')),
+          action: parcel.available ? (parcel.affordable ? 'Buy land' : `${progress}%`) : 'Locked',
+          enabled: parcel.affordable && parcel.available,
+          onClick: () => this.callbacks.onBuyLand(parcel.parcelId),
+          highlight: parcel.affordable && parcel.available,
+        }),
+      );
+    }
   }
 
   #row(config: {
     testId: string;
+    rowTestId?: string;
     icon: UiIconId;
     title: string;
     meta: string;
@@ -218,6 +234,7 @@ export class BuildPanel {
           'fr-market__row' +
           (config.enabled ? '' : ' fr-market__row--blocked') +
           (config.highlight ? ' fr-market__row--best' : ''),
+        testId: config.rowTestId,
       },
       uiIcon(config.icon, '', 'fr-market__icon'),
       el(

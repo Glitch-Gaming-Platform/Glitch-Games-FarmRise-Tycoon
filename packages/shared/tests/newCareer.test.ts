@@ -7,7 +7,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ESTATE_PARCELS,
   HOMESTEAD_PARCEL_ID,
+  NORTH_FIELD_PARCEL_ID,
   PARCELS_BY_ID,
+  STARTER_EXTENSION_PARCEL_ID,
   STARTER_CHICKENS,
   STARTER_SITE_ID,
   STARTING_BALANCE,
@@ -18,6 +20,7 @@ import {
   newCareer,
   newCareerSite,
   nextParcelFor,
+  normalizeOwnedParcelIds,
   parcelAt,
   purchasableParcels,
   validateLandPurchase,
@@ -108,22 +111,75 @@ describe('the estate', () => {
   });
 
   it('never overlaps two parcels on the same tile', () => {
+    const claimed = new Map<string, string>();
     for (const parcel of ESTATE_PARCELS) {
       const { tileX, tileZ, width, depth } = parcel.bounds;
       expect(parcelAt(tileX, tileZ)?.id).toBe(parcel.id);
       expect(parcelAt(tileX + width - 1, tileZ + depth - 1)?.id).toBe(parcel.id);
+      for (let z = tileZ; z < tileZ + depth; z += 1) {
+        for (let x = tileX; x < tileX + width; x += 1) {
+          const key = `${x}:${z}`;
+          expect(claimed.get(key), `${key} overlaps ${parcel.id}`).toBeUndefined();
+          claimed.set(key, parcel.id);
+        }
+      }
+    }
+  });
+
+  it('keeps every crop bed inside its parcel and every bed tile unique', () => {
+    const bedTiles = new Set<string>();
+    for (const parcel of ESTATE_PARCELS) {
+      for (const bed of parcel.beds) {
+        expect(parcelAt(bed.tileX, bed.tileZ)?.id).toBe(parcel.id);
+        const key = `${bed.tileX}:${bed.tileZ}`;
+        expect(bedTiles.has(key), `${key} contains two crop beds`).toBe(false);
+        bedTiles.add(key);
+      }
     }
   });
 
   it('offers exactly one parcel to a brand-new farm', () => {
     expect(purchasableParcels([HOMESTEAD_PARCEL_ID], 0)).toHaveLength(1);
-    expect(nextParcelFor([HOMESTEAD_PARCEL_ID], 0)?.id).toBe('parcel-north-field');
+    expect(nextParcelFor([HOMESTEAD_PARCEL_ID], 0)?.id).toBe(STARTER_EXTENSION_PARCEL_ID);
+    expect(
+      purchasableParcels([HOMESTEAD_PARCEL_ID, STARTER_EXTENSION_PARCEL_ID], 0).map(
+        (parcel) => parcel.id,
+      ),
+    ).toEqual([NORTH_FIELD_PARCEL_ID]);
+    expect(nextParcelFor([HOMESTEAD_PARCEL_ID, STARTER_EXTENSION_PARCEL_ID], 0)?.id).toBe(
+      NORTH_FIELD_PARCEL_ID,
+    );
+  });
+
+  it('does not hide an unknown parcel id during layout normalization', () => {
+    expect(normalizeOwnedParcelIds([HOMESTEAD_PARCEL_ID, 'parcel-forged'])).toContain(
+      'parcel-forged',
+    );
+  });
+
+  it('defines a $20 three-bed extension near the original six and before North Field', () => {
+    const extension = PARCELS_BY_ID[STARTER_EXTENSION_PARCEL_ID]!;
+    const north = PARCELS_BY_ID[NORTH_FIELD_PARCEL_ID]!;
+    const homestead = PARCELS_BY_ID[HOMESTEAD_PARCEL_ID]!;
+    expect(extension.purchaseCost).toBe(2_000);
+    expect(extension.beds).toHaveLength(3);
+    expect(north.purchaseCost).toBe(7_500);
+    expect(north.beds).toHaveLength(8);
+    expect(north.requiresOwned).toContain(extension.id);
+    const closest = Math.min(
+      ...extension.beds.flatMap((bed) =>
+        homestead.beds.map(
+          (starter) => Math.abs(starter.tileX - bed.tileX) + Math.abs(starter.tileZ - bed.tileZ),
+        ),
+      ),
+    );
+    expect(closest).toBeLessThanOrEqual(7);
   });
 });
 
 describe('validateLandPurchase', () => {
   const owned = [HOMESTEAD_PARCEL_ID];
-  const parcel = PARCELS_BY_ID['parcel-north-field'];
+  const parcel = PARCELS_BY_ID[STARTER_EXTENSION_PARCEL_ID];
 
   it('sells the adjoining parcel to a farm that can afford it', () => {
     if (!parcel) throw new Error('Missing parcel.');
@@ -145,6 +201,19 @@ describe('validateLandPurchase', () => {
   it('refuses land already owned', () => {
     const result = validateLandPurchase(HOMESTEAD_PARCEL_ID, owned, 999_999 as never, 5);
     expect(result.ok).toBe(false);
+  });
+
+  it('requires the Starter Extension before the North Field', () => {
+    const north = PARCELS_BY_ID[NORTH_FIELD_PARCEL_ID]!;
+    expect(validateLandPurchase(north.id, owned, north.purchaseCost, 0).ok).toBe(false);
+    expect(
+      validateLandPurchase(
+        north.id,
+        [HOMESTEAD_PARCEL_ID, STARTER_EXTENSION_PARCEL_ID],
+        north.purchaseCost,
+        0,
+      ).ok,
+    ).toBe(true);
   });
 
   it('refuses land that does not adjoin the farm', () => {

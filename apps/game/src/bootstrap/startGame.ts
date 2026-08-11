@@ -40,7 +40,6 @@ import { SaveDirector } from '@platform/save/SaveDirector.js';
 import { AutosaveController } from '@platform/save/AutosaveController.js';
 import { loadCareer } from '@platform/save/CareerLoader.js';
 import { bindGlitchAnalytics } from './bindGlitch.js';
-import { nextParcelFor } from '@farmrise/shared';
 import { bindSceneAudio, bindStateAudio, prepareAudio } from './bindAudio.js';
 import { SOUND, type SoundId } from '@assets/audio/soundIds.js';
 import { DEFAULT_MUSIC_ID } from '@assets/audio/musicIds.js';
@@ -215,12 +214,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     build: {
       onSelectBuilding: (kind) => activeScene?.session?.chooseBuilding(kind),
       onBuyAnimal: (species) => activeScene?.session?.purchaseAnimal(species),
-      onBuyLand: () => {
-        const career = activeScene?.career;
-        if (!career) return;
-        const parcel = nextParcelFor(career.world.parcels.ownedIds, career.stage);
-        if (parcel) activeScene?.session?.purchaseLand(parcel.id);
-      },
+      onBuyLand: (parcelId) => activeScene?.session?.purchaseLand(parcelId),
       onBuyCarrier: (kind) => activeScene?.session?.purchaseCarrier(kind),
       onClose: () => activeScene?.session?.openPanel('none'),
     },

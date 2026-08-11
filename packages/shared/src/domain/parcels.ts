@@ -44,7 +44,7 @@ export interface ParcelDefinition {
 }
 
 /**
- * The Millbrook estate: a 32x32 grid of four parcels.
+ * The Millbrook estate: a 32x32 grid of five parcels.
  *
  * 32x32 was chosen over one large regional grid because a mature single site
  * should stay walkable; further growth is delivered as additional sites rather
@@ -53,6 +53,8 @@ export interface ParcelDefinition {
 export const ESTATE_GRID = Object.freeze({ width: 32, depth: 32, tileSize: 2 });
 
 export const HOMESTEAD_PARCEL_ID = 'parcel-homestead';
+export const STARTER_EXTENSION_PARCEL_ID = 'parcel-starter-extension';
+export const NORTH_FIELD_PARCEL_ID = 'parcel-north-field';
 
 export const ESTATE_PARCELS: readonly ParcelDefinition[] = Object.freeze([
   {
@@ -75,23 +77,42 @@ export const ESTATE_PARCELS: readonly ParcelDefinition[] = Object.freeze([
     description: 'The plot you inherited. Six beds, a shelter and not much else.',
   },
   {
-    id: 'parcel-north-field',
-    displayName: 'North Field',
-    bounds: { tileX: 8, tileZ: 0, width: 16, depth: 8 },
+    id: STARTER_EXTENSION_PARCEL_ID,
+    displayName: 'Starter Extension',
+    // A narrow strip between the inherited homestead and the larger North
+    // Field. It creates three nearby beds without consuming any tile where a
+    // first-session player could already have placed a structure.
+    bounds: { tileX: 8, tileZ: 6, width: 16, depth: 2 },
     ownedAtStart: false,
-    purchaseCost: cents(7_500),
+    purchaseCost: cents(2_000),
     requiresOwned: [HOMESTEAD_PARCEL_ID],
     requiresStage: 0,
     gate: { tileX: 15, tileZ: 8 },
+    beds: [
+      { id: 'plot-n5', tileX: 13, tileZ: 6 },
+      { id: 'plot-n6', tileX: 15, tileZ: 6 },
+      { id: 'plot-n7', tileX: 17, tileZ: 6 },
+    ],
+    description: 'Three crop beds just beyond the homestead gate.',
+  },
+  {
+    id: NORTH_FIELD_PARCEL_ID,
+    displayName: 'North Field',
+    bounds: { tileX: 8, tileZ: 0, width: 16, depth: 6 },
+    ownedAtStart: false,
+    purchaseCost: cents(7_500),
+    requiresOwned: [STARTER_EXTENSION_PARCEL_ID],
+    requiresStage: 0,
+    gate: { tileX: 15, tileZ: 6 },
     beds: [
       { id: 'plot-n1', tileX: 12, tileZ: 4 },
       { id: 'plot-n2', tileX: 14, tileZ: 4 },
       { id: 'plot-n3', tileX: 16, tileZ: 4 },
       { id: 'plot-n4', tileX: 18, tileZ: 4 },
-      { id: 'plot-n5', tileX: 12, tileZ: 6 },
-      { id: 'plot-n6', tileX: 14, tileZ: 6 },
-      { id: 'plot-n7', tileX: 16, tileZ: 6 },
-      { id: 'plot-n8', tileX: 18, tileZ: 6 },
+      { id: 'plot-n8', tileX: 10, tileZ: 4 },
+      { id: 'plot-n9', tileX: 12, tileZ: 2 },
+      { id: 'plot-n10', tileX: 15, tileZ: 2 },
+      { id: 'plot-n11', tileX: 18, tileZ: 2 },
     ],
     description:
       'Eight beds of good ground beyond the north gate. Far enough that carrying every harvest by hand starts to hurt.',
@@ -144,6 +165,19 @@ export function getParcel(id: string): ParcelDefinition | undefined {
 
 export function startingParcelIds(): readonly ParcelId[] {
   return ESTATE_PARCELS.filter((parcel) => parcel.ownedAtStart).map((parcel) => parcel.id);
+}
+
+/**
+ * The Starter Extension split an older North Field parcel in two. Old saves
+ * that already owned the North Field keep the connecting strip automatically;
+ * this is a layout compatibility grant, not a second purchase.
+ */
+export function normalizeOwnedParcelIds(ownedParcelIds: readonly ParcelId[]): readonly ParcelId[] {
+  const owned = new Set(ownedParcelIds);
+  if (owned.has(NORTH_FIELD_PARCEL_ID)) owned.add(STARTER_EXTENSION_PARCEL_ID);
+  const known = ESTATE_PARCELS.filter((parcel) => owned.has(parcel.id)).map((parcel) => parcel.id);
+  const unknown = ownedParcelIds.filter((id) => !PARCELS_BY_ID[id]);
+  return [...known, ...unknown];
 }
 
 export function containsTile(bounds: ParcelRect, tileX: number, tileZ: number): boolean {

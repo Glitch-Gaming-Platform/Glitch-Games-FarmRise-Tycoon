@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest';
 import {
   CAREER_SCHEMA_VERSION,
   HOMESTEAD_PARCEL_ID,
+  NORTH_FIELD_PARCEL_ID,
+  STARTER_EXTENSION_PARCEL_ID,
   V1_SECOND_PARCEL_ID,
   V1_TILE_OFFSET,
   careerSaveStateSchema,
@@ -126,6 +128,7 @@ describe('migrateSave, version 1 to 2', () => {
     const result = migrate({ landParcels: 2 });
     if (!result.ok) throw new Error(result.reason);
     expect(result.value.state.sites[0]?.ownedParcelIds).toContain(V1_SECOND_PARCEL_ID);
+    expect(result.value.state.sites[0]?.ownedParcelIds).toContain(STARTER_EXTENSION_PARCEL_ID);
     expect(result.value.notes.some((note) => note.field.includes('ownedParcelIds'))).toBe(true);
   });
 
@@ -157,6 +160,31 @@ describe('migrateSave, other inputs', () => {
     expect(result.value.fromVersion).toBe(CAREER_SCHEMA_VERSION);
     expect(result.value.notes).toHaveLength(0);
     expect(result.value.state).toEqual(current);
+  });
+
+  it('keeps the connecting strip and new beds for an old North Field owner', () => {
+    const current = newCareer({ careerId: 'career-current', seed: 7 });
+    const site = current.sites[0]!;
+    const oldLayout = {
+      ...current,
+      sites: [
+        {
+          ...site,
+          ownedParcelIds: [...site.ownedParcelIds, NORTH_FIELD_PARCEL_ID],
+        },
+      ],
+    };
+
+    const result = migrateSave(oldLayout, current.careerId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const migrated = result.value.state.sites[0]!;
+    expect(migrated.ownedParcelIds).toContain(STARTER_EXTENSION_PARCEL_ID);
+    expect(migrated.ownedParcelIds).toContain(NORTH_FIELD_PARCEL_ID);
+    expect(migrated.plots.map((plot) => String(plot.id))).toEqual(
+      expect.arrayContaining(['plot-n5', 'plot-n6', 'plot-n7', 'plot-n9', 'plot-n10', 'plot-n11']),
+    );
+    expect(result.value.notes.some((note) => /Starter Extension/.test(note.reason))).toBe(true);
   });
 
   it('refuses a document that is not a save at all', () => {

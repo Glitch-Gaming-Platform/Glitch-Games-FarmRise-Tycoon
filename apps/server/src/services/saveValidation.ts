@@ -34,6 +34,7 @@ import {
   getParcel,
   getWorkerRole,
   loadWeight,
+  normalizeEstateLayout,
   parcelAt,
   processorBuildCost,
   prosperityForDelivery,
@@ -65,6 +66,8 @@ export function validateSaveTransition(
   next: SaveState,
   maxAllowedTick: number,
 ): ValidationOutcome {
+  previous = normalizeEstateLayout(previous).state;
+  next = normalizeEstateLayout(next).state;
   if (next.careerId !== previous.careerId) return reject('Career id changed.');
   if (next.seed !== previous.seed) return reject('Career seed changed.');
   if (next.tick < previous.tick) return reject('Save tick went backwards.');
@@ -446,6 +449,9 @@ function validatePlots(
   }
   if (previous.plots.some((plot) => !nextIds.has(String(plot.id)))) {
     return reject('A crop bed disappeared.');
+  }
+  for (const bedId of legalBeds) {
+    if (!nextIds.has(bedId)) return reject(`Owned crop bed ${bedId} is missing.`);
   }
   return OK;
 }

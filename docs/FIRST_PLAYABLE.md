@@ -33,10 +33,11 @@ Menu → Play
 Loading (art + audio)
   ↓
 ONBOARDING — each beat is completed by doing the real thing
-  move → plant → tend → harvest → haul → sell → reinvest → eggs → setback → goal
+  move → plant → tend → harvest → haul → sell → reinvest → eggs → expand → setback → goal
   (the first watered crop ripens over about three simulation seconds; later crops use normal timing)
   (the egg step uses a collectible basket at the shelter)
-  (egg collection schedules one real minor fox warning before random incidents begin)
+  (egg collection unlocks the $20 three-bed Starter Extension)
+  (buying that extension schedules one real minor fox warning before random incidents begin)
   ↓
 FREE LOOP  ─────────────────────────────────────────────┐
   read the HUD and the market                           │
@@ -119,12 +120,13 @@ Six plots, measured per production cycle:
 | Corn | 180 s | +$45.60 |
 | Pumpkin | 330 s | +$136.08 |
 
-Starting balance is $50, the parcel costs $75, so a run needs +$25. Whole production cycles from the
-table above give the practical lower bound:
+Starting balance is $50. The required land path is the $20 Starter Extension followed by the $75
+North Field, so land costs $95 in total and the farm must earn at least $45 before optional spending.
+Whole production cycles from the table above give the practical lower bound:
 
 | Strategy | Cycles needed | Wall clock |
 | --- | ---: | ---: |
-| Wheat only | 2 | ~3 min |
+| Wheat only | 3 | ~4.5 min |
 | Corn only | 1 | ~3 min |
 | Pumpkin only | 1 | ~5.5 min |
 
@@ -134,9 +136,9 @@ the tier below it. Poor water, missed tending, disease, spoilage and leaving a r
 reduce the realized price; the headline multiplier is never guaranteed after neglect or delay.
 
 So **roughly 3–6 minutes of growing time** depending on strategy, before walking, selling or reacting.
-The lower target keeps the first expansion inside the onboarding-to-free-loop hand-off instead of
-requiring a long repeat grind. `ESTATE_PARCELS` is the shared price table; re-derive the North Field
-entry whenever crop economics change.
+The $20 strip keeps the first expansion inside onboarding, while the $75 North Field remains the
+first real savings goal. `ESTATE_PARCELS` is the shared price table; re-derive both entries whenever
+crop economics change.
 
 ## Tests and measurements
 

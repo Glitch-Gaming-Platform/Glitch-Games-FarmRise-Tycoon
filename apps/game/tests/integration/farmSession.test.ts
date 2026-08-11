@@ -217,8 +217,13 @@ describe('reinvestment', () => {
   it('land remains a named, physical purchase instead of a run-ending counter', () => {
     const career = fundedCareer(50_000);
     const before = career.world.parcels.count;
-    expect(buyLand(career, 'parcel-north-field').ok).toBe(true);
+    expect(buyLand(career, 'parcel-north-field').ok).toBe(false);
+    expect(buyLand(career, 'parcel-starter-extension').ok).toBe(true);
     expect(career.world.parcels.count).toBe(before + 1);
+    expect(
+      career.world.fields.placements.filter((plot) => /^plot-n[567]$/.test(plot.id)),
+    ).toHaveLength(3);
+    expect(buyLand(career, 'parcel-north-field').ok).toBe(true);
     expect(career.world.fields.placements.some((plot) => plot.id === 'plot-n1')).toBe(true);
   });
 });

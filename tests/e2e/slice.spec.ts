@@ -197,6 +197,12 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
       return Number(text.match(/\$([\d.]+)/)?.[1] ?? '0');
     })
     .toBeGreaterThan(48.8);
+  // A returning or exploratory player may have sold the starter feed before
+  // the egg lesson. The first clutch is already fed, so onboarding must still
+  // produce a visible, collectable basket; later clutches require stored corn.
+  await expect(page.getByTestId('market-sell-all-corn')).toBeVisible();
+  await page.getByTestId('market-sell-all-corn').click();
+  await expect(page.getByTestId('market-sell-all-corn')).toHaveCount(0);
   await expect(page.getByTestId('coach-mark')).toContainText(/(Press B|Tap Build).*place/i);
 
   await page.getByTestId('market-close').click();
@@ -205,6 +211,10 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   // control here to avoid losing a synthetic key event under a busy renderer.
   await page.getByRole('button', { name: 'Open build' }).click();
   await expect(page.getByTestId('build-panel')).toBeVisible();
+  await expect(page.getByTestId('build-land-row-parcel-starter-extension')).toContainText(
+    /Collect the eggs/i,
+  );
+  await expect(page.getByTestId('build-land-parcel-starter-extension')).toBeDisabled();
   await page.getByTestId('build-animal-chicken').click();
   await expect(page.getByTestId('build-panel')).toContainText(/stored Corn.*Eggs.*Market/i);
   await page.getByTestId('build-close').click();
@@ -216,6 +226,15 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   await page.keyboard.press('m');
   await expect(page.getByTestId('market-sell-all-eggs')).toBeVisible();
   await page.getByTestId('market-close').click();
+  await expect(page.getByTestId('coach-mark')).toContainText(/Starter Extension/i);
+  await page.getByRole('button', { name: 'Open build' }).click();
+  const extension = page.getByTestId('build-land-row-parcel-starter-extension');
+  const north = page.getByTestId('build-land-row-parcel-north-field');
+  await expect(extension).toContainText(/\$20\.00.*3 crop beds/i);
+  await expect(page.getByTestId('build-land-parcel-starter-extension')).toBeEnabled();
+  await expect(north).toContainText(/Buy Starter Extension first/i);
+  await page.getByTestId('build-land-parcel-starter-extension').click();
+  await expect(page.getByTestId('build-panel')).toBeHidden();
   await expect(page.getByTestId('coach-mark')).toContainText(/Something is coming/i);
   await expect(page.getByTestId('hud-warning')).toBeVisible();
 
@@ -339,7 +358,12 @@ test('the reinvest panel shows every option, including the goal', async ({ page 
   }
   // The land purchase is always listed, even when unaffordable, so the player
   // learns what they are saving toward.
-  await expect(page.getByTestId('build-land')).toBeVisible();
+  const extension = page.getByTestId('build-land-row-parcel-starter-extension');
+  const north = page.getByTestId('build-land-row-parcel-north-field');
+  await expect(extension).toBeVisible();
+  await expect(extension).toContainText(/\$20\.00.*3 crop beds/i);
+  await expect(north).toBeVisible();
+  await expect(north).toContainText(/Buy Starter Extension first/i);
 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('build-panel')).toBeHidden();

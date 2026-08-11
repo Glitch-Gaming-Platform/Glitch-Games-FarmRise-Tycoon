@@ -13,6 +13,7 @@ import { Career } from '@game/career/Career.js';
 import {
   build,
   buyAnimal,
+  buyLand,
   collectStack,
   harvest,
   hireWorker,
@@ -124,6 +125,26 @@ describe('construction and collision', () => {
     expect(career.world.physics.isBlockedWorld(road.x, road.z)).toBe(false);
   });
 
+  it('reserves all three Starter Extension beds from structures before and after purchase', () => {
+    for (const [tileX, tileZ] of [
+      [13, 6],
+      [15, 6],
+      [17, 6],
+    ] as const) {
+      expect(build(career, 'road', tileX, tileZ).ok).toBe(false);
+    }
+
+    expect(buyLand(career, 'parcel-starter-extension').ok).toBe(true);
+    const extensionBeds = career.world.fields.placements.filter((plot) =>
+      /^plot-n[567]$/.test(plot.id),
+    );
+    expect(extensionBeds).toHaveLength(3);
+    for (const bed of extensionBeds) {
+      expect(build(career, 'road', bed.tileX, bed.tileZ).ok).toBe(false);
+      expect(plant(career, bed.id, 'wheat').ok).toBe(true);
+    }
+  });
+
   it('keeps the shelter collision outside the visible structure', () => {
     const shelter = career.world.grid.tileToWorld(
       career.world.level.shelter.tileX,
@@ -207,6 +228,55 @@ describe('livestock and persistence', () => {
 
     career.advance(600, ['eggs'], true);
     expect(career.world.inventory.eggs).toBe(8);
+  });
+
+  it('finishes the already-fed onboarding clutch when a resumed farm has no corn', () => {
+    expect(career.world.stores.withdraw('store-yard', 'corn', 3).ok).toBe(true);
+    const hens = career.world.livestock.groups.find((group) => group.species === 'chicken')!;
+    const remaining = ANIMALS.chicken.cycleTicks - hens.cycleTicks;
+
+    career.advance(remaining, ['eggs'], true, ['chicken']);
+
+    const drop = career.world.level.animalProductDrop;
+    expect(career.world.stores.get(`stack-${drop.tileX}-${drop.tileZ}`)?.items.eggs).toBe(8);
+    expect(career.world.stores.storedTotalOf('corn')).toBe(0);
+
+    career.advance(ANIMALS.chicken.cycleTicks, ['eggs'], true);
+    expect(career.world.stores.totalOf('eggs')).toBe(8);
+  });
+
+  it('moves animal-product baskets from old unreachable save locations to the collection point', () => {
+    const state = career.toSaveState();
+    const site = state.sites[0]!;
+    const resumed = Career.fromSaveState({
+      ...state,
+      sites: [
+        {
+          ...site,
+          stores: [
+            ...site.stores,
+            {
+              id: 'stack-19-16',
+              buildingId: null,
+              tileX: 19,
+              tileZ: 16,
+              capacity: 999,
+              preserving: false,
+              items: { eggs: 8 },
+              quality: { eggs: 0.75 },
+              spoilageRemainder: { eggs: 0.4 },
+            },
+          ],
+        },
+      ],
+    });
+    const drop = resumed.world.level.animalProductDrop;
+
+    expect(resumed.world.stores.get('stack-19-16')).toBeUndefined();
+    expect(resumed.world.stores.get(`stack-${drop.tileX}-${drop.tileZ}`)?.items.eggs).toBe(8);
+    expect(resumed.world.stores.get(`stack-${drop.tileX}-${drop.tileZ}`)?.quality.eggs).toBeCloseTo(
+      0.75,
+    );
   });
 
   it('makes collected animal products sellable but excludes baskets still on the ground', () => {

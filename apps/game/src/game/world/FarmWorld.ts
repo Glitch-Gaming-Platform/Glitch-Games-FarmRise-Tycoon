@@ -17,6 +17,7 @@ import {
   FIELD_SPOILAGE_MULTIPLIER,
   STORED_SPOILAGE_MULTIPLIER,
   bedsForParcels,
+  getItem,
   type AnimalSpecies,
   type FarmSiteSaveState,
   type Inventory,
@@ -48,6 +49,8 @@ export interface SiteTickContext {
   readonly protectedFieldItems?: readonly string[];
   /** Pauses the starter clutch until onboarding is ready to teach collection. */
   readonly animalProductionEnabled?: boolean;
+  /** Species whose already-fed tutorial clutch may finish without consuming new feed. */
+  readonly animalFeedWaiverSpecies?: readonly AnimalSpecies[];
 }
 
 /** What one tick of a site cost and produced. The career applies the money. */
@@ -85,7 +88,7 @@ export interface FarmWorldEvents extends Record<string, unknown> {
     inTheOpen: boolean;
   };
   'world:storage-full': { itemId: string; spilled: number };
-  'world:parcel-acquired': { parcelId: string; displayName: string };
+  'world:parcel-acquired': { parcelId: string; displayName: string; bedCount: number };
   'world:carry-changed': { units: number; capacity: number };
 }
 
@@ -233,14 +236,18 @@ export class FarmWorld {
     const produce =
       context.animalProductionEnabled === false
         ? []
-        : this.livestock.advance(dtTicks, {
-            // Feed has to be carried home first. A crop still lying in a field
-            // pile is not magically available to the animals at the shelter.
-            available: (itemId) => this.stores.storedTotalOf(itemId),
-            consume: (itemId, quantity) => {
-              this.stores.withdrawStoredAnywhere(itemId, quantity);
+        : this.livestock.advance(
+            dtTicks,
+            {
+              // Feed has to be carried home first. A crop still lying in a field
+              // pile is not magically available to the animals at the shelter.
+              available: (itemId) => this.stores.storedTotalOf(itemId),
+              consume: (itemId, quantity) => {
+                this.stores.withdrawStoredAnywhere(itemId, quantity);
+              },
             },
-          });
+            context.animalFeedWaiverSpecies,
+          );
     for (const entry of produce) {
       producedUnits += entry.quantity;
       // This tile is reserved but walkable, so a crop or newly placed building
@@ -319,6 +326,44 @@ export class FarmWorld {
     this.stores.deposit(stackId, itemId, quantity, quality);
   }
 
+  /**
+   * Repairs older saves that left eggs or milk inside the shelter or on another
+   * unreachable ground tile. Collected products in storage are deliberately
+   * untouched; only field baskets move to the reserved collection point.
+   */
+  relocateAnimalProductBaskets(): number {
+    const drop = this.level.animalProductDrop;
+    const targetId = `stack-${drop.tileX}-${drop.tileZ}`;
+    let moved = 0;
+
+    for (const store of [...this.stores.stores]) {
+      if (!store.id.startsWith('stack-') || store.id === targetId) continue;
+      for (const [itemId, quantity] of Object.entries(store.items)) {
+        if (quantity <= 0 || getItem(itemId)?.category !== 'animal_product') continue;
+        const withdrawn = this.stores.withdraw(store.id, itemId, quantity);
+        if (!withdrawn.ok) continue;
+
+        const items = { ...store.items };
+        const quality = { ...store.quality };
+        const spoilageRemainder = { ...store.spoilageRemainder };
+        delete items[itemId];
+        delete quality[itemId];
+        delete spoilageRemainder[itemId];
+        store.items = items;
+        store.quality = quality;
+        store.spoilageRemainder = spoilageRemainder;
+
+        this.dropAt(drop.tileX, drop.tileZ, itemId, quantity, withdrawn.value.quality);
+        moved += quantity;
+      }
+      if (!Object.values(store.items).some((quantity) => quantity > 0)) {
+        this.stores.remove(store.id);
+      }
+    }
+
+    return moved;
+  }
+
   acquireParcel(parcelId: string): boolean {
     const parcel = this.parcels.acquire(parcelId);
     if (!parcel) return false;
@@ -327,6 +372,7 @@ export class FarmWorld {
     this.events.emit('world:parcel-acquired', {
       parcelId: parcel.id,
       displayName: parcel.displayName,
+      bedCount: parcel.beds.length,
     });
     return true;
   }
@@ -401,6 +447,7 @@ export class FarmWorld {
     for (const store of state.stores) {
       world.stores.add({ ...(store as unknown as StoreState) });
     }
+    world.relocateAnimalProductBaskets();
     world.livestock.hydrate(state.animals as never);
     world.processing.hydrate(state.processors as never);
     world.workforce.hydrate(

@@ -128,11 +128,34 @@ describe('the physical core loop', () => {
 });
 
 describe('progression remains continuous', () => {
-  it('opens the north parcel and its beds without ending the career', () => {
+  it('keeps the tutorial extension locked until eggs have been physically handled', () => {
+    const { career, world, session } = makeSession(true, false);
+    const refusals: string[] = [];
+    session.events.on('session:refused', ({ reason }) => refusals.push(reason));
+    session.fixedUpdate(STEP);
+
+    session.purchaseLand('parcel-starter-extension');
+    expect(world.parcels.owns('parcel-starter-extension')).toBe(false);
+    expect(refusals.at(-1)).toMatch(/Collect the eggs/i);
+
+    world.carry.pickUp('eggs', 1);
+    session.purchaseLand('parcel-starter-extension');
+    expect(world.parcels.owns('parcel-starter-extension')).toBe(true);
+    expect(career.balance).toBe(98_000);
+  });
+
+  it('opens the three-bed extension before the North Field without ending the career', () => {
     const { career, session } = harness;
     const before = career.world.parcels.count;
     session.purchaseLand('parcel-north-field');
+    expect(career.world.parcels.count).toBe(before);
+    session.purchaseLand('parcel-starter-extension');
     expect(career.world.parcels.count).toBe(before + 1);
+    expect(
+      career.world.fields.placements.filter((plot) => /^plot-n[567]$/.test(plot.id)),
+    ).toHaveLength(3);
+    session.purchaseLand('parcel-north-field');
+    expect(career.world.parcels.count).toBe(before + 2);
     expect(career.world.fields.placements.some((plot) => plot.id === 'plot-n1')).toBe(true);
     expect(session.summary().outcome).toBe('season');
   });

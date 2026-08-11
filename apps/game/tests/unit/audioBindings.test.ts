@@ -93,6 +93,7 @@ describe('audio bindings', () => {
     world.emit('world:parcel-acquired', {
       parcelId: 'parcel-north-field',
       displayName: 'North Field',
+      bedCount: 8,
     });
     world.emit('world:storage-full', { itemId: 'wheat', spilled: 1 });
     world.emit('world:produce', { itemId: 'egg', quantity: 2 });

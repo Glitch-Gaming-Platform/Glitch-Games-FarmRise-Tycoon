@@ -148,8 +148,10 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
       hud.toast(`A fox took ${count} ${name}. ${remaining} remain.`, 'error');
       render();
     }),
-    world.events.on('world:parcel-acquired', ({ displayName }) => {
-      hud.toast(`${displayName} is yours. The gate is open.`);
+    world.events.on('world:parcel-acquired', ({ displayName, bedCount }) => {
+      hud.toast(
+        `${displayName} is yours. ${bedCount} new crop ${bedCount === 1 ? 'bed is' : 'beds are'} ready.`,
+      );
       render();
     }),
 

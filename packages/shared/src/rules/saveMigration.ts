@@ -23,17 +23,25 @@ import {
   careerSaveStateSchema,
   type CareerSaveState,
 } from '../schemas/career.js';
+import type { FarmSiteSaveState } from '../schemas/site.js';
 import {
   legacySaveStateSchemaV1,
   SAVE_SCHEMA_VERSION_V1,
   type LegacySaveStateV1,
 } from '../schemas/save.js';
-import { cents } from '../domain/ids.js';
-import { HOMESTEAD_PARCEL_ID, PARCELS_BY_ID } from '../domain/parcels.js';
-import { asPlotId } from '../domain/ids.js';
+import { asPlotId, cents } from '../domain/ids.js';
+import {
+  HOMESTEAD_PARCEL_ID,
+  NORTH_FIELD_PARCEL_ID,
+  PARCELS_BY_ID,
+  STARTER_EXTENSION_PARCEL_ID,
+  bedsForParcels,
+  normalizeOwnedParcelIds,
+} from '../domain/parcels.js';
 import { isBuildingKind } from '../domain/buildings.js';
 import { newCareer, newCareerSite, STARTER_SITE_ID, YARD_STORE_ID } from './newCareer.js';
 import { ok, ruleViolation, type Result } from './result.js';
+import { emptyPlot } from './growth.js';
 
 /** Tile offset applied to v1 coordinates: the 16x16 farm became the middle of a 32x32 estate. */
 export const V1_TILE_OFFSET = 8;
@@ -45,7 +53,7 @@ export const V1_TILE_OFFSET = 8;
  * defensible reading: the player bought the only parcel the build offered, and
  * that parcel is the North Field.
  */
-export const V1_SECOND_PARCEL_ID = 'parcel-north-field';
+export const V1_SECOND_PARCEL_ID = NORTH_FIELD_PARCEL_ID;
 
 export interface MigrationNote {
   readonly field: string;
@@ -79,7 +87,7 @@ export function migrateV1ToV2(legacy: LegacySaveStateV1, careerId: string): Migr
 
   const ownedParcelIds = [HOMESTEAD_PARCEL_ID];
   if (legacy.landParcels > 1) {
-    ownedParcelIds.push(V1_SECOND_PARCEL_ID);
+    ownedParcelIds.push(STARTER_EXTENSION_PARCEL_ID, V1_SECOND_PARCEL_ID);
     notes.push({
       field: 'sites[0].ownedParcelIds',
       reason:
@@ -91,7 +99,7 @@ export function migrateV1ToV2(legacy: LegacySaveStateV1, careerId: string): Migr
     ownedParcelIds.flatMap((id) => (PARCELS_BY_ID[id]?.beds ?? []).map((bed) => bed.id)),
   );
 
-  const plots = legacy.plots
+  const plots: FarmSiteSaveState['plots'] = legacy.plots
     .filter((plot) => bedIds.has(plot.id as string))
     .map((plot) => ({
       id: asPlotId(plot.id as string),
@@ -108,6 +116,10 @@ export function migrateV1ToV2(legacy: LegacySaveStateV1, careerId: string): Migr
       quality: 1,
       previousCropId: null,
     }));
+  const migratedPlotIds = new Set(plots.map((plot) => String(plot.id)));
+  for (const bed of bedsForParcels(ownedParcelIds)) {
+    if (!migratedPlotIds.has(bed.id)) plots.push(emptyPlot(asPlotId(bed.id)));
+  }
 
   if (plots.length !== legacy.plots.length) {
     notes.push({
@@ -188,6 +200,58 @@ export function migrateV1ToV2(legacy: LegacySaveStateV1, careerId: string): Migr
 }
 
 /**
+ * Applies estate-table compatibility changes that do not alter the save wire
+ * shape. The current one preserves North Field ownership after its adjoining
+ * three-bed tutorial strip became a separately purchasable parcel.
+ */
+export function normalizeEstateLayout(state: CareerSaveState): MigrationOutcome {
+  const notes: MigrationNote[] = [];
+  let changed = false;
+  const sites = state.sites.map((site) => {
+    const legacyNorthSplit =
+      site.ownedParcelIds.includes(NORTH_FIELD_PARCEL_ID) &&
+      !site.ownedParcelIds.includes(STARTER_EXTENSION_PARCEL_ID);
+    const ownedParcelIds = normalizeOwnedParcelIds(site.ownedParcelIds);
+    const ownedChanged =
+      ownedParcelIds.length !== site.ownedParcelIds.length ||
+      ownedParcelIds.some((id, index) => id !== site.ownedParcelIds[index]);
+    const existingPlots = new Set(site.plots.map((plot) => String(plot.id)));
+    const missingPlots = legacyNorthSplit
+      ? bedsForParcels(ownedParcelIds)
+          .filter((bed) => !existingPlots.has(bed.id))
+          .map((bed) => emptyPlot(asPlotId(bed.id)))
+      : [];
+
+    if (!ownedChanged && missingPlots.length === 0) return site;
+    changed = true;
+    if (legacyNorthSplit) {
+      notes.push({
+        field: `sites.${site.id}.ownedParcelIds`,
+        reason:
+          'The original North Field included the new Starter Extension strip, so existing ownership keeps both parcels.',
+      });
+    }
+    if (missingPlots.length > 0) {
+      notes.push({
+        field: `sites.${site.id}.plots`,
+        reason: `${missingPlots.length} empty crop beds were added for the current estate layout.`,
+      });
+    }
+    return {
+      ...site,
+      ownedParcelIds: [...ownedParcelIds],
+      plots: [...site.plots, ...missingPlots],
+    };
+  });
+
+  return {
+    state: changed ? { ...state, sites } : state,
+    fromVersion: CAREER_SCHEMA_VERSION,
+    notes,
+  };
+}
+
+/**
  * Reads any supported save document and returns the current one.
  *
  * The caller keeps the original document until the migrated one has been
@@ -204,7 +268,7 @@ export function migrateSave(document: unknown, careerId: string): Result<Migrati
     if (!parsed.success) {
       return ruleViolation(`Save is version ${version} but does not match the schema.`);
     }
-    return ok({ state: parsed.data, fromVersion: version, notes: [] });
+    return ok(normalizeEstateLayout(parsed.data));
   }
 
   if (version === SAVE_SCHEMA_VERSION_V1) {
@@ -213,11 +277,16 @@ export function migrateSave(document: unknown, careerId: string): Result<Migrati
       return ruleViolation('This version 1 save is damaged and cannot be upgraded safely.');
     }
     const outcome = migrateV1ToV2(parsed.data, careerId);
-    const revalidated = careerSaveStateSchema.safeParse(outcome.state);
+    const normalized = normalizeEstateLayout(outcome.state);
+    const revalidated = careerSaveStateSchema.safeParse(normalized.state);
     if (!revalidated.success) {
       return ruleViolation('Upgrading this save produced an invalid career document.');
     }
-    return ok({ ...outcome, state: revalidated.data });
+    return ok({
+      ...outcome,
+      state: revalidated.data,
+      notes: [...outcome.notes, ...normalized.notes],
+    });
   }
 
   if (version > CAREER_SCHEMA_VERSION) {

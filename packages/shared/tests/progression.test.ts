@@ -96,7 +96,7 @@ describe('milestoneProgress', () => {
 
 describe('stageProgress', () => {
   it('is partial on a brand-new career and one when the milestone is met', () => {
-    // Not zero: a new farm already owns one of the two parcels the opening
+    // Not zero: a new farm already owns one of the three parcels the opening
     // milestone asks for, and the meter should say so rather than pretending
     // the player has done nothing.
     const opening = stageProgress(state());
@@ -107,7 +107,7 @@ describe('stageProgress', () => {
 
   it('never exceeds one, however far past a requirement the player goes', () => {
     expect(
-      stageProgress(state({ lifetimeEarned: 10_000_000, parcelsOwned: 4 })),
+      stageProgress(state({ lifetimeEarned: 10_000_000, parcelsOwned: 5 })),
     ).toBeLessThanOrEqual(1);
   });
 });

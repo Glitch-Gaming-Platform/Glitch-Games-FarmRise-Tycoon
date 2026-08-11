@@ -9,7 +9,14 @@
  * (docs/PROGRESSION_GAMEPLAY_PLAN.md §39.1). This class stays what FarmScene
  * needs: the thing that turns a keypress into a command.
  */
-import { ANIMALS, isMitigated, type BuildingKind, type Cents, type Result } from '@farmrise/shared';
+import {
+  ANIMALS,
+  STARTER_EXTENSION_PARCEL_ID,
+  isMitigated,
+  type BuildingKind,
+  type Cents,
+  type Result,
+} from '@farmrise/shared';
 import type * as THREE from 'three';
 import { EventBus } from '@engine/core/EventBus.js';
 import type { FixedUpdateContext, RenderContext } from '@engine/core/types.js';
@@ -193,6 +200,11 @@ export class SessionController {
   }
 
   purchaseLand(parcelId: string): void {
+    const onboardingRequirement = this.landPurchaseRequirement(parcelId);
+    if (onboardingRequirement) {
+      this.events.emit('session:refused', { action: 'buyLand', reason: onboardingRequirement });
+      return;
+    }
     const result = buyLand(this.career, parcelId);
     if (!result.ok) {
       this.events.emit('session:refused', { action: 'buyLand', reason: result.reason });
@@ -200,6 +212,18 @@ export class SessionController {
     }
     this.#reinvestments += 1;
     this.openPanel('none');
+  }
+
+  /** Keeps the tutorial expansion after the egg lesson without gating normal careers. */
+  landPurchaseRequirement(parcelId: string): string | null {
+    if (
+      parcelId === STARTER_EXTENSION_PARCEL_ID &&
+      this.onboarding.active &&
+      !this.#onboardingContext().eggsHandled
+    ) {
+      return 'Collect the eggs before opening the Starter Extension.';
+    }
+    return null;
   }
 
   purchaseCarrier(kind: string): void {
@@ -344,7 +368,8 @@ export class SessionController {
       this.onboarding.active &&
       onboardingContext.reinvestments > 0 &&
       onboardingContext.eggsHandled &&
-      (this.onboarding.currentBeat?.id === 'reinvest' || this.onboarding.currentBeat?.id === 'eggs')
+      onboardingContext.starterExtensionOwned &&
+      (this.onboarding.currentBeat?.id === 'eggs' || this.onboarding.currentBeat?.id === 'expand')
     ) {
       this.incidents.ensureOnboardingWarning();
       onboardingContext = this.#onboardingContext();
@@ -426,6 +451,7 @@ export class SessionController {
       eggsReady,
       eggsCollected,
       eggsHandled: eggsHandled || eggsCollected > 0,
+      starterExtensionOwned: world.parcels.owns(STARTER_EXTENSION_PARCEL_ID),
       warningActive: this.incidents.active.some(
         (instance) => this.career.tick < instance.impactTick && !isMitigated(instance as never),
       ),

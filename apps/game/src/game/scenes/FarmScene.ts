@@ -299,10 +299,14 @@ export class FarmScene implements GameScene {
     if (worldInputEnabled) this.#interaction?.fixedUpdate(context);
     this.#session?.fixedUpdate(context);
     const onboarding = this.#session?.onboarding;
+    const eggLessonActive = onboarding?.active && onboarding.currentBeat?.id === 'eggs';
+    const eggsAvailable =
+      (career.world.stores.totalOf('eggs') ?? 0) + (career.world.carry.items.eggs ?? 0);
     career.advance(
       1,
       onboarding?.active ? ['eggs'] : [],
       !onboarding?.active || onboarding.currentBeat?.id === 'eggs',
+      eggLessonActive && eggsAvailable <= 0 ? ['chicken'] : [],
     );
     this.#incidents?.fixedUpdate(1);
     this.#careerDirector?.fixedUpdate();

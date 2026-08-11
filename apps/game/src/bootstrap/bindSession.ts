@@ -15,6 +15,7 @@ import {
   BUILDING_KINDS,
   CARRIERS,
   COMMUNITY_PROJECTS_BY_ID,
+  ESTATE_PARCELS,
   INSURANCE_POLICIES,
   LOAN_OFFERS,
   PROCESSORS,
@@ -28,8 +29,6 @@ import {
   formatTicks,
   getItem,
   milestoneProgress as milestoneRequirementProgress,
-  nextParcelFor,
-  landProgress as landProgressOf,
   purchasableAnimals,
   recipesFor,
   storageUsed,
@@ -131,7 +130,6 @@ export function bindSession(
     }
 
     if (ui.build.visible) {
-      const parcel = nextParcelFor(world.parcels.ownedIds, career.stage);
       ui.build.update({
         balance: career.balance,
         options: buildableKinds(career.unlocks).map((kind) => {
@@ -144,11 +142,32 @@ export function bindSession(
           shelterRequired: animal.shelterSlots,
         })),
         shelterFree: session.shelterFree(),
-        landCost: parcel?.purchaseCost ?? cents(0),
-        canAffordLand: parcel !== undefined && career.balance >= parcel.purchaseCost,
-        landAvailable: parcel !== undefined,
-        landProgress: landProgressOf(career.balance, world.parcels.ownedIds, career.stage),
-        landName: parcel?.displayName ?? null,
+        land: ESTATE_PARCELS.filter(
+          (parcel) => !world.parcels.owns(parcel.id) && parcel.requiresStage <= career.stage,
+        ).map((parcel) => {
+          const missing = parcel.requiresOwned.filter((id) => !world.parcels.owns(id));
+          const ownershipRequirement = missing
+            .map((id) => ESTATE_PARCELS.find((candidate) => candidate.id === id)?.displayName ?? id)
+            .join(', ');
+          const tutorialRequirement = session.landPurchaseRequirement(parcel.id);
+          const requirement =
+            tutorialRequirement ??
+            (missing.length > 0 ? `Buy ${ownershipRequirement} first` : null);
+          return {
+            parcelId: parcel.id,
+            displayName: parcel.displayName,
+            cost: parcel.purchaseCost,
+            bedCount: parcel.beds.length,
+            description: parcel.description,
+            affordable: career.balance >= parcel.purchaseCost,
+            available: missing.length === 0 && tutorialRequirement === null,
+            progress:
+              parcel.purchaseCost > 0
+                ? Math.max(0, Math.min(1, career.balance / parcel.purchaseCost))
+                : 1,
+            requirement,
+          };
+        }),
         carriers: Object.values(CARRIERS)
           .filter(
             (carrier) =>
