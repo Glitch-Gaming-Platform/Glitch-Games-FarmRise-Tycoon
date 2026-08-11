@@ -14,13 +14,22 @@
 import {
   DEFAULT_BUYER_ID,
   ITEMS,
+  combineStoreInventories,
   cents,
   createRng,
+  getBuyer,
+  marketItemIdsForSeason,
+  projectDeliveryBonus,
+  qualityPriceMultiplier,
+  recordDelivery,
+  removeItemsFromStores,
   seedFromString,
+  seasonAt,
   spotPriceFor,
   validateFulfilment,
   validateSpotSale,
   type Cents,
+  type FarmSiteSaveState,
   type MarketOrderWire,
   type SaveState,
 } from '@farmrise/shared';
@@ -58,7 +67,14 @@ export class MarketService {
 
     let open = await this.repositories.market.listOpenForUser(userId);
     if (open.length < TARGET_OPEN_ORDERS) {
-      const generated = this.#generateOrders(userId, tick, TARGET_OPEN_ORDERS - open.length);
+      const save = await this.repositories.saves.findByUserId(userId);
+      const itemIds = marketItemIdsForSeason(save ? seasonAt(save.state.tick) : 'spring');
+      const generated = this.#generateOrders(
+        userId,
+        tick,
+        TARGET_OPEN_ORDERS - open.length,
+        itemIds,
+      );
       await this.repositories.market.insertMany(generated);
       open = await this.repositories.market.listOpenForUser(userId);
     }
@@ -74,7 +90,7 @@ export class MarketService {
     const save = await this.repositories.saves.findByUserId(userId);
     if (!save) throw HttpError.notFound('No save to trade from.');
 
-    const check = validateFulfilment(toDomainOrder(order), save.state.inventory, tick);
+    const check = validateFulfilment(toDomainOrder(order), inventoryFor(save.state), tick);
     if (!check.ok) throw HttpError.ruleViolation(check.reason);
 
     // Claim the order first. If this returns false another request already took
@@ -82,11 +98,9 @@ export class MarketService {
     const claimed = await this.repositories.market.markFulfilled(userId, orderId, Date.now());
     if (!claimed) throw HttpError.conflict('That order has already been fulfilled.');
 
-    const { envelope, state } = await this.saves.applyTradeResult(userId, (current) => ({
-      ...current,
-      balance: cents(current.balance + check.value.payout),
-      inventory: check.value.inventory,
-    }));
+    const { envelope, state } = await this.saves.applyTradeResult(userId, (current) =>
+      applySale(current, order.itemId, order.quantity, check.value.payout, order.buyerId),
+    );
 
     await this.repositories.ledger.append({
       userId,
@@ -105,24 +119,30 @@ export class MarketService {
     const save = await this.repositories.saves.findByUserId(userId);
     if (!save) throw HttpError.notFound('No save to trade from.');
 
-    const check = validateSpotSale(itemId, quantity, save.state.inventory);
+    const check = validateSpotSale(itemId, quantity, inventoryFor(save.state));
     if (!check.ok) throw HttpError.ruleViolation(check.reason);
 
-    const { envelope, state } = await this.saves.applyTradeResult(userId, (current) => ({
-      ...current,
-      balance: cents(current.balance + check.value.payout),
-      inventory: check.value.inventory,
-    }));
+    let payout = check.value.payout;
+    const { envelope, state } = await this.saves.applyTradeResult(userId, (current) => {
+      const withdrawal = withdrawFromActiveSite(current, itemId, quantity);
+      payout = cents(
+        spotPriceFor(itemId) *
+          quantity *
+          qualityPriceMultiplier(withdrawal.quality) *
+          projectDeliveryBonus(current.town.completedProjectIds),
+      );
+      return creditSale(withdrawal.state, payout, quantity);
+    });
 
     await this.repositories.ledger.append({
       userId,
       kind: 'spot_sale',
-      amount: check.value.payout,
+      amount: payout,
       balanceAfter: state.balance,
       metadata: { itemId, quantity },
     });
 
-    return { payout: check.value.payout, balance: state.balance, saveRevision: envelope.revision };
+    return { payout, balance: state.balance, saveRevision: envelope.revision };
   }
 
   /**
@@ -132,10 +152,14 @@ export class MarketService {
    * so orders are stable within a window (a refresh does not reroll them into
    * something better) but unpredictable to the client.
    */
-  #generateOrders(userId: string, tick: number, count: number): MarketOrderRecord[] {
+  #generateOrders(
+    userId: string,
+    tick: number,
+    count: number,
+    itemIds: readonly string[],
+  ): MarketOrderRecord[] {
     const window = Math.floor(tick / ORDER_WINDOW_TICKS);
     const rng = createRng(seedFromString(`farmrise-orders:${userId}:${window}`));
-    const itemIds = Object.keys(ITEMS);
     const now = Date.now();
 
     return Array.from({ length: count }, () => {
@@ -189,5 +213,89 @@ function toDomainOrder(order: MarketOrderRecord) {
 
 /** Convenience for tests and the seed script. */
 export function emptyInventory(state: SaveState): boolean {
-  return Object.values(state.inventory).every((quantity) => quantity === 0);
+  return state.sites.every((site) =>
+    [
+      ...site.stores.map((store) => store.items),
+      site.carried.items,
+      ...site.processors.map((processor) => processor.held),
+      ...site.workers.map((worker) => worker.carrying),
+    ].every((inventory) => Object.values(inventory).every((quantity) => quantity === 0)),
+  );
+}
+
+function activeSite(state: SaveState): FarmSiteSaveState {
+  const site = state.sites.find((entry) => entry.id === state.activeSiteId);
+  if (!site) throw HttpError.ruleViolation('The active farm site does not exist.');
+  return site;
+}
+
+function inventoryFor(state: SaveState) {
+  return combineStoreInventories(activeSite(state).stores);
+}
+
+function withdrawFromActiveSite(
+  state: SaveState,
+  itemId: string,
+  quantity: number,
+): { state: SaveState; quality: number } {
+  const site = activeSite(state);
+  const result = removeItemsFromStores(site.stores, itemId, quantity);
+  if (!result.ok) throw HttpError.ruleViolation(result.reason);
+  const nextSite: FarmSiteSaveState = { ...site, stores: [...result.value.stores] };
+  return {
+    quality: result.value.quality,
+    state: {
+      ...state,
+      sites: state.sites.map((entry) => (entry.id === site.id ? nextSite : entry)),
+    },
+  };
+}
+
+function creditSale(state: SaveState, payout: Cents, quantity: number): SaveState {
+  const balance = cents(state.balance + payout);
+  return {
+    ...state,
+    balance,
+    statistics: {
+      ...state.statistics,
+      lifetimeEarned: state.statistics.lifetimeEarned + payout,
+      peakBalance: Math.max(state.statistics.peakBalance, balance),
+      itemsSold: state.statistics.itemsSold + quantity,
+    },
+  };
+}
+
+function applySale(
+  state: SaveState,
+  itemId: string,
+  quantity: number,
+  payout: Cents,
+  buyerId?: string,
+): SaveState {
+  const withdrawn = withdrawFromActiveSite(state, itemId, quantity);
+  let next = creditSale(withdrawn.state, payout, quantity);
+  const buyer = buyerId ? getBuyer(buyerId) : undefined;
+  if (!buyer) return next;
+
+  const relationship = next.buyers[buyer.id] ?? {
+    trust: 0,
+    deliveries: 0,
+    failures: 0,
+    lastDeliveryTick: null,
+  };
+  next = {
+    ...next,
+    buyers: {
+      ...next.buyers,
+      [buyer.id]: {
+        ...recordDelivery(buyer.id, relationship),
+        lastDeliveryTick: next.tick,
+      },
+    },
+    statistics: {
+      ...next.statistics,
+      contractsCompleted: next.statistics.contractsCompleted + 1,
+    },
+  };
+  return next;
 }

@@ -14,6 +14,31 @@ export interface RenderCapabilities {
   readonly reducedMotion: boolean;
 }
 
+export interface TouchCapabilityEnvironment {
+  readonly maxTouchPoints?: number;
+  readonly coarsePointer?: boolean;
+  readonly viewportWidth?: number;
+  readonly touchEvents?: boolean;
+}
+
+/**
+ * Capability gate for the phone/tablet path. No user-agent sniffing: a device
+ * must expose touch and either a coarse primary pointer or a compact viewport.
+ */
+export function isTouchPrimaryDevice(environment: TouchCapabilityEnvironment = {}): boolean {
+  const maxTouchPoints =
+    environment.maxTouchPoints ??
+    (typeof navigator === 'undefined' ? 0 : (navigator.maxTouchPoints ?? 0));
+  const coarsePointer =
+    environment.coarsePointer ??
+    (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
+  const touchEvents =
+    environment.touchEvents ?? (typeof globalThis !== 'undefined' && 'ontouchstart' in globalThis);
+  const viewportWidth =
+    environment.viewportWidth ?? globalThis.innerWidth ?? Number.POSITIVE_INFINITY;
+  return (maxTouchPoints > 0 || touchEvents) && (coarsePointer || viewportWidth <= 1024);
+}
+
 export function detectCapabilities(doc: Document = document): RenderCapabilities {
   const canvas = doc.createElement('canvas');
   let webgl2 = false;

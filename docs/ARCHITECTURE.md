@@ -70,9 +70,9 @@ Two asymmetries are deliberate and worth stating plainly:
 | Folder | Contents |
 | --- | --- |
 | `protocol/` | Version negotiation, route builders, the response envelope, error codes |
-| `schemas/` | Zod schemas for every request and response, including the save document |
-| `domain/` | Crops, animals, buildings, events, items, ids, time constants |
-| `rules/` | Pure functions: growth, yield, storage, orders, money, seeded RNG |
+| `schemas/` | Zod schemas for requests, responses, legacy saves, career saves and site state |
+| `domain/` | Crops, animals, buildings, buyers, incidents, parcels, processing, seasons, workers and town data |
+| `rules/` | Pure functions for growth, progression, land, logistics, quality, finance, incidents and migration |
 
 Nothing here may read `process.env`, touch the DOM, import Three.js, or perform I/O. Every function
 is deterministic, which is what allows the server to re-run them over a submitted save.
@@ -103,13 +103,14 @@ also initialise last, which is backwards.
 
 | Folder | Contents |
 | --- | --- |
-| `world/` | `FarmWorld` (state + evolution), `FarmCommands` (player intents), levels, views |
+| `world/` | `FarmWorld` facade, focused models and command modules, levels and views |
+| `career/` | Persistent `Career`, progression/season director and seeded offline contract board |
 | `player/` | `Player` model, `PlayerController`, `PlayerView` |
 | `enemies/` | `Fox`, `EnemyDirector` |
-| `events/` | `EventDirector` — the warned-disruption scheduler |
+| `events/` | `IncidentDirector` — persisted, targeted and recoverable disruptions |
 | `items/` | Read-only inventory projections for the UI |
 | `states/` | `GameStateMachine`, the guarded transition table, phase implementations |
-| `systems/` | `InteractionController`, `GameStateSystem` |
+| `systems/` | Session, contextual interaction and placement controllers |
 | `rules/` | Client-only session rules; re-exports the shared, server-validated ones |
 | `scenes/` | `FarmScene` — composes the above and ticks it in dependency order |
 
@@ -167,6 +168,8 @@ renders is Playwright's job.
 - Rate limiting is per process. Behind N instances the effective limit is N×.
 - Save validation is a plausibility check, not a full re-simulation. Trades are fully authoritative;
   see [NETWORKING.md](NETWORKING.md) for exactly where the line is.
-- The asset manifest is empty — the bootstrap is procedural geometry. The pipeline is real; the
-  content is not there yet.
+- The 52 authored world assets still load as family bundles; stage-driven lazy world packs are
+  deferred until the measured transfer saving justifies the extra loading states (ADR 0021).
+- Multi-site travel/coarse simulation and machinery are reserved progression slices, not current
+  milestone rewards (ADR 0020).
 - No account deletion or data-export route yet.

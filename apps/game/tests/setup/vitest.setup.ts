@@ -8,6 +8,36 @@
  * verified by the Playwright tests against real browsers.
  */
 import { vi } from 'vitest';
+import { webcrypto } from 'node:crypto';
+
+// jsdom's typed arrays live in a different realm from Node's WebCrypto under
+// Node 20. Use one coherent implementation in tests so digest() receives
+// buffers from the same realm. Browsers continue to use their native crypto.
+const testSubtle = new Proxy(webcrypto.subtle, {
+  get(target, property, receiver) {
+    if (property === 'digest') {
+      return (algorithm: AlgorithmIdentifier, data: BufferSource) => {
+        const bytes = ArrayBuffer.isView(data)
+          ? Buffer.from(data.buffer as ArrayBuffer, data.byteOffset, data.byteLength)
+          : Buffer.from(data as ArrayBuffer);
+        return target.digest(algorithm, bytes);
+      };
+    }
+    const value = Reflect.get(target, property, receiver) as unknown;
+    return typeof value === 'function' ? value.bind(target) : value;
+  },
+});
+const testCrypto = new Proxy(webcrypto, {
+  get(target, property, receiver) {
+    if (property === 'subtle') return testSubtle;
+    const value = Reflect.get(target, property, receiver) as unknown;
+    return typeof value === 'function' ? value.bind(target) : value;
+  },
+});
+Object.defineProperty(globalThis, 'crypto', {
+  value: testCrypto,
+  configurable: true,
+});
 
 class MockResizeObserver implements ResizeObserver {
   observe(): void {}

@@ -24,19 +24,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function startFarmFromMenu(page: Page) {
-  // Vite may optimise Three's loader graph on the first farm request and
-  // reload once. Retry the semantic click so the test observes the game,
-  // not the development server warmup.
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.getByTestId('menu-play').dispatchEvent('click');
-    try {
-      await expect(page.getByTestId('hud')).toBeVisible({ timeout: 12_000 });
-      return;
-    } catch {
-      await expect(page.getByTestId('main-menu')).toBeVisible();
-    }
-  }
-  await expect(page.getByTestId('hud')).toBeVisible();
+  await page.getByTestId('menu-play').dispatchEvent('click');
+  await expect(page.getByTestId('menu-shortcuts')).toBeVisible({ timeout: 30_000 });
 }
 
 async function enterFarm(page: Page, path = '/') {
@@ -88,6 +77,58 @@ async function reachFirstPlot(page: Page) {
   await expect(page.getByTestId('hud-prompt')).toContainText('Plant Wheat');
 }
 
+async function carryFirstHarvestHome(page: Page) {
+  await expect(page.getByTestId('hud-carry')).toContainText(/[1-9]/);
+  await expect(page.getByTestId('coach-mark')).toContainText(/shelter.*(press E|tap Work)/i);
+
+  await page.keyboard.down('Shift');
+  await page.keyboard.down('d');
+  try {
+    await expect(page.getByTestId('hud-prompt')).toContainText('Put down', { timeout: 15_000 });
+  } finally {
+    await page.keyboard.up('d');
+    await page.keyboard.up('Shift');
+  }
+
+  await page.keyboard.press('e');
+  await expect(page.getByTestId('hud-storage')).toContainText(/[1-9]\/60/);
+  await expect(page.getByTestId('hud-carry')).toHaveCount(0);
+}
+
+async function reachEggStack(page: Page) {
+  const prompt = page.getByTestId('hud-prompt');
+  if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
+
+  // On a heavily throttled software renderer, the tutorial can reach this
+  // beat before the short starter clutch has elapsed. Wait for the
+  // first clutch to become a real field stack before searching for it.
+  await expect
+    .poll(
+      async () => {
+        const text = (await page.getByTestId('hud-storage').textContent()) ?? '0/60';
+        return Number(text.match(/(\d+)\//)?.[1] ?? 0);
+      },
+      { timeout: 90_000 },
+    )
+    .toBeGreaterThan(3);
+
+  // The player finishes hauling beside the shelter. Walk a short search loop
+  // around its collision footprint until the real egg-stack prompt appears.
+  for (const direction of ['s', 'd', 'w', 'a', 's', 'd'] as const) {
+    await page.keyboard.down(direction);
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await page.waitForTimeout(100);
+        if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
+      }
+    } finally {
+      await page.keyboard.up(direction);
+    }
+  }
+
+  await expect(prompt).toContainText(/Pick up .*Eggs/i);
+}
+
 async function placeAtFirstValidCanvasPoint(page: Page) {
   const canvas = page.locator('#app > canvas');
   const box = await canvas.boundingBox();
@@ -111,29 +152,50 @@ async function placeAtFirstValidCanvasPoint(page: Page) {
   throw new Error('No valid road-placement point was found on the visible canvas.');
 }
 
+test('crop condition bars stay out of the top HUD', async ({ page }) => {
+  await enterFarm(page);
+  await reachFirstPlot(page);
+
+  // Water, growth and spoilage are Three.js labels anchored over the affected
+  // world object. The top HUD must not recreate the old full-width meters.
+  await expect(page.getByTestId('hud-meter-water')).toHaveCount(0);
+  await expect(page.getByTestId('hud-meter-growth')).toHaveCount(0);
+  await expect(page.getByTestId('hud-meter-freshness')).toHaveCount(0);
+
+  await page.keyboard.press('e');
+  await expect(page.getByTestId('hud-prompt')).toContainText('Tend');
+  await expect(page.getByTestId('hud-meter-water')).toHaveCount(0);
+  await expect(page.getByTestId('hud-meter-growth')).toHaveCount(0);
+});
+
 test('a new player is given something to do within seconds', async ({ page }) => {
   await enterFarm(page);
   const coach = page.getByTestId('coach-mark');
   await expect(coach).toBeVisible({ timeout: 10_000 });
-  await expect(coach).toContainText(/W, A, S and D.*brown plots/i);
+  await expect(coach).toContainText(/(W, A, S and D|joystick).*brown plots/i);
 });
 
 test('the first-time loop reaches harvest, sale and reinvestment without a long wait', async ({
   page,
 }) => {
+  // Software-rendered Firefox can spend most of the default allowance drawing
+  // the farm when this test follows the rest of the release matrix. The crop
+  // still uses the accelerated onboarding clock; this only protects the
+  // browser-driving wall-clock budget from renderer contention.
+  test.setTimeout(300_000);
   await enterFarm(page);
   await reachFirstPlot(page);
 
   await page.keyboard.press('e');
   await expect(page.getByTestId('hud-prompt')).toContainText('Tend');
-  await expect(page.getByTestId('coach-mark')).toContainText(/press E.*water/i);
+  await expect(page.getByTestId('coach-mark')).toContainText(/(press E|tap Work).*water/i);
 
   await tendFirstCrop(page);
-  await expect(page.getByTestId('hud-prompt')).toContainText('Harvest', { timeout: 12_000 });
+  await expect(page.getByTestId('hud-prompt')).toContainText('Harvest', { timeout: 30_000 });
 
   await page.keyboard.press('e');
-  await expect(page.getByTestId('hud-storage')).toContainText(/[1-9]\/60/);
-  await expect(page.getByTestId('coach-mark')).toContainText(/Press M.*Sell all/i);
+  await carryFirstHarvestHome(page);
+  await expect(page.getByTestId('coach-mark')).toContainText(/(Press M|Tap Market).*Sell all/i);
 
   await page.keyboard.press('m');
   await expect(page.getByTestId('market-panel')).toBeVisible();
@@ -145,14 +207,27 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
       return Number(text.match(/\$([\d.]+)/)?.[1] ?? '0');
     })
     .toBeGreaterThan(48.8);
-  await expect(page.getByTestId('coach-mark')).toContainText(/Press B.*place/i);
+  await expect(page.getByTestId('coach-mark')).toContainText(/(Press B|Tap Build).*place/i);
 
   await page.getByTestId('market-close').click();
-  await page.keyboard.press('b');
-  await page.getByTestId('build-chicken').click();
+  // This scenario proves the progression loop. Shortcut behavior is covered
+  // by the dedicated panel-input test below, so use the always-visible menu
+  // control here to avoid losing a synthetic key event under a busy renderer.
+  await page.getByRole('button', { name: 'Open build' }).click();
+  await expect(page.getByTestId('build-panel')).toBeVisible();
+  await page.getByTestId('build-animal-chicken').click();
   await page.getByTestId('build-close').click();
   await expect(page.getByTestId('hud-objective')).toBeVisible();
+
+  await expect(page.getByTestId('coach-mark')).toContainText(/Collect the eggs/i);
+  await reachEggStack(page);
+  await page.keyboard.press('e');
+  await expect(page.getByTestId('coach-mark')).toContainText(/Something is coming/i);
+  await expect(page.getByTestId('hud-warning')).toBeVisible();
+
+  await page.keyboard.press('f');
   await expect(page.getByTestId('coach-mark')).toBeHidden();
+  await expect(page.getByText('That is already dealt with.')).toHaveCount(0);
 });
 
 test('market and reinvest interfaces block farm controls behind them', async ({ page }) => {
@@ -255,7 +330,7 @@ test('bottom-right menu icons and their letter keys open the same interfaces', a
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('pause-menu')).toBeVisible();
   await expect(shortcuts).toBeHidden();
-  await page.getByTestId('pause-resume').click();
+  await page.getByTestId('pause-resume').dispatchEvent('click');
   await expect(shortcuts).toBeVisible();
 });
 

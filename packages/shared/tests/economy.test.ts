@@ -6,15 +6,26 @@ import { describe, expect, it } from 'vitest';
 import {
   BASE_STORAGE_UNITS,
   BARN_CAPACITY_UNITS,
+  CROPS,
+  advancePlot,
   addItems,
   asOrderId,
+  asPlotId,
   canAfford,
   cents,
+  computeYield,
+  emptyPlot,
+  harvestQuality,
   orderPayout,
   orderPremium,
+  plantableCrops,
   removeItems,
+  seasonalCropIds,
   spend,
   spotValue,
+  qualityPriceMultiplier,
+  tendPlot,
+  ticksUntilReady,
   storageCapacity,
   storageUsed,
   validateFulfilment,
@@ -103,5 +114,71 @@ describe('wallet', () => {
   it('rejects a negative price outright', () => {
     // Otherwise "buying" something for -500 would be a way to print money.
     expect(spend({ balance: cents(100) }, cents(-500), 'exploit').ok).toBe(false);
+  });
+});
+
+describe('crop margins', () => {
+  it('returns the crop rarity target between three and ten times seed cost', () => {
+    for (const crop of Object.values(CROPS)) {
+      let state = {
+        ...emptyPlot(asPlotId(`plot-${crop.id}`)),
+        cropId: crop.id,
+        irrigated: true,
+      };
+      for (let action = 0; action < crop.tendActions; action += 1) state = tendPlot(state);
+      const season = crop.favouredSeasons[0] ?? 'spring';
+      state = advancePlot(state, ticksUntilReady(state, season), season);
+
+      const quality = harvestQuality(state, season);
+      const payout = Math.round(
+        computeYield(state) * crop.baseUnitPrice * qualityPriceMultiplier(quality),
+      );
+      const actualReturn = payout / crop.seedCost;
+      expect(actualReturn, crop.id).toBeGreaterThanOrEqual(3);
+      expect(actualReturn, crop.id).toBeLessThanOrEqual(10.05);
+      expect(actualReturn, crop.id).toBeCloseTo(crop.returnMultiplier, 1);
+    }
+  });
+
+  it('makes corn common at 3x and avocado exotic at 10x', () => {
+    expect(CROPS.corn?.rarity).toBe('common');
+    expect(CROPS.corn?.returnMultiplier).toBe(3);
+    expect(CROPS.avocado?.rarity).toBe('exotic');
+    expect(CROPS.avocado?.returnMultiplier).toBe(10);
+  });
+
+  it('keeps four base crops year-round and exposes exactly three specials per season', () => {
+    for (const season of ['spring', 'summer', 'autumn', 'winter'] as const) {
+      expect(seasonalCropIds(season)).toHaveLength(3);
+      const available = new Set(plantableCrops(['soil_management'], season).map((crop) => crop.id));
+      for (const cropId of ['wheat', 'corn', 'pumpkin', 'clover']) {
+        expect(available.has(cropId), `${cropId} in ${season}`).toBe(true);
+      }
+      for (const cropId of seasonalCropIds(season)) {
+        expect(available.has(cropId), `${cropId} in ${season}`).toBe(true);
+      }
+    }
+  });
+
+  it('does not sell a seasonal crop outside its planting window', () => {
+    expect(plantableCrops([], 'spring').some((crop) => crop.id === 'strawberry')).toBe(true);
+    expect(plantableCrops([], 'summer').some((crop) => crop.id === 'strawberry')).toBe(false);
+    expect(plantableCrops([], 'summer').some((crop) => crop.id === 'avocado')).toBe(true);
+  });
+
+  it('makes every higher return tier take longer than the tier below it', () => {
+    const byReturn = new Map<number, number[]>();
+    for (const crop of Object.values(CROPS)) {
+      const durations = byReturn.get(crop.returnMultiplier) ?? [];
+      durations.push(crop.growthTicks);
+      byReturn.set(crop.returnMultiplier, durations);
+    }
+
+    const tiers = [...byReturn.entries()].sort(([left], [right]) => left - right);
+    for (let index = 1; index < tiers.length; index += 1) {
+      const lower = tiers[index - 1]![1];
+      const higher = tiers[index]![1];
+      expect(Math.min(...higher)).toBeGreaterThan(Math.max(...lower));
+    }
   });
 });

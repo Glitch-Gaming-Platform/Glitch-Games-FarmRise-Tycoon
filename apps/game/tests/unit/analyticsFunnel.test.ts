@@ -114,6 +114,8 @@ describe('the onboarding funnel', () => {
     expect(index('scene_ready')).toBeLessThan(index('onboarding_start'));
     expect(index('first_input')).toBeLessThan(index('first_meaningful_action'));
     expect(index('crop_planted')).toBeLessThan(index('crop_harvested'));
+    expect(index('crop_harvested')).toBeLessThan(index('goods_hauled'));
+    expect(index('goods_hauled')).toBeLessThan(index('goods_sold'));
     expect(index('crop_harvested')).toBeLessThan(index('goods_sold'));
     expect(index('goods_sold')).toBeLessThan(index('onboarding_complete'));
   });
@@ -121,45 +123,55 @@ describe('the onboarding funnel', () => {
 
 // ---------------------------------------------------------------------------
 
-describe('local market contracts', () => {
-  it('always presents a choice, even with no backend', async () => {
-    const { refreshLocalContracts, createContractRng } =
-      await import('@game/world/localContracts.js');
-    const contracts = refreshLocalContracts([], 0, createContractRng(7));
-    expect(contracts.length).toBeGreaterThanOrEqual(3);
-    for (const order of contracts) {
-      expect(order.quantity).toBeGreaterThan(0);
-      expect(order.deadlineTick).toBeGreaterThan(0);
-      expect(order.status).toBe('open');
+describe('offline buyer board', () => {
+  const makeContractCareer = async (careerId = 'test-career') => {
+    const { makeCareer } = await import('../helpers/career.js');
+    const career = makeCareer({}, careerId);
+    career.grant(['contracts']);
+    return career;
+  };
+
+  it('always presents a choice without a backend', async () => {
+    const { ContractBoard } = await import('@game/career/ContractBoard.js');
+    const board = new ContractBoard(await makeContractCareer());
+    board.refresh();
+    expect(board.available().length).toBeGreaterThan(0);
+    for (const entry of board.available()) {
+      expect(entry.offer.quantity).toBeGreaterThan(0);
+      expect(entry.offer.deadlineTick).toBeGreaterThan(0);
     }
   });
 
-  it('pays a premium over spot, or the trade-off does not exist', async () => {
-    const { refreshLocalContracts, createContractRng } =
-      await import('@game/world/localContracts.js');
+  it('offers a premium over raw spot value', async () => {
+    const { ContractBoard } = await import('@game/career/ContractBoard.js');
     const { spotPriceFor } = await import('@farmrise/shared');
-    for (const order of refreshLocalContracts([], 0, createContractRng(11))) {
-      expect(order.unitPrice).toBeGreaterThan(spotPriceFor(order.itemId));
+    const board = new ContractBoard(await makeContractCareer());
+    board.refresh();
+    for (const entry of board.available()) {
+      expect(entry.offer.unitPrice).toBeGreaterThan(spotPriceFor(entry.offer.itemId));
     }
   });
 
-  it('drops expired orders and tops the list back up', async () => {
-    const { refreshLocalContracts, createContractRng } =
-      await import('@game/world/localContracts.js');
-    const rng = createContractRng(3);
-    const initial = refreshLocalContracts([], 0, rng);
-    const later = refreshLocalContracts(initial, 1_000_000, rng);
-    expect(later.length).toBeGreaterThanOrEqual(3);
-    expect(later.every((order) => order.deadlineTick > 1_000_000)).toBe(true);
+  it('drops expired offers and tops the board back up', async () => {
+    const { ContractBoard } = await import('@game/career/ContractBoard.js');
+    const career = await makeContractCareer();
+    const board = new ContractBoard(career);
+    board.refresh();
+    const expiry = Math.max(...board.available().map((entry) => entry.offer.deadlineTick));
+    career.advance(expiry + 1);
+    board.fixedUpdate();
+    expect(board.available().length).toBeGreaterThan(0);
+    expect(board.available().every((entry) => entry.offer.deadlineTick > career.tick)).toBe(true);
   });
 
-  it('is deterministic for a given seed, so a reload cannot reroll the market', async () => {
-    const { refreshLocalContracts, createContractRng } =
-      await import('@game/world/localContracts.js');
-    const a = refreshLocalContracts([], 0, createContractRng(99));
-    const b = refreshLocalContracts([], 0, createContractRng(99));
-    expect(a.map((o) => `${o.itemId}:${o.quantity}:${o.unitPrice}`)).toEqual(
-      b.map((o) => `${o.itemId}:${o.quantity}:${o.unitPrice}`),
+  it('is deterministic for a saved market RNG stream', async () => {
+    const { ContractBoard } = await import('@game/career/ContractBoard.js');
+    const a = new ContractBoard(await makeContractCareer('market-a'));
+    const b = new ContractBoard(await makeContractCareer('market-b'));
+    a.refresh();
+    b.refresh();
+    expect(a.available().map((entry) => entry.offer)).toEqual(
+      b.available().map((entry) => entry.offer),
     );
   });
 });

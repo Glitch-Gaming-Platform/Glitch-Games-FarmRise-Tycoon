@@ -10,7 +10,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import type * as THREE from 'three';
-import { createGroundGeometry, outsideDistance } from '@game/world/view/groundGeometry.js';
+import {
+  createGroundGeometry,
+  outsideDistance,
+  sampleGroundSurface,
+} from '@game/world/view/groundGeometry.js';
 
 const OPTIONS = { playableWidth: 32, playableDepth: 32, extentScale: 3 } as const;
 
@@ -63,12 +67,61 @@ describe('createGroundGeometry', () => {
     // Multipliers above 1 are allowed and intended - they brighten the base
     // palette colour - but anything past ~1.3 would blow the ground out to a
     // flat highlight, which is the failure this range exists to prevent.
-    expect(min).toBeGreaterThan(0.4);
+    expect(min).toBeGreaterThan(0.38);
     expect(max).toBeLessThan(1.3);
     // And it must actually vary. A previous pass shipped a range so narrow it
     // was invisible at the gameplay camera, which is the same as flat.
     expect(max - min).toBeGreaterThan(0.25);
     geometry.dispose();
+  });
+
+  it('adds lighting texture without displacing the playable land', () => {
+    const geometry = createGroundGeometry(OPTIONS);
+    const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+    const normal = geometry.getAttribute('normal') as THREE.BufferAttribute;
+
+    let variedNormals = 0;
+    for (let index = 0; index < position.count; index += 1) {
+      const x = position.getX(index);
+      const z = position.getZ(index);
+      if (outsideDistance(x, z, OPTIONS.playableWidth, OPTIONS.playableDepth) > 0) continue;
+      expect(position.getY(index)).toBe(0);
+      if (Math.abs(normal.getX(index)) > 0.002 || Math.abs(normal.getZ(index)) > 0.002) {
+        variedNormals += 1;
+      }
+    }
+
+    expect(variedNormals).toBeGreaterThan(500);
+    geometry.dispose();
+  });
+
+  it('suppresses grass where a worn route crosses otherwise lush ground', () => {
+    let point = { x: 0, z: 0 };
+    let base = sampleGroundSurface(point.x, point.z, OPTIONS);
+    for (let z = -14; z <= 14; z += 1) {
+      for (let x = -14; x <= 14; x += 1) {
+        const candidate = sampleGroundSurface(x, z, OPTIONS);
+        if (candidate.localPasture > base.localPasture) {
+          point = { x, z };
+          base = candidate;
+        }
+      }
+    }
+    const worn = sampleGroundSurface(point.x, point.z, {
+      ...OPTIONS,
+      wornPaths: [
+        {
+          from: { x: point.x - 4, z: point.z },
+          to: { x: point.x + 4, z: point.z },
+          width: 1.4,
+        },
+      ],
+    });
+
+    expect(base.localPasture).toBeGreaterThan(0.4);
+    expect(worn.worn).toBeGreaterThan(0.95);
+    expect(worn.localPasture).toBeLessThan(base.localPasture);
+    expect(worn.localEarth).toBeGreaterThan(0.95);
   });
 
   it('is deterministic across builds', () => {

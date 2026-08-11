@@ -12,6 +12,8 @@ import { uiIcon, type UiIconId } from '../core/icons.js';
 export interface MenuShortcutCallbacks {
   readonly onMarket: () => void;
   readonly onBuild: () => void;
+  readonly onCareer: () => void;
+  readonly onTown: () => void;
 }
 
 export class MenuShortcutDock {
@@ -27,6 +29,8 @@ export class MenuShortcutDock {
       },
       shortcut('Market', 'M', 'market', callbacks.onMarket, 'menu-shortcut-market'),
       shortcut('Build', 'B', 'barn', callbacks.onBuild, 'menu-shortcut-build'),
+      shortcut('Office', 'C', 'land', callbacks.onCareer, 'menu-shortcut-career'),
+      shortcut('Town', 'T', 'market', callbacks.onTown, 'menu-shortcut-town'),
     );
     this.root.hidden = true;
   }

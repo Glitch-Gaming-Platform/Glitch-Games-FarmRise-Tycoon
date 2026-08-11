@@ -1,19 +1,29 @@
 /**
- * Building definitions - first playable scope is exactly four structures.
+ * Building definitions.
  *
- * Each one maps to a different pillar of the reinvestment decision:
+ * The original four map to the four pillars of the reinvestment decision:
  *   barn       - increases output you can hold  (capacity)
  *   irrigation - stabilises growth              (reliability)
  *   road       - reduces travel time            (labour)
  *   fence      - protects animals               (resilience)
  *
- * Money should never have an obvious best home; these four are deliberately
- * priced close together.
+ * Progression adds structures that answer problems the player only has *after*
+ * a success: somewhere to stage a distant harvest, somewhere to keep goods from
+ * spoiling, somewhere for a worker to live, and the processors that turn
+ * produce into something worth more (docs/PROGRESSION_GAMEPLAY_PLAN.md §8-10).
+ *
+ * Processor buildings are generated from PROCESSORS rather than retyped here,
+ * so a processor's cost exists in exactly one place.
  */
 import { cents, type Cents } from './ids.js';
 import { secondsToTicks, type Ticks } from './time.js';
+import { PROCESSORS, type ProcessorKind } from './processing.js';
+import type { UnlockId } from './milestones.js';
 
-export type BuildingKind = 'barn' | 'irrigation' | 'road' | 'fence';
+export type CoreBuildingKind =
+  'barn' | 'irrigation' | 'road' | 'fence' | 'loading_pad' | 'cold_store' | 'worker_hut' | 'well';
+
+export type BuildingKind = CoreBuildingKind | ProcessorKind;
 
 export interface BuildingDefinition {
   readonly id: BuildingKind;
@@ -25,10 +35,12 @@ export interface BuildingDefinition {
   readonly footprint: { readonly width: number; readonly depth: number };
   /** Upkeep charged per in-game day once complete. */
   readonly upkeepPerDay: Cents;
+  /** Career unlock required before this appears in the build menu. */
+  readonly requiresUnlock: UnlockId | null;
   readonly description: string;
 }
 
-export const BUILDINGS: Readonly<Record<BuildingKind, BuildingDefinition>> = Object.freeze({
+const CORE_BUILDINGS: Readonly<Record<CoreBuildingKind, BuildingDefinition>> = Object.freeze({
   barn: {
     id: 'barn',
     displayName: 'Barn',
@@ -36,6 +48,7 @@ export const BUILDINGS: Readonly<Record<BuildingKind, BuildingDefinition>> = Obj
     buildTicks: secondsToTicks(90),
     footprint: { width: 2, depth: 2 },
     upkeepPerDay: cents(40),
+    requiresUnlock: null,
     description: 'Adds storage capacity so you can hold goods for a better order.',
   },
   irrigation: {
@@ -45,6 +58,7 @@ export const BUILDINGS: Readonly<Record<BuildingKind, BuildingDefinition>> = Obj
     buildTicks: secondsToTicks(75),
     footprint: { width: 1, depth: 1 },
     upkeepPerDay: cents(60),
+    requiresUnlock: null,
     description: 'Supplies water to adjacent plots and blunts drought damage.',
   },
   road: {
@@ -54,6 +68,7 @@ export const BUILDINGS: Readonly<Record<BuildingKind, BuildingDefinition>> = Obj
     buildTicks: secondsToTicks(10),
     footprint: { width: 1, depth: 1 },
     upkeepPerDay: cents(2),
+    requiresUnlock: null,
     description: 'Speeds up movement and hauling across the tile it occupies.',
   },
   fence: {
@@ -63,13 +78,93 @@ export const BUILDINGS: Readonly<Record<BuildingKind, BuildingDefinition>> = Obj
     buildTicks: secondsToTicks(30),
     footprint: { width: 1, depth: 1 },
     upkeepPerDay: cents(10),
+    requiresUnlock: null,
     description: 'Encloses animal shelter and sharply reduces predator losses.',
   },
+  loading_pad: {
+    id: 'loading_pad',
+    displayName: 'Loading pad',
+    buildCost: cents(1800),
+    buildTicks: secondsToTicks(35),
+    footprint: { width: 2, depth: 1 },
+    upkeepPerDay: cents(8),
+    requiresUnlock: 'hauling',
+    description:
+      'Somewhere to stage a harvest out in the fields instead of carrying every load home.',
+  },
+  cold_store: {
+    id: 'cold_store',
+    displayName: 'Cold store',
+    buildCost: cents(11_000),
+    buildTicks: secondsToTicks(140),
+    footprint: { width: 2, depth: 2 },
+    upkeepPerDay: cents(160),
+    requiresUnlock: 'quality_grading',
+    description: 'Stops goods losing quality while you wait for the contract that pays properly.',
+  },
+  worker_hut: {
+    id: 'worker_hut',
+    displayName: 'Worker hut',
+    buildCost: cents(7_000),
+    buildTicks: secondsToTicks(120),
+    footprint: { width: 2, depth: 2 },
+    upkeepPerDay: cents(30),
+    requiresUnlock: 'workers',
+    description: 'Houses one worker. No hut, no hire.',
+  },
+  well: {
+    id: 'well',
+    displayName: 'Deep well',
+    buildCost: cents(9_500),
+    buildTicks: secondsToTicks(160),
+    footprint: { width: 1, depth: 1 },
+    upkeepPerDay: cents(35),
+    requiresUnlock: 'utilities',
+    description: 'Feeds every irrigation point in range, so one drought does not empty the estate.',
+  },
 });
+
+function processorBuildings(): Record<ProcessorKind, BuildingDefinition> {
+  const entries = Object.values(PROCESSORS).map(
+    (processor): [ProcessorKind, BuildingDefinition] => [
+      processor.id,
+      {
+        id: processor.id,
+        displayName: processor.displayName,
+        buildCost: processor.buildCost,
+        buildTicks: processor.buildTicks,
+        footprint: processor.footprint,
+        upkeepPerDay: processor.upkeepPerDay,
+        requiresUnlock: 'processing',
+        description: processor.description,
+      },
+    ],
+  );
+  return Object.fromEntries(entries) as Record<ProcessorKind, BuildingDefinition>;
+}
+
+export const BUILDINGS: Readonly<Record<BuildingKind, BuildingDefinition>> = Object.freeze({
+  ...CORE_BUILDINGS,
+  ...processorBuildings(),
+});
+
+export const BUILDING_KINDS = Object.keys(BUILDINGS) as readonly BuildingKind[];
+
+export function getBuilding(id: string): BuildingDefinition | undefined {
+  return (BUILDINGS as Record<string, BuildingDefinition>)[id];
+}
+
+export function isBuildingKind(id: string): id is BuildingKind {
+  return Object.hasOwn(BUILDINGS, id);
+}
 
 /** Storage capacity granted per completed barn, in item units. */
 export const BARN_CAPACITY_UNITS = 120;
 /** Baseline storage before any barn is built. */
 export const BASE_STORAGE_UNITS = 60;
+/** A cold store holds less than a barn but preserves what is in it. */
+export const COLD_STORE_CAPACITY_UNITS = 70;
 /** Multiplier applied to traversal cost on a road tile (lower is faster). */
 export const ROAD_TRAVERSAL_MULTIPLIER = 0.55;
+/** Tiles a deep well can serve. */
+export const WELL_SERVICE_RADIUS_TILES = 6;

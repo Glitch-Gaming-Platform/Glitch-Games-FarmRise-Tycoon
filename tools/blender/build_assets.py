@@ -31,7 +31,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
-for _module in ("palette", "buildlib", "assets"):
+for _module in ("palette", "buildlib", "seasonal_crops", "assets"):
     if _module in sys.modules:
         del sys.modules[_module]
 
@@ -49,6 +49,10 @@ REPORT = os.path.join(ROOT, "art", "build_report.json")
 # downloads the character.
 FAMILIES = {
     "crops": "CROPS",
+    "crops-spring": "CROPS_SPRING",
+    "crops-summer": "CROPS_SUMMER",
+    "crops-autumn": "CROPS_AUTUMN",
+    "crops-winter": "CROPS_WINTER",
     "ground": "GROUND",
     "buildings": "BUILDINGS",
     "characters": "CHARACTERS",
@@ -121,10 +125,13 @@ def export_family(name: str, collection_name: str, variants: dict) -> dict:
         use_selection=True,
         export_apply=True,
         export_yup=True,
-        export_texcoords=False,      # no UVs anywhere: colour is per-vertex
+        # TEXCOORD_0 selects a cell in the one shared procedural detail atlas.
+        # The GLB does not embed that atlas: Blender uses it for review renders
+        # and ModelLibrary creates the same texture once at runtime.
+        export_texcoords=True,
         export_normals=True,
         export_tangents=False,
-        export_materials="EXPORT",
+        export_materials="NONE",
         export_cameras=False,
         export_lights=False,
         export_extras=False,
@@ -171,6 +178,19 @@ def audit_palette() -> list[str]:
         ("wheat_ready", "soil_tilled", "ready wheat must be spottable across the farm"),
         ("corn_ready", "soil_tilled", "ready corn likewise"),
         ("pumpkin_body", "soil_tilled", "ready pumpkin likewise"),
+        ("flower_white", "soil_tilled", "ready clover flowers must read over the bed"),
+        ("radish_body", "soil_tilled", "ready radish roots must read over the bed"),
+        ("pea_pod", "soil_tilled", "ready pea pods must read over the bed"),
+        ("strawberry_body", "soil_tilled", "ready strawberries must read over the bed"),
+        ("sunflower_petal", "soil_tilled", "ready sunflower heads must read over the bed"),
+        ("tomato_body", "soil_tilled", "ready tomatoes must read over the bed"),
+        ("avocado_body", "soil_tilled", "ready avocados must read over the bed"),
+        ("beetroot_body", "soil_tilled", "ready beetroot must read over the bed"),
+        ("cranberry_body", "soil_tilled", "ready cranberries must read over the bed"),
+        ("grape_body", "soil_tilled", "ready grapes must read over the bed"),
+        ("carrot_body", "soil_tilled", "ready carrots must read over the bed"),
+        ("cabbage_ready", "soil_tilled", "ready cabbages must read over the bed"),
+        ("garlic_body", "soil_tilled", "ready garlic must read over the bed"),
         ("crop_seedling", "soil_tilled", "a just-planted plot must look different from a bare one"),
         ("wall_teal", "ground_scrub", "buildings must not sink into the scrub"),
         ("straw_hat", "soil_tilled", "the hat is the player's primary silhouette read"),
@@ -187,8 +207,22 @@ def audit_palette() -> list[str]:
         ("crop_young", "crop_mature", "wheat/corn stage 2 -> 3"),
         ("crop_mature", "wheat_ready", "wheat stage 3 -> 4, the critical one"),
         ("crop_mature", "corn_ready", "corn stage 3 -> 4"),
+        ("crop_mature", "corn_husk", "ready corn foliage must also leave the mature-green band"),
         ("crop_young", "pumpkin_green", "pumpkin stage 2 -> 3"),
         ("pumpkin_green", "pumpkin_body", "pumpkin stage 3 -> 4"),
+        ("crop_mature", "crop_leaf_light", "clover stage 3 -> 4"),
+        ("pumpkin_green", "radish_body", "radish stage 3 -> 4"),
+        ("crop_mature", "pea_pod", "pea stage 3 -> 4"),
+        ("pumpkin_green", "strawberry_body", "strawberry stage 3 -> 4"),
+        ("crop_mature", "sunflower_petal", "sunflower stage 3 -> 4"),
+        ("pumpkin_green", "tomato_body", "tomato stage 3 -> 4"),
+        ("crop_mature", "avocado_body", "avocado stage 3 -> 4"),
+        ("pumpkin_green", "beetroot_body", "beetroot stage 3 -> 4"),
+        ("pumpkin_green", "cranberry_body", "cranberry stage 3 -> 4"),
+        ("pumpkin_green", "grape_body", "grape stage 3 -> 4"),
+        ("pumpkin_green", "carrot_body", "carrot stage 3 -> 4"),
+        ("crop_mature", "cabbage_ready", "cabbage stage 3 -> 4"),
+        ("pumpkin_green", "garlic_body", "garlic stage 3 -> 4"),
     ]
 
     failures = []

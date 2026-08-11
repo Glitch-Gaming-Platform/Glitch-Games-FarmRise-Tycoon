@@ -70,7 +70,7 @@ export class GlitchSession implements Disposable {
   }
   /** True only when Glitch resolved a real user - the gate for saves/progression. */
   get isLoginBacked(): boolean {
-    return Boolean(this.#validation?.user_id);
+    return this.#validation?.valid === true && Boolean(this.#validation.user_id);
   }
 
   /**

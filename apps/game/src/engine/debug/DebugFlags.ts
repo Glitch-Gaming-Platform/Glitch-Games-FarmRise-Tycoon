@@ -12,7 +12,23 @@ export interface DebugFlags {
   readonly physics: boolean;
   readonly wireframe: boolean;
   readonly logEvents: boolean;
+  /** Starts the player beside a crop bed for deterministic action review. */
+  readonly actionReview: boolean;
+  /** Loads a non-persistent late-game career for progression acceptance review. */
+  readonly progressionReviewStage: 3 | 5 | null;
+  /** Loads one named incident through the normal career hydration path. */
+  readonly incidentReviewId: string | null;
 }
+
+const INCIDENT_REVIEW_FLAGS = [
+  'incident-drought',
+  'incident-fox-raid',
+  'incident-cart-axle',
+  'incident-blocked-road',
+  'incident-blight',
+  'incident-processor-breakdown',
+  'incident-cold-snap',
+] as const;
 
 const STORAGE_KEY = 'farmrise:debug';
 
@@ -43,6 +59,9 @@ export function resolveDebugFlags(
     physics: has('physics'),
     wireframe: has('wireframe'),
     logEvents: has('events'),
+    actionReview: has('actions'),
+    progressionReviewStage: has('estate') ? 5 : has('progression') ? 3 : null,
+    incidentReviewId: INCIDENT_REVIEW_FLAGS.find((flag) => has(flag)) ?? null,
   };
 }
 

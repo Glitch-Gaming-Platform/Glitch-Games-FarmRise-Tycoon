@@ -18,6 +18,7 @@ import { itemIcon, uiIcon } from '../core/icons.js';
 import type { InventoryRow } from '@game/items/InventoryView.js';
 
 export interface ContractRow {
+  readonly action: 'accept' | 'deliver';
   readonly orderId: string;
   readonly itemId: string;
   readonly displayName: string;
@@ -33,6 +34,7 @@ export interface ContractRow {
 export interface MarketSnapshot {
   readonly balance: Cents;
   readonly rows: readonly InventoryRow[];
+  readonly contractsUnlocked: boolean;
   readonly contracts: readonly ContractRow[];
   readonly storageUsed: number;
   readonly storageCapacity: number;
@@ -40,19 +42,29 @@ export interface MarketSnapshot {
 
 export interface MarketPanelCallbacks {
   readonly onSellSpot: (itemId: string, quantity: number) => void;
-  readonly onFulfil: (orderId: string) => void;
+  /**
+   * Takes an offer, or delivers against a promise already made. One callback
+   * because from the player's side both are "yes, that one".
+   */
+  readonly onFulfil: (orderId: string, action: ContractRow['action']) => void;
   readonly onClose: () => void;
 }
 
 export class MarketPanel {
   readonly root: HTMLElement;
   readonly #contracts: HTMLElement;
+  readonly #contractsHeading: HTMLElement;
   readonly #inventory: HTMLElement;
   readonly #summary: HTMLElement;
   #visible = false;
 
   constructor(private readonly callbacks: MarketPanelCallbacks) {
     this.#contracts = el('div', { class: 'fr-market__list', testId: 'market-contracts' });
+    this.#contractsHeading = el('h3', {
+      class: 'fr-panel-card__section',
+      text: 'Contracts',
+      testId: 'market-contracts-heading',
+    });
     this.#inventory = el('div', { class: 'fr-market__list', testId: 'market-inventory' });
     this.#summary = el('p', { class: 'fr-market__summary' });
 
@@ -83,7 +95,7 @@ export class MarketPanel {
         this.#summary,
         el('h3', { class: 'fr-panel-card__section', text: 'Sell now' }),
         this.#inventory,
-        el('h3', { class: 'fr-panel-card__section', text: 'Contracts' }),
+        this.#contractsHeading,
         this.#contracts,
       ),
     );
@@ -104,14 +116,18 @@ export class MarketPanel {
       `${formatCents(snapshot.balance)} in hand  ·  ` +
       `storage ${snapshot.storageUsed}/${snapshot.storageCapacity}`;
 
+    this.#contractsHeading.hidden = !snapshot.contractsUnlocked;
+    this.#contracts.hidden = !snapshot.contractsUnlocked;
     clear(this.#contracts);
-    if (snapshot.contracts.length === 0) {
-      this.#contracts.append(
-        el('p', { class: 'fr-market__empty', text: 'No contracts posted right now.' }),
-      );
-    }
-    for (const contract of snapshot.contracts) {
-      this.#contracts.append(this.#contractRow(contract));
+    if (snapshot.contractsUnlocked) {
+      if (snapshot.contracts.length === 0) {
+        this.#contracts.append(
+          el('p', { class: 'fr-market__empty', text: 'No contracts posted right now.' }),
+        );
+      }
+      for (const contract of snapshot.contracts) {
+        this.#contracts.append(this.#contractRow(contract));
+      }
     }
 
     clear(this.#inventory);
@@ -147,8 +163,12 @@ export class MarketPanel {
         }),
       ),
       button(
-        contract.canFulfil ? 'Fulfil' : `Need ${contract.quantity - contract.held} more`,
-        () => this.callbacks.onFulfil(contract.orderId),
+        contract.action === 'accept'
+          ? 'Accept contract'
+          : contract.canFulfil
+            ? `Deliver ${Math.min(contract.held, contract.quantity)}`
+            : `Need ${contract.quantity - contract.held} more`,
+        () => this.callbacks.onFulfil(contract.orderId, contract.action),
         {
           class: 'fr-btn fr-btn--small',
           testId: `market-fulfil-${contract.itemId}`,

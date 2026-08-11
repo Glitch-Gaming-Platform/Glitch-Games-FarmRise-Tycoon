@@ -5,7 +5,6 @@
 node_modules
 **/node_modules
 **/.next
-**/dist
 **/*.tsbuildinfo
 art/measure
 art/review

@@ -82,7 +82,8 @@ Both are covered by tests in `apps/game/tests/unit/gameLoop.test.ts`.
 Inside `FarmScene.fixedUpdate` the order is equally deliberate:
 
 ```
-playerController  →  interaction  →  world.advance(1)  →  eventDirector  →  enemyDirector
+playerController → interaction → session → career.advance(1) → IncidentDirector
+                 → CareerDirector → dynamic collision refresh → EnemyDirector
 ```
 
 Movement must precede interaction (reach is evaluated from the *new* position); the world must
@@ -97,6 +98,11 @@ inside one frame would be missed.
 So events are queued and drained at the top of each fixed step. "Was `interact` pressed this tick?"
 becomes a well-defined question, and press-and-release within a single frame still registers —
 asserted in `apps/game/tests/unit/inputSystem.test.ts`.
+
+Mobile controls use the same queue through semantic action values. The analog joystick writes four
+fractional movement actions, while Work/Seed/Protect/Pause write edge-triggered actions. No gameplay
+system knows whether an action came from a key, mouse button or touch control. A touch tap records
+its coordinates on `pointerdown` because touchscreens do not provide a hover move before placement.
 
 Blur releases everything held, which prevents the classic "held W while alt-tabbing, came back
 walking forever" bug.
@@ -119,6 +125,18 @@ does not affect the economy.
 Pausing stops the *simulation*, not the render loop: `PausedState` calls
 `setSimulationRunning(false)`, and `FarmScene.fixedUpdate` returns early. The frozen farm stays
 visible behind the pause panel, and the renderer keeps drawing so the UI stays responsive.
+
+## Mobile page lifecycle
+
+Phone/tablet page hiding is different from the pause screen. `bindMobileLifecycle()` stops the
+entire engine loop on `visibilitychange` hidden or `pagehide`, disables input so every held joystick
+action is released, and suspends Web Audio. On `pageshow` or visible it re-enables input, resumes
+audio and restarts only a loop that was running before the hide. Desktop does not install this
+binding.
+
+Stopping the loop means a backgrounded phone does not render, accumulate a catch-up burst or return
+with a stuck movement action. Listener ownership stays in `startGame()`, which calls the returned
+unbind function during disposal.
 
 ## Testing the loop
 

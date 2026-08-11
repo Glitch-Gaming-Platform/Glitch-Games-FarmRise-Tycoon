@@ -30,7 +30,7 @@ import bpy
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-for _module in ("palette", "buildlib", "assets", "build_assets"):
+for _module in ("palette", "buildlib", "seasonal_crops", "assets", "build_assets"):
     sys.modules.pop(_module, None)
 
 import build_assets  # noqa: E402

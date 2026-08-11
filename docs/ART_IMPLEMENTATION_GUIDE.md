@@ -8,7 +8,7 @@ How to make an asset that belongs in this game. Read
 Every asset is built by a Python script in `tools/blender/`. There is no hand-modelling step.
 
 ```bash
-npm run art:build     # rebuild all 34 assets, export GLB, write art/build_report.json
+npm run art:build     # rebuild all 102 assets, export GLB, write art/build_report.json
 npm run art:review    # render the core sheets plus four accessibility variants
 npm run art:ui-icons  # render transparent DOM-interface WebPs + art/ui_icon_report.json
 npm run art:check     # palette contrast audit (no Blender needed) - exits non-zero on failure
@@ -29,6 +29,7 @@ close-up performance still needs a specialist.
 | `tools/blender/palette.py` | Colour, scale constants, triangle budgets, contrast maths |
 | `tools/blender/buildlib.py` | `MeshBuilder`, primitives, bevel, budget enforcement, the shared material |
 | `tools/blender/assets.py` | Every asset, one function each |
+| `tools/blender/seasonal_crops.py` | Twelve seasonal crops, four authored stages each |
 | `tools/blender/build_assets.py` | Scene setup, build order, GLB export, the report |
 | `tools/blender/review_render.py` | Core review passes plus colour-vision / bright-sun variants |
 | `tools/blender/render_ui_icons.py` | DOM-interface compositions rendered from the authored meshes |
@@ -46,7 +47,7 @@ inconsistent normals and a character who is subtly the wrong size next to a door
 | Plot bed / crop footprint | 1.80 m — crops must never overhang |
 | Player height | 1.60 m, four heads |
 | Minimum door | 1.90 m |
-| Review distance | 20 m at 38° |
+| Review camera | 13.25 m at 34°, 42° vertical FOV, -42° azimuth |
 
 ## Form language
 
@@ -57,7 +58,7 @@ inconsistent normals and a character who is subtly the wrong size next to a door
 | Smoothing angle | 35° |
 | Metalness | 0.0 everywhere |
 | Roughness | 0.85 everywhere |
-| Minimum feature size | ~4 cm — below this it does not survive 20 m |
+| Minimum feature size | ~4 cm — below this it does not survive the gameplay camera |
 
 The inverse bevel rule is not arbitrary: the barn's edges are metres long, so a single chamfer
 already reads as a rim highlight, and the second segment cost 640 triangles for something no player
@@ -86,16 +87,19 @@ attribute is the classic route to washed-out, milky vertex colours.
 
 **One material for the authored 3D-world asset set**: `M_FarmRise_VertexColour`.
 
-- Base colour comes entirely from the `COLOR_0` vertex attribute.
-- No sampled textures or UVs in the 3D world.
+- Hue comes entirely from the `COLOR_0` vertex attribute.
+- `TEXCOORD_0` selects a cell in one shared greyscale procedural detail atlas for siding, shingles,
+  wood grain, metal, glass, live/dead bark, leaves, stone and water.
+- Blender and `ModelLibrary` generate the atlas deterministically; no bitmap world texture ships.
 - `doubleSided: true`, because foliage is single-sided geometry — a leaf is one quad strip, not a
   solid, which halves the triangle count on every crop.
 
 This is what keeps draw calls proportional to the number of distinct *meshes* rather than the number
 of distinct colours. Runtime views add a small fixed set of presentation materials: cloned wind and
 character materials with shader hooks, two water shaders, a semi-transparent player contact mark, a
-pale back-face outline and one dust material. They are class-level resources, not per-instance
-materials, so farm growth does not multiply draw calls.
+pale back-face outline, one dust material and one unlit vertex-colour material for tiny handheld
+tools. This prevents a sickle or watering can from dropping to black when its action pose faces away
+from the sun. They are class-level resources, so farm growth does not multiply draw calls.
 
 The DOM interface is a separate presentation target. `render_ui_icons.py` renders existing meshes
 to transparent WebP files, and `uiIcons.manifest.ts` records their paths and measured bytes. These
@@ -114,8 +118,9 @@ Enforced at build time. `assert_budget` raises and stops the build.
 | `animal` | 700 | |
 | `prop` | 300 | |
 
-Current worst cases: `SM_char_farmer` at 2,438, `SM_building_barn` at 880 and the mature wheat beds
-at 720. Total across 34 assets: **13,241 triangles.**
+Current worst cases: `SM_char_farmer` at 2,310, `SM_building_barn` at 892 and ready grapes at 894.
+Total across 102 assets: **37,712 triangles**, split so only common crops plus relevant seasonal
+packs are resident.
 
 Raising a budget requires updating this table and saying why in the commit. A budget that is merely
 documented is a budget that gets exceeded; this one stops the build.
@@ -195,7 +200,11 @@ reintroduces each fault and asserts the build refuses it.
 
 A fourth guard lives on the TypeScript side: `cameraFraming.test.ts` parses
 `palette.py` and fails if the camera constants drift between the engine and the
-review renderer. It has been verified by deliberately changing one copy.
+review renderer. It also inspects the decisive review setup for the runtime's
+positive world-Z orbit convention and the explicit vertical-FOV conversion; matching
+numbers are not sufficient if Blender interprets them through a different transform
+or sensor axis. The gameplay review scene uses the canonical starter coordinates from
+the shared parcel and new-career rules.
 
 ## Adding an asset
 
@@ -217,7 +226,7 @@ review renderer. It has been verified by deliberately changing one copy.
 | Library geometry is shared — views must not dispose it | `ModelLibrary.dispose()` owns it |
 | Repeated objects use `InstancedMesh` | Plots, crops, scatter, chickens |
 | Growth is shown by swapping meshes, never by scaling one | `PlotView.visualStage()` |
-| Nothing invents a colour | Palette → vertex colours → one material |
+| Nothing invents a colour | Palette → vertex colours × greyscale detail atlas → one material |
 
 The fallback path is not decoration: it is what keeps the jsdom test suite running with no art and no
 network, and it means a missing GLB shows placeholder primitives rather than a black screen.
@@ -232,33 +241,45 @@ network, and it means a missing GLB shows placeholder primitives rather than a b
 2. Scatter now includes eucalyptus trees, dead trees, rock clusters, wildflowers, scrub patches and
    a trough, distributed across the whole grid rather than repeating every 16 samples.
 3. The visible ground extends beyond the collision grid and is framed by an unreachable instanced
-   tree line, so the follow camera never exposes the terrain edge.
-4. The player has an asymmetrical satchel/scarf silhouette, an independent-limb virtual rig for
-   idle/walk/sprint/work motion, secondary hat/satchel movement, a contact mark and a player-only rim.
+   three-family tree line, scenic mature fields and farmstead landmarks, so the follow camera never
+   exposes the terrain edge or an empty ochre horizon.
+4. The player has an asymmetrical satchel/scarf silhouette, a 25-bone independent-limb virtual rig
+   for idle/walk/sprint/work motion, ponytail/satchel lag, a rigid chest strap, a contact mark and a
+   player-only rim. Work VFX is synchronized to tool contact and watering uses both hands.
 5. Manifest byte counts and compression measurements are current after the rebuild.
-6. Crops, grass, flowers, bushes, eucalyptus and dead trees use rooted wind deformation with
-   per-instance phase.
-7. Chickens wander/peck, foxes lean and stretch with travel, troughs ripple, irrigation structures
-   carry a visible running stream, and player movement/work emits pooled dust.
+6. Wheat, corn, pumpkin and clover each use a distinct rooted wind profile; grass, flowers and
+   bushes retain the lighter shared gust. Living eucalyptus use cantilever bend, torsion and tip
+   flutter, while dead trees use a restrained separate material.
+7. Every playable building kind has an authored base mesh. Mill wheels, cold-store/creamery fans,
+   well cranks, processor steam, irrigation flow, construction rise and completion dust make
+   operational state visible; broken structures stop and shake.
+8. Chickens use exact walk/rest/peck gait state, cows walk/graze/rest and foxes switch between
+   idle/travel/raid/flee motion. Troughs ripple, irrigation structures carry a visible running stream,
+   and player movement/work emits pooled dust.
+9. Vertex AO and the shared generated surface-detail atlas add crevice, contact and material breakup
+   without multiplying authored materials or shipping a bitmap world texture.
+10. Terrain uses a one-metre colour/normal field, pasture/earth-aware grass and dirt scatter,
+    adjacency-aware packed-earth roads, physical parcel gates and surface-specific contact dust.
 
 ## High-impact revisions (days, still no artist)
 
-1. **Ambient occlusion.** A cheap SSAO or baked vertex-AO pass would lift Grounding and Lighting
-   together. Vertex AO is attractive here because the palette already lives in vertex colours.
-2. **Seasonal palettes.** The reference set contained three biomes. The palette is a single dictionary
+1. **Seasonal palettes.** The reference set contained three biomes. The palette is a single dictionary
    with a contrast audit, so a second season is mostly data.
-3. **LODs — only if profiling demands it.** At 13,241 authored triangles total this is currently unnecessary,
-   and adding it now would be optimisation without evidence.
+2. **World-space economy presentation.** Sales, event prevention and parcel purchases need authored
+   farm-side beats if those UI actions are meant to carry the same visual weight as field work.
+3. **LODs — only if profiling demands it.** The 37,712 authored triangles are distributed across
+   lazy seasonal packs; add LODs only if a loaded-season device trace is geometry-bound.
 
 ## Needs a professional artist or specialist
 
-4. **True character and animal rigs.** The virtual rig now articulates limbs and secondary pieces at
-   gameplay distance, but authored starts/stops/turns, foot planting, IK and distinct work clips
-   remain the largest gap. Weight, anticipation and follow-through are craft, not generic code.
-5. **Hand-painted texture pass**, if the project ever wants #5/#6's painted foliage. This would
-    reverse the no-UV decision and needs a texture artist plus a KTX2 pipeline — re-run the
-    compression measurements before committing.
-6. **Character appeal at close range.** The two-dot face is correct at 20 m and thin in a menu or a
-    portrait. A dedicated close-up head is an artist's job.
-7. **Contact-specific VFX**: foot/work dust is complete; harvest bursts, weather interaction, water
-   splashes and surface-specific contacts remain. Effects animation is its own discipline.
+4. **Locomotion-scale redesign.** The completed skeletal rig, compact walk, capped visual stride warp
+   and IK remove the former forward-kick silhouette, but 0.385 m legs still cannot honestly cover the
+   current 6.5 m/s arcade walk without some sliding. Closing the physical distance gap needs a
+   gameplay-speed or character-proportion decision, then specialist animation retuning.
+5. **Hand-painted texture pass**, if the project ever wants painted foliage or scanned ground. UVs
+    now exist for the generated greyscale atlas, but shipped bitmap colour/normal textures would
+    still need a texture artist plus a KTX2 pipeline — re-run the compression measurements first.
+6. **Character appeal at close range.** The face now includes blink/focus expression; a
+   dialogue-grade portrait still needs a dedicated close-up head.
+7. **Remaining contact feedback**: surface-specific visual dust, work/harvest bursts and water
+   impact rings are complete; footstep audio, overflow spills and fox carry/escape contacts remain.

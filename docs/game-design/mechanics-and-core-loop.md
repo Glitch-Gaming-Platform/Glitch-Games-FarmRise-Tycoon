@@ -95,20 +95,18 @@ Plant and tend → Harvest and haul → Build and upgrade → Trade and expand
 
 Everything below describes the code as it currently stands. It is not part of the approved design.
 
-## Scope rules — where the numbers live
+## Implemented career scope
 
-| Scope rule | Implemented as | File |
+| System | Current implementation | Primary owner |
 | --- | --- | --- |
-| Three crops | wheat, corn, pumpkin | `packages/shared/src/domain/crops.ts` |
-| One animal | chicken → eggs, fed on corn | `packages/shared/src/domain/animals.ts` |
-| Four structures | barn, irrigation, road, fence | `packages/shared/src/domain/buildings.ts` |
-| One buyer | Millbrook Grocers | `packages/shared/src/rules/orders.ts` |
-| Two events | drought, fox raid | `packages/shared/src/domain/events.ts` |
-| One adjacent parcel | `landParcels`, capped at +1 per save write | `packages/shared/src/schemas/save.ts` |
-
-Each of the three crops carries a distinct decision, per the scope rule: wheat is the fast, cheap,
-low-margin safety net; corn is thirsty enough that irrigation changes its economics; pumpkin has the
-best margin, the longest wait and the worst disease risk, so it is the crop a drought actually hurts.
+| Crops | four year-round crops plus three exclusive crops per season, with rarity returns, planting windows, soil draw, quality and freshness | `packages/shared/src/domain/crops.ts` |
+| Livestock | chickens/eggs and dairy cows/milk with feed, shelter and pasture constraints | `packages/shared/src/domain/animals.ts` |
+| Buildings | eight infrastructure types plus mill, creamery and preserve kitchen | `packages/shared/src/domain/buildings.ts` |
+| Market | four behaviorally distinct buyers, trust, quality gates, deadlines, penalties and seeded offline offers | `packages/shared/src/domain/buyers.ts`, `game/career/ContractBoard.ts` |
+| Incidents | seven persisted incident definitions with named targets, severity, cooldowns and active responses | `packages/shared/src/domain/incidents.ts`, `game/events/IncidentDirector.ts` |
+| Land | one homestead and three purchasable gated parcels on the Millbrook estate | `packages/shared/src/domain/parcels.ts` |
+| Career | milestone stages, specialization, seasons, town projects, workers, finance and restructuring | `packages/shared/src/domain/`, `game/career/` |
+| Persistence | career save v2, v1 migration, scene hydration, local-first timed/irreversible-action autosave and server transition validation | `packages/shared/src/schemas/career.ts`, `game/platform/save/`, `server/src/services/saveValidation.ts` |
 
 ## Pillars — the mechanism behind each
 
@@ -116,36 +114,33 @@ best margin, the longest wait and the worst disease risk, so it is the crop a dr
 `interactRange` of the plot, and each locks them in place for a short work animation
 (`InteractionController`). There is no remote-management button.
 
-**Meaningful Reinvestment.** The four buildings map to four different things money can buy —
-capacity, reliability, labour, resilience — and are priced close enough together that none is an
-obvious first purchase. Roads lower A* traversal cost, so a compact layout measurably reduces travel
-time (`engine/physics/pathfinding.ts`).
+**Meaningful Reinvestment.** Infrastructure still begins with capacity, reliability, labour and
+resilience, then expands into land, carts, cold storage, processing, workers, finance and town
+projects. Unlocks expose these choices as the farm creates the bottleneck they solve.
 
-**Recoverable Disruption.** `EventDirector` enforces the contract structurally: an event cannot fire
-without first emitting a warning, `prevent()` is only legal during the warning window, and damage is
-a yield multiplier on named plots rather than destruction. A drought-hit plot still harvests. The
-integration test asserts that every `started` event is preceded by a `warned` event.
+**Recoverable Disruption.** `IncidentDirector` persists warning, impact, target ids, severity and
+response progress. Incidents offer active work and often a paid fallback, apply bounded losses to
+named assets, support insurance, and cannot be rerolled by refreshing the page.
 
 ## Core loop — what exists and what does not
 
 | Step | Status |
 | --- | --- |
-| 1. Read Conditions | Partial. HUD shows money, storage, ready plots and the active warning. Market orders exist server-side but have no in-game panel yet. |
-| 2. Choose Output | Implemented for crops (`Q` cycles the seed). Animal production is automatic once fed. |
-| 3. Commit Resources | Implemented. Seed cost is charged on planting; feed is consumed per cycle. |
-| 4. Work the Farm | Implemented: movement, planting, tending, harvesting, building placement. |
-| 5. Respond to Trouble | Implemented: paid prevention during the warning, and scaring foxes by physically approaching them. |
-| 6. Harvest and Trade | Harvest and storage implemented client-side; selling is server-side and exposed through `GameApi`, but has no UI yet. |
-| 7. Reinvest and Expand | Building implemented. Buying the adjacent parcel is modelled in the save schema but has no command or UI. |
+| 1. Read Conditions | Implemented through the HUD plus market, career and town panels: storage, carry load, contracts, milestones, seasons, incidents and finances are visible. |
+| 2. Choose Output | Implemented for crops, livestock and processor recipes, with specialization and buyer demand changing the answer. |
+| 3. Commit Resources | Implemented: seeds, feed, construction, land, wages, processor inputs, loans and project materials all consume real resources. |
+| 4. Work the Farm | Implemented: contextual field work, physical hauling, placement, workers and processing queues. |
+| 5. Respond to Trouble | Implemented through targeted incident responses, protective infrastructure, insurance and recoverable restructuring. |
+| 6. Harvest and Trade | Implemented through spot sales and accepted buyer contracts with quality, deadlines and trust consequences. |
+| 7. Reinvest and Expand | Implemented across four estate parcels, infrastructure, carts, livestock, processors, staff and town projects. |
 
-## Known gaps against the blueprint
+## Deliberate remaining boundaries
 
-- **No trade UI.** `spotSell` and `fulfilOrder` work and are tested, but nothing in the HUD calls
-  them. This is the largest gap and the next thing to build.
-- **Crop disease and contamination** are modelled (`diseased`, `eventMultiplier`) but only drought
-  and fox raid are wired into the director — matching the two-event scope rule.
-- **Hauling** is implicit: harvested goods go straight to storage. There is no carry capacity or
-  physical trip to the barn yet, which weakens the road's contribution to Hands-On Ownership.
-- **Land expansion** has a data model and no verb.
-- **The core playtest question cannot yet be answered**, because step 6 has no interface. The loop is
-  mechanically complete from planting through the setback; it stops at the point of sale.
+- The current progression ends after completing the Millbrook estate. Multi-site travel, coarse
+  simulation and machinery remain future slices and are not granted by any milestone.
+- Stage-driven lazy world-asset packs remain deferred; the current authored family bundles are
+  within the accepted measured budget, but the main Three.js chunk still produces a size warning.
+- Account career saves are transition-validated rather than fully replayed from intent. Trade routes
+  remain fully authoritative; the exact trust boundary is documented in `docs/NETWORKING.md`.
+- The complete serialized Playwright matrix passes 80 checks with 14 platform-inapplicable skips
+  across the three desktop engines and both mobile projects.

@@ -5,7 +5,7 @@
 import type { Vec2 } from '@engine/physics/PhysicsPort.js';
 
 export type PlayerActivity = 'idle' | 'walking' | 'working';
-export type WorkAction = 'plant' | 'tend' | 'harvest';
+export type WorkAction = 'plant' | 'tend' | 'harvest' | 'transfer' | 'shoo' | 'repair';
 
 export interface PlayerOptions {
   readonly walkSpeed?: number;

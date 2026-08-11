@@ -23,11 +23,14 @@ export interface InventoryRow {
   readonly formattedTotal: string;
 }
 
-export function inventoryRows(inventory: Inventory): InventoryRow[] {
+export function inventoryRows(
+  inventory: Inventory,
+  quote: (itemId: string) => Cents = spotPriceFor,
+): InventoryRow[] {
   return Object.entries(inventory)
     .filter(([, quantity]) => quantity > 0)
     .map(([itemId, quantity]) => {
-      const unitPrice = spotPriceFor(itemId);
+      const unitPrice = quote(itemId);
       const totalValue = (unitPrice * quantity) as Cents;
       return {
         itemId,

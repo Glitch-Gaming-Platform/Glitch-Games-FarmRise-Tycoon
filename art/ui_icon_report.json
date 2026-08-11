@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-08-10T14:59:55",
+  "generated_at": "2026-08-11T01:57:15",
   "blender": "5.2.0 LTS",
-  "duration_seconds": 11.38,
+  "duration_seconds": 18.21,
   "icons": [
     {
       "file": "hero-farm.webp",
-      "bytes": 11080
+      "bytes": 11906
     },
     {
       "file": "farmer.webp",
-      "bytes": 4330
+      "bytes": 4366
     },
     {
       "file": "settings.webp",
@@ -17,68 +17,168 @@
     },
     {
       "file": "market.webp",
-      "bytes": 5804
+      "bytes": 5454
     },
     {
       "file": "contract.webp",
-      "bytes": 4060
+      "bytes": 3982
     },
     {
       "file": "wheat.webp",
-      "bytes": 9128
+      "bytes": 8920
     },
     {
       "file": "corn.webp",
-      "bytes": 8348
+      "bytes": 8100
     },
     {
       "file": "pumpkin.webp",
-      "bytes": 2780
+      "bytes": 2762
+    },
+    {
+      "file": "clover.webp",
+      "bytes": 2950
+    },
+    {
+      "file": "radish.webp",
+      "bytes": 2596
+    },
+    {
+      "file": "pea.webp",
+      "bytes": 5424
+    },
+    {
+      "file": "strawberry.webp",
+      "bytes": 2550
+    },
+    {
+      "file": "sunflower.webp",
+      "bytes": 8108
+    },
+    {
+      "file": "tomato.webp",
+      "bytes": 4396
+    },
+    {
+      "file": "avocado.webp",
+      "bytes": 4416
+    },
+    {
+      "file": "beetroot.webp",
+      "bytes": 2738
+    },
+    {
+      "file": "cranberry.webp",
+      "bytes": 1922
+    },
+    {
+      "file": "grape.webp",
+      "bytes": 4026
+    },
+    {
+      "file": "carrot.webp",
+      "bytes": 4412
+    },
+    {
+      "file": "cabbage.webp",
+      "bytes": 2814
+    },
+    {
+      "file": "garlic.webp",
+      "bytes": 3772
     },
     {
       "file": "eggs.webp",
       "bytes": 2532
     },
     {
+      "file": "milk.webp",
+      "bytes": 2058
+    },
+    {
+      "file": "flour.webp",
+      "bytes": 2466
+    },
+    {
+      "file": "cheese.webp",
+      "bytes": 2276
+    },
+    {
+      "file": "preserves.webp",
+      "bytes": 2540
+    },
+    {
       "file": "barn.webp",
-      "bytes": 3038
+      "bytes": 3128
     },
     {
       "file": "irrigation.webp",
-      "bytes": 3210
+      "bytes": 3324
     },
     {
       "file": "road.webp",
-      "bytes": 1656
+      "bytes": 1764
     },
     {
       "file": "fence.webp",
-      "bytes": 3280
+      "bytes": 3224
     },
     {
       "file": "chicken.webp",
-      "bytes": 3384
+      "bytes": 3390
+    },
+    {
+      "file": "cow.webp",
+      "bytes": 3266
+    },
+    {
+      "file": "loading-pad.webp",
+      "bytes": 2480
+    },
+    {
+      "file": "cold-store.webp",
+      "bytes": 2466
+    },
+    {
+      "file": "worker-hut.webp",
+      "bytes": 3236
+    },
+    {
+      "file": "well.webp",
+      "bytes": 3706
+    },
+    {
+      "file": "mill.webp",
+      "bytes": 2908
+    },
+    {
+      "file": "creamery.webp",
+      "bytes": 2710
+    },
+    {
+      "file": "preserve-kitchen.webp",
+      "bytes": 2954
     },
     {
       "file": "land.webp",
-      "bytes": 3120
+      "bytes": 3650
     },
     {
       "file": "warning.webp",
-      "bytes": 2828
+      "bytes": 2956
     },
     {
       "file": "watering.webp",
-      "bytes": 3068
+      "bytes": 3146
     },
     {
       "file": "harvest.webp",
-      "bytes": 2598
+      "bytes": 2616
     },
     {
       "file": "tools.webp",
-      "bytes": 3482
+      "bytes": 3532
     }
   ],
-  "total_bytes": 82150
+  "total_bytes": 166366
 }

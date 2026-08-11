@@ -17,11 +17,13 @@ export function bindAnalytics(
   session: SessionController,
   analytics: AnalyticsClient,
 ): Unsubscribe {
+  const career = scene.career;
   const world = scene.world;
   const interaction = scene.interaction;
-  const eventDirector = scene.eventDirector;
+  const incidents = scene.incidents;
+  const careerDirector = scene.careerDirector;
   const enemies = scene.enemyDirector;
-  if (!world || !interaction || !eventDirector) {
+  if (!career || !world || !interaction || !incidents || !careerDirector) {
     throw new Error('bindAnalytics requires a loaded FarmScene.');
   }
 
@@ -41,46 +43,60 @@ export function bindAnalytics(
     analytics.trackOnce('first_success', { ms: analytics.elapsedMs(), kind });
 
   subscriptions.push(
-    interaction.events.on('interaction:performed', ({ action, plotId }) => {
+    interaction.events.on('interaction:performed', ({ action, target }) => {
       analytics.trackOnce('first_input', { ms: analytics.elapsedMs(), action });
       if (action === 'plant') {
         firstMeaningful('plant');
         firstFeedback('crop_appeared');
         analytics.track('crop_planted', {
           cropId: interaction.selectedCropId,
-          plotId,
-          balance: world.balance,
+          plotId: target,
+          balance: career.balance,
           cycle,
         });
       } else if (action === 'tend') {
-        analytics.track('crop_tended', { plotId });
+        analytics.track('crop_tended', { plotId: target });
       }
     }),
     interaction.events.on('interaction:refused', ({ reason }) =>
       analytics.track('action_refused', { action: 'interact', reason }),
     ),
 
-    world.events.on('world:harvested', ({ itemId, quantity, spilled }) => {
+    world.events.on('world:harvested', ({ itemId, quantity, carried }) => {
       cycle += 1;
       firstSuccess('harvest');
-      analytics.track('crop_harvested', { cropId: itemId, quantity, spilled, cycle });
+      // `spilled` now means "left in the field because your hands were full",
+      // which is the number that says whether hauling is the live bottleneck.
+      analytics.track('crop_harvested', {
+        cropId: itemId,
+        quantity,
+        spilled: quantity - carried,
+        cycle,
+      });
       analytics.track('cycle_completed', {
         cycle,
         elapsedMs: analytics.elapsedMs(),
-        balance: world.balance,
+        balance: career.balance,
       });
     }),
     world.events.on('world:storage-full', ({ itemId, spilled }) =>
       analytics.track('storage_overflowed', { itemId, spilled }),
     ),
     world.events.on('world:building-placed', ({ kind }) =>
-      analytics.track('building_placed', { kind, cost: 0, balance: world.balance }),
+      analytics.track('building_placed', { kind, cost: 0, balance: career.balance }),
     ),
     world.events.on('world:building-completed', ({ kind }) =>
       analytics.track('building_completed', { kind }),
     ),
-    world.events.on('world:land-purchased', ({ parcels }) =>
-      analytics.track('land_purchased', { parcels, elapsedMs: analytics.elapsedMs() }),
+    world.events.on('world:parcel-acquired', ({ parcelId }) =>
+      analytics.track('land_purchased', {
+        parcels: world.parcels.count,
+        parcelId,
+        elapsedMs: analytics.elapsedMs(),
+      }),
+    ),
+    session.events.on('session:hauled', ({ stored, refused }) =>
+      analytics.track('goods_hauled', { stored, refused, carrier: world.carry.carrier }),
     ),
 
     session.events.on('session:sold', ({ itemId, quantity, payout, viaContract }) => {
@@ -90,38 +106,56 @@ export function bindAnalytics(
         quantity,
         payout,
         viaContract,
-        balance: world.balance,
+        balance: career.balance,
       });
     }),
     session.events.on('session:refused', ({ action, reason }) =>
       analytics.track('action_refused', { action, reason }),
     ),
-    session.events.on('session:prevented', ({ kind, cost }) =>
-      analytics.track('farm_event_prevented', { kind, cost }),
+    session.events.on('session:responded', ({ response }) =>
+      analytics.track('farm_event_prevented', { kind: response, cost: 0 }),
     ),
-    session.events.on('session:outcome', ({ summary }) =>
+
+    // --- progression funnel ------------------------------------------------
+    careerDirector.events.on('career:season-review', ({ summary }) =>
       analytics.track('run_completed', {
-        outcome: summary.outcome === 'expanded' ? 'expanded' : 'bankrupt',
+        outcome: summary.outcome,
         elapsedMs: analytics.elapsedMs(),
         cyclesCompleted: summary.cyclesCompleted,
         finalBalance: summary.finalBalance,
         peakBalance: summary.peakBalance,
         cropsHarvested: summary.cropsHarvested,
-        eventsSurvived: summary.eventsSurvived,
-        eventsPrevented: summary.eventsPrevented,
+        eventsSurvived: summary.incidentsSurvived,
+        eventsPrevented: summary.incidentsMitigated,
         buildingsBuilt: summary.buildingsBuilt,
       }),
     ),
-
-    eventDirector.events.on('event:warned', ({ kind, targets }) =>
-      analytics.track('farm_event_warned', {
-        kind,
-        targets: targets.length,
-        balance: world.balance,
+    careerDirector.events.on('career:milestone-claimed', ({ milestone }) =>
+      analytics.track('milestone_claimed', {
+        milestoneId: milestone.id,
+        stage: milestone.advancesToStage,
+        elapsedMs: analytics.elapsedMs(),
       }),
     ),
-    eventDirector.events.on('event:started', ({ kind, mitigated }) =>
-      analytics.track('farm_event_impacted', { kind, mitigated }),
+    careerDirector.events.on('career:restructured', () =>
+      analytics.track('career_restructured', { elapsedMs: analytics.elapsedMs() }),
+    ),
+    career.events.on('career:specialization-chosen', ({ specialization }) =>
+      analytics.track('specialization_chosen', { specialization }),
+    ),
+
+    incidents.events.on('incident:warned', ({ instance, definition }) =>
+      analytics.track('farm_event_warned', {
+        kind: definition.id,
+        targets: instance.targetIds.length,
+        balance: career.balance,
+      }),
+    ),
+    incidents.events.on('incident:impact', ({ instance, definition }) =>
+      analytics.track('farm_event_impacted', {
+        kind: definition.id,
+        mitigated: instance.responseProgress > 0,
+      }),
     ),
 
     // --- onboarding funnel ------------------------------------------------

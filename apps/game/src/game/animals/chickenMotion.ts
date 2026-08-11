@@ -1,3 +1,5 @@
+import { TICK_SECONDS } from '@farmrise/shared';
+
 /**
  * Deterministic chicken motion shared by rendering and collision.
  *
@@ -15,31 +17,30 @@ export interface ChickenPose {
   scaleX: number;
   scaleY: number;
   scaleZ: number;
+  /** 1 while walking, 0 while resting/pecking. Fed to the instanced shader. */
+  motion: number;
+  /** 0..1 peck amount, isolated to the head by the shader. */
+  action: number;
+  /** Exact gait phase shared with the leg shader. */
+  gaitPhase: number;
 }
 
-export const CHICKEN_COLLISION_RADIUS = 0.28;
+export const CHICKEN_COLLISION_RADIUS = 0.33;
 
 const TROUGH_OFFSET_X = -1.9;
 const TROUGH_OFFSET_Z = -1.44;
 // Includes the trough proxy, the raster's conservative half-cell expansion,
 // and the chicken radius rather than only keeping the bird's centre clear.
-const TROUGH_CLEARANCE = 1.42;
-const COOP_CLEARANCE = 2.45;
+const TROUGH_CLEARANCE = 1.48;
+const COOP_CLEARANCE = 2.52;
 
-export function chickenPose(
-  shelter: { readonly x: number; readonly z: number },
-  index: number,
-  total: number,
-  elapsedSeconds: number,
-  animalHop = 0,
-  purchaseIntro = 1,
-  out: ChickenPose = createChickenPose(),
-): ChickenPose {
-  const pace = 0.32 + (index % 3) * 0.11;
-  const angle = (index / Math.max(1, total)) * Math.PI * 2 + elapsedSeconds * pace;
-  // Keep the orbit outside the coop's solid proxy. The variation gives each
-  // bird its own lane instead of drawing a perfectly artificial ring.
-  const radius = COOP_CLEARANCE + ((index * 37) % 7) * 0.11;
+interface ChickenPathPoint {
+  x: number;
+  z: number;
+}
+
+/** Writes the coop/trough-adjusted local path point without allocating per bird. */
+function writeChickenPathPoint(angle: number, radius: number, out: ChickenPathPoint): void {
   let offsetX = Math.cos(angle) * radius;
   let offsetZ = Math.sin(angle) * radius;
 
@@ -67,20 +68,74 @@ export function chickenPose(
     offsetZ *= scale;
   }
 
-  const step = elapsedSeconds * (6.4 + (index % 4) * 0.55) + index * 1.7;
-  const peck = Math.max(0, Math.sin(elapsedSeconds * 2.3 + index * 2.1) - 0.72) / 0.28;
-  const bob = Math.abs(Math.sin(step)) * 0.025 + animalHop;
-  const squash = Math.abs(Math.sin(step)) * 0.045;
+  out.x = offsetX;
+  out.z = offsetZ;
+}
+
+export function chickenPose(
+  shelter: { readonly x: number; readonly z: number },
+  index: number,
+  total: number,
+  elapsedSeconds: number,
+  animalHop = 0,
+  purchaseIntro = 1,
+  out: ChickenPose = createChickenPose(),
+): ChickenPose {
+  const pace = 0.32 + (index % 3) * 0.11;
+  const cycleLength = 9.5 + (index % 4) * 0.85;
+  const localTime = elapsedSeconds + index * 1.73;
+  const cycle = Math.floor(localTime / cycleLength);
+  const withinCycle = localTime - cycle * cycleLength;
+  const walkDuration = cycleLength * (0.58 + (index % 3) * 0.035);
+  const walking = withinCycle < walkDuration;
+  const motionTime = cycle * walkDuration + Math.min(withinCycle, walkDuration);
+  const angle = (index / Math.max(1, total)) * Math.PI * 2 + motionTime * pace;
+  // Keep the orbit outside the coop's solid proxy. The variation gives each
+  // bird its own lane instead of drawing a perfectly artificial ring.
+  const radius = COOP_CLEARANCE + ((index * 37) % 7) * 0.11;
+  writeChickenPathPoint(angle, radius, out);
+  const offsetX = out.x;
+  const offsetZ = out.z;
+  // Average the heading across the same fixed tick used by simulation. This
+  // also gives the bird a stable direction through the trough-avoidance bend.
+  writeChickenPathPoint(angle + pace * TICK_SECONDS, radius, out);
+  const tangentX = out.x - offsetX;
+  const tangentZ = out.z - offsetZ;
+
+  const step = motionTime * (6.4 + (index % 4) * 0.55) + index * 1.7;
+  const restTime = Math.max(0, withinCycle - walkDuration);
+  const peck = walking
+    ? Math.max(0, Math.sin(localTime * 1.7 + index * 2.1) - 0.88) / 0.12
+    : Math.max(0, Math.sin(restTime * 4.6 + index * 0.7));
+  // Gait profile rather than a sine. `Math.abs(Math.sin(step))` rises and falls
+  // at the same rate, so the body floated up as smoothly as it dropped; a
+  // walking bird falls onto a planted foot quickly and rises slowly. Reusing
+  // the same 62% stance the chicken shader uses keeps the body bob in step with
+  // the legs instead of beating against them.
+  const gaitPhase = (((step / (Math.PI * 2)) % 1) + 1) % 1;
+  const stance = 0.62;
+  const lift = gaitPhase < stance ? 0 : Math.sin(((gaitPhase - stance) / (1 - stance)) * Math.PI);
+  const bob = (walking ? lift * 0.034 : 0) + animalHop;
+  // Compression peaks at the plant, which is the start of stance, not at the
+  // top of the lift.
+  const impact = gaitPhase < 0.18 ? 1 - gaitPhase / 0.18 : 0;
+  const squash = walking ? impact * 0.06 : peck * 0.018;
 
   out.x = shelter.x + offsetX;
   out.y = bob;
   out.z = shelter.z + offsetZ;
-  out.pitch = peck * 0.52;
-  out.yaw = -angle + Math.PI / 2;
-  out.roll = Math.sin(step) * 0.055;
+  out.pitch = peck * 0.64;
+  // Blender -Y becomes Three.js +Z, so the authored beak/head is local +Z.
+  // Aim that axis along the adjusted path tangent; using the orbit angle alone
+  // made the birds move sideways and sometimes backwards near the trough.
+  out.yaw = Math.hypot(tangentX, tangentZ) > 1e-8 ? Math.atan2(tangentX, tangentZ) : -angle;
+  out.roll = walking ? Math.sin(step) * 0.065 : Math.sin(restTime * 1.7) * 0.012;
   out.scaleX = (1 + squash * 0.25) * purchaseIntro;
   out.scaleY = (1 - squash + animalHop * 0.18) * purchaseIntro;
   out.scaleZ = (1 + squash * 0.45) * purchaseIntro;
+  out.motion = walking ? 1 : 0;
+  out.action = peck;
+  out.gaitPhase = gaitPhase;
   return out;
 }
 
@@ -95,5 +150,8 @@ export function createChickenPose(): ChickenPose {
     scaleX: 1,
     scaleY: 1,
     scaleZ: 1,
+    motion: 0,
+    action: 0,
+    gaitPhase: 0,
   };
 }

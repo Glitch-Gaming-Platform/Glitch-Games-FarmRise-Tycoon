@@ -29,9 +29,13 @@ export interface PlayOptions {
   readonly bus?: Exclude<AudioBus, 'master'>;
   readonly volume?: number;
   readonly loop?: boolean;
+  /** Total number of seamless buffer plays before the source ends. */
+  readonly repeatCount?: number;
   readonly playbackRate?: number;
   /** Detune in cents, randomised per call to stop repeated sounds fatiguing. */
   readonly detuneJitter?: number;
+  /** Called only after natural or scheduled completion, never after handle.stop(). */
+  readonly onEnded?: () => void;
 }
 
 export interface AudioHandle {
@@ -83,6 +87,10 @@ export class AudioSystem implements EngineSystem, Disposable {
     this.#buffers.set(id, buffer);
   }
 
+  unregister(id: string): void {
+    this.#buffers.delete(id);
+  }
+
   has(id: string): boolean {
     return this.#buffers.has(id);
   }
@@ -94,8 +102,18 @@ export class AudioSystem implements EngineSystem, Disposable {
 
     const source = ctx.createBufferSource();
     source.buffer = buffer;
-    source.loop = options.loop ?? false;
-    source.playbackRate.value = options.playbackRate ?? 1;
+    const requestedPlaybackRate = options.playbackRate ?? 1;
+    const playbackRate =
+      Number.isFinite(requestedPlaybackRate) && requestedPlaybackRate > 0
+        ? requestedPlaybackRate
+        : 1;
+    const requestedRepeatCount = options.repeatCount;
+    const repeatCount =
+      requestedRepeatCount === undefined
+        ? null
+        : Math.max(1, Math.floor(Number.isFinite(requestedRepeatCount) ? requestedRepeatCount : 1));
+    source.loop = repeatCount !== null ? repeatCount > 1 : (options.loop ?? false);
+    source.playbackRate.value = playbackRate;
     if (options.detuneJitter) {
       source.detune.value = (Math.random() * 2 - 1) * options.detuneJitter;
     }
@@ -103,10 +121,21 @@ export class AudioSystem implements EngineSystem, Disposable {
     const gain = ctx.createGain();
     gain.gain.value = options.volume ?? 1;
     source.connect(gain).connect(this.#busGain(options.bus ?? 'sfx'));
+    let manuallyStopped = false;
+    let ended = false;
+    source.onended = () => {
+      ended = true;
+      if (!manuallyStopped) options.onEnded?.();
+    };
     source.start();
+    if (repeatCount !== null) {
+      source.stop(ctx.currentTime + (buffer.duration * repeatCount) / playbackRate);
+    }
 
     return {
       stop: (fadeSeconds = 0.05) => {
+        if (ended || manuallyStopped) return;
+        manuallyStopped = true;
         const now = ctx.currentTime;
         gain.gain.setValueAtTime(gain.gain.value, now);
         gain.gain.linearRampToValueAtTime(0.0001, now + fadeSeconds);
@@ -141,6 +170,18 @@ export class AudioSystem implements EngineSystem, Disposable {
 
   get muted(): boolean {
     return this.#muted;
+  }
+
+  /** Releases the audio hardware while a mobile browser is backgrounded. */
+  async suspend(): Promise<void> {
+    if (this.#context?.state === 'running') await this.#context.suspend();
+  }
+
+  /** Restores an already-unlocked context after foregrounding. */
+  async resume(): Promise<void> {
+    const context = this.#context;
+    if (!context || context.state === 'running' || context.state === 'closed') return;
+    await context.resume();
   }
 
   dispose(): void {

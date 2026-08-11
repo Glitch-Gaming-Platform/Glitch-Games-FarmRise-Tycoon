@@ -17,6 +17,7 @@
  */
 
 export const GLITCH_API_BASE_URL = 'https://api.glitch.fun/api';
+export const GLITCH_TITLE_ID = '9a698a9d-1b27-4c78-9256-0f458368737d';
 
 export interface GlitchLaunchContext {
   /** Glitch title UUID. */
@@ -64,7 +65,7 @@ function env(name: string): string | undefined {
  */
 export function resolveGlitchContext(): GlitchLaunchContext | null {
   const query = readQuery();
-  const titleId = query.title_id ?? env('VITE_GLITCH_TITLE_ID') ?? '';
+  const titleId = query.title_id ?? env('VITE_GLITCH_TITLE_ID') ?? GLITCH_TITLE_ID;
   const titleToken = env('VITE_GLITCH_TITLE_TOKEN') ?? '';
 
   if (!titleId || !titleToken) return null;

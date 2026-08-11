@@ -73,11 +73,9 @@ export class PlayingState implements GameState {
 }
 
 /**
- * The run is over.
+ * A season review pauses the simulation without ending the career.
  *
- * The simulation stops but the scene stays loaded, so the finished farm is
- * visible behind the summary. Seeing the farm you built is most of the reward
- * for building it.
+ * The scene stays loaded and the first button returns to the same farm.
  */
 export class OutcomeState implements GameState {
   readonly id: GamePhase = 'outcome';

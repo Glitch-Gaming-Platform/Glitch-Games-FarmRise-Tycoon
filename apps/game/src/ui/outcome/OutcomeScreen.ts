@@ -1,5 +1,5 @@
 /**
- * The end-of-run screen: one success state, one failure state.
+ * A pause between stretches of a persistent career.
  *
  * Both use the same layout on purpose. A failure screen that looks
  * structurally different from a success screen reads as a punishment, and the
@@ -21,15 +21,19 @@ export interface OutcomeCallbacks {
 }
 
 const COPY = {
-  expanded: {
-    title: 'The parcel is yours',
+  season: {
+    title: 'Season complete',
     headline:
-      'You worked the ground, read the market and bought the field next door. That is a season well run.',
+      'The farm carries on. Take stock of what changed, then decide what the next season is for.',
   },
-  bankrupt: {
-    title: 'The season got away from you',
+  milestone: {
+    title: 'The farm has changed',
+    headline: 'A new capability is yours, along with the new problem that makes it matter.',
+  },
+  restructured: {
+    title: 'The farm has been restructured',
     headline:
-      'No seed money, nothing in store and nothing in the ground. It happens — most farms lose a season before they win one.',
+      'The terms hurt, but the land, working buildings and relationships survived. There is a route back.',
   },
 } as const;
 
@@ -75,8 +79,8 @@ export class OutcomeScreen implements Screen {
   }
 
   present(summary: RunSummary): void {
-    const copy = summary.outcome === 'expanded' ? COPY.expanded : COPY.bankrupt;
-    setUiIcon(this.#icon, summary.outcome === 'expanded' ? 'land' : 'warning');
+    const copy = COPY[summary.outcome];
+    setUiIcon(this.#icon, summary.outcome === 'restructured' ? 'warning' : 'land');
     this.#title.textContent = copy.title;
     this.#headline.textContent = copy.headline;
 
@@ -86,7 +90,13 @@ export class OutcomeScreen implements Screen {
       ['Money earned', formatCents(summary.totalEarned)],
       ['Best balance', formatCents(summary.peakBalance)],
       ['Buildings raised', String(summary.buildingsBuilt)],
-      ['Setbacks weathered', `${summary.eventsSurvived} (${summary.eventsPrevented} prevented)`],
+      ['Goods hauled', String(summary.goodsHauled)],
+      ['Goods processed', String(summary.goodsProcessed)],
+      ['Contracts completed', String(summary.contractsCompleted)],
+      [
+        'Setbacks weathered',
+        `${summary.incidentsSurvived} (${summary.incidentsMitigated} answered)`,
+      ],
       ['Time on the farm', formatTicks(summary.elapsedTicks)],
     ];
 

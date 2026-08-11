@@ -9,28 +9,18 @@
  *     stored state before it is accepted.
  */
 import {
-  SAVE_SCHEMA_VERSION,
-  STARTING_BALANCE,
+  MAX_TICK_DRIFT_TICKS,
+  TICK_HZ,
+  newCareer,
   type SaveEnvelope,
   type SaveState,
 } from '@farmrise/shared';
 import { HttpError } from '../http/errors';
 import type { Repositories, SaveRecord } from '../repositories/ports';
-import { serverTick } from '../domain/serverClock';
 import { validateSaveTransition } from './saveValidation';
 
-export function createInitialSaveState(): SaveState {
-  return {
-    schemaVersion: SAVE_SCHEMA_VERSION,
-    tick: serverTick(),
-    balance: STARTING_BALANCE,
-    plots: [],
-    buildings: [],
-    animals: [],
-    inventory: {},
-    landParcels: 1,
-    rngState: Math.floor(Math.random() * 0xffffffff),
-  };
+export function createInitialSaveState(careerId = 'server-career'): SaveState {
+  return newCareer({ careerId });
 }
 
 export class SaveService {
@@ -38,7 +28,10 @@ export class SaveService {
 
   /** Loads the player's save, creating a fresh one on first play. */
   async load(userId: string): Promise<SaveEnvelope> {
-    const record = await this.repositories.saves.createIfMissing(userId, createInitialSaveState());
+    const record = await this.repositories.saves.createIfMissing(
+      userId,
+      createInitialSaveState(userId),
+    );
     return toEnvelope(record);
   }
 
@@ -57,7 +50,12 @@ export class SaveService {
       );
     }
 
-    const outcome = validateSaveTransition(current.state, state, serverTick());
+    // Career ticks are relative to the career, not to Unix time. Bound the
+    // submitted tick by wall time since the stored revision plus a small drift
+    // allowance instead of comparing it to an epoch-sized server tick.
+    const wallTicks = Math.ceil((Math.max(0, Date.now() - current.updatedAt) / 1000) * TICK_HZ);
+    const maxAllowedTick = current.state.tick + wallTicks + MAX_TICK_DRIFT_TICKS;
+    const outcome = validateSaveTransition(current.state, state, maxAllowedTick);
     if (!outcome.ok) {
       throw HttpError.ruleViolation(outcome.reason ?? 'That save is not a possible continuation.');
     }
@@ -80,7 +78,10 @@ export class SaveService {
     userId: string,
     mutate: (state: SaveState) => SaveState,
   ): Promise<{ envelope: SaveEnvelope; state: SaveState }> {
-    const current = await this.repositories.saves.createIfMissing(userId, createInitialSaveState());
+    const current = await this.repositories.saves.createIfMissing(
+      userId,
+      createInitialSaveState(userId),
+    );
     const next = mutate(current.state);
     const updated = await this.repositories.saves.updateIfRevisionMatches(
       userId,

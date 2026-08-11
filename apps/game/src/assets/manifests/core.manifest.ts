@@ -1,12 +1,13 @@
 /**
  * The core manifest.
  *
- * One GLB per asset family. Grouping this way means the loading screen makes
- * six requests rather than twenty-four, and a scene that needs only crops
- * never downloads the character.
+ * One GLB per common asset family plus one GLB per seasonal crop pack. Grouping
+ * this way keeps common world requests coarse while preventing Spring from
+ * downloading Summer, Autumn and Winter growth meshes.
  *
- * All six are `critical` for the farm scene: the game has no fallback art
- * worth showing, so there is no honest way to start without them.
+ * Seasonal packs are catalogued as preload assets but FarmScene requests the
+ * active/standing seasons directly. Missing families still fall back to
+ * procedural geometry, which is why a partial art load is not fatal.
  *
  * Byte counts are the real, measured sizes from art/build_report.json. They
  * are what weights the loading bar, so they must be updated whenever the
@@ -19,7 +20,7 @@ import { AUDIO_ASSETS } from './audio.manifest.js';
 import { UI_ICON_ASSETS } from './uiIcons.manifest.js';
 
 export const CORE_MANIFEST: AssetManifest = {
-  version: 6,
+  version: 10,
   assets: [
     ...AUDIO_ASSETS,
     ...UI_ICON_ASSETS,
@@ -28,7 +29,7 @@ export const CORE_MANIFEST: AssetManifest = {
       kind: 'model',
       url: 'assets/models/animals.glb',
       phase: 'critical',
-      bytes: 69_052,
+      bytes: 138_816,
       scenes: ['farm'],
     },
     {
@@ -36,7 +37,7 @@ export const CORE_MANIFEST: AssetManifest = {
       kind: 'model',
       url: 'assets/models/buildings.glb',
       phase: 'critical',
-      bytes: 236_316,
+      bytes: 672_932,
       scenes: ['farm'],
     },
     {
@@ -44,7 +45,7 @@ export const CORE_MANIFEST: AssetManifest = {
       kind: 'model',
       url: 'assets/models/characters.glb',
       phase: 'critical',
-      bytes: 130_680,
+      bytes: 150_164,
       scenes: ['farm'],
     },
     {
@@ -52,7 +53,39 @@ export const CORE_MANIFEST: AssetManifest = {
       kind: 'model',
       url: 'assets/models/crops.glb',
       phase: 'critical',
-      bytes: 424_668,
+      bytes: 594_980,
+      scenes: ['farm'],
+    },
+    {
+      id: 'model:crops-autumn',
+      kind: 'model',
+      url: 'assets/models/crops-autumn.glb',
+      phase: 'preload',
+      bytes: 443_560,
+      scenes: ['farm'],
+    },
+    {
+      id: 'model:crops-spring',
+      kind: 'model',
+      url: 'assets/models/crops-spring.glb',
+      phase: 'preload',
+      bytes: 469_812,
+      scenes: ['farm'],
+    },
+    {
+      id: 'model:crops-summer',
+      kind: 'model',
+      url: 'assets/models/crops-summer.glb',
+      phase: 'preload',
+      bytes: 467_408,
+      scenes: ['farm'],
+    },
+    {
+      id: 'model:crops-winter',
+      kind: 'model',
+      url: 'assets/models/crops-winter.glb',
+      phase: 'preload',
+      bytes: 369_684,
       scenes: ['farm'],
     },
     {
@@ -60,7 +93,7 @@ export const CORE_MANIFEST: AssetManifest = {
       kind: 'model',
       url: 'assets/models/ground.glb',
       phase: 'critical',
-      bytes: 19_876,
+      bytes: 28_248,
       scenes: ['farm'],
     },
     {
@@ -68,7 +101,7 @@ export const CORE_MANIFEST: AssetManifest = {
       kind: 'model',
       url: 'assets/models/props.glb',
       phase: 'preload',
-      bytes: 146_336,
+      bytes: 219_636,
       scenes: ['farm'],
     },
   ],

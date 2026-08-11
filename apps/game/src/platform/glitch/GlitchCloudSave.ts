@@ -11,8 +11,8 @@
  *      every save after the first conflicts. We persist the server version per
  *      slot and send it back.
  *
- * On 409 we never silently overwrite. The conflict is surfaced and resolved
- * through the documented resolve endpoint with an explicit choice.
+ * A 409 is returned to the save director, which applies the game's background
+ * synchronization policy through the documented resolve endpoint.
  */
 import { STORAGE_KEYS } from './config.js';
 import type { GlitchClient } from './GlitchClient.js';
@@ -22,26 +22,49 @@ export const MAX_SAVE_BYTES = 50 * 1024 * 1024;
 
 export interface CloudSaveRecord {
   readonly id: string;
+  readonly title_id?: string;
+  readonly user_id?: string;
   readonly slot_index: number;
+  readonly slot_name?: string | null;
+  readonly save_type?: 'manual' | 'auto' | 'checkpoint' | 'quicksave';
   readonly version: number;
   readonly payload: string | null;
   readonly checksum: string;
+  readonly size_bytes?: number;
   readonly updated_at: string;
   readonly is_conflicted: boolean;
+  readonly metadata?: Record<string, unknown> | null;
+  readonly platform?: string | null;
+  readonly device_id?: string | null;
+  readonly game_version?: string | null;
+  readonly client_timestamp?: string | null;
+  readonly last_played_at?: string | null;
+  readonly play_duration_seconds?: number | null;
+  readonly created_at?: string;
+  readonly versions?: readonly unknown[];
+  readonly active_conflicts?: readonly unknown[];
 }
 
 export interface CloudSaveConflict {
   readonly status: 'conflict';
-  readonly save_id: string;
+  readonly save_id?: string;
   readonly conflict_id: string;
   readonly server_version: number;
-  readonly your_base_version: number;
+  readonly your_base_version?: number;
+  readonly message?: string;
 }
 
 export type CloudSaveOutcome =
   | { kind: 'saved'; record: CloudSaveRecord }
   | { kind: 'conflict'; conflict: CloudSaveConflict }
   | { kind: 'unavailable'; reason: string; code: string | null };
+
+export type CloudSaveLoadOutcome =
+  | { kind: 'loaded'; record: CloudSaveRecord; rawBytes: Uint8Array }
+  | { kind: 'empty' }
+  | { kind: 'unavailable'; reason: string; code: string | null };
+
+type CloudSaveRecordResponse = CloudSaveRecord | { readonly data?: CloudSaveRecord };
 
 /** Base64 of raw bytes. Chunked so a large save cannot blow the call stack. */
 export function bytesToBase64(bytes: Uint8Array): string {
@@ -91,14 +114,60 @@ export class GlitchCloudSave {
     return this.#versions.get(slotIndex) ?? 0;
   }
 
-  async list(installId: string): Promise<CloudSaveRecord[] | null> {
+  async list(installId: string, includePayload = false): Promise<CloudSaveRecord[] | null> {
     const result = await this.client.get<{ data?: CloudSaveRecord[] }>(
-      `/titles/${this.titleId}/installs/${installId}/saves`,
+      `/titles/${this.titleId}/installs/${installId}/saves${includePayload ? '?include_payload=1' : ''}`,
     );
     if (!result.ok) return null;
     const records = result.data?.data ?? [];
     for (const record of records) this.#rememberVersion(record.slot_index, record.version);
     return records;
+  }
+
+  /** Loads and verifies one cloud slot before any save document is parsed. */
+  async loadSlot(installId: string, slotIndex: number): Promise<CloudSaveLoadOutcome> {
+    const result = await this.client.get<{ data?: CloudSaveRecord[] }>(
+      `/titles/${this.titleId}/installs/${installId}/saves?include_payload=1`,
+    );
+    if (!result.ok) {
+      return {
+        kind: 'unavailable',
+        reason: result.error ?? 'Cloud saves could not be loaded.',
+        code: result.code,
+      };
+    }
+
+    const records = result.data?.data ?? [];
+    for (const record of records) this.#rememberVersion(record.slot_index, record.version);
+    const record = records.find((entry) => entry.slot_index === slotIndex);
+    if (!record) return { kind: 'empty' };
+    if (!record.payload) {
+      return {
+        kind: 'unavailable',
+        reason: 'The cloud save did not include its payload.',
+        code: 'MISSING_PAYLOAD',
+      };
+    }
+
+    let rawBytes: Uint8Array;
+    try {
+      rawBytes = base64ToBytes(record.payload);
+    } catch {
+      return {
+        kind: 'unavailable',
+        reason: 'The cloud save payload is not valid base64.',
+        code: 'INVALID_BASE64',
+      };
+    }
+    const checksum = await sha256Hex(rawBytes);
+    if (checksum !== record.checksum.toLowerCase()) {
+      return {
+        kind: 'unavailable',
+        reason: 'The cloud save failed its checksum verification.',
+        code: 'CHECKSUM_MISMATCH',
+      };
+    }
+    return { kind: 'loaded', record, rawBytes };
   }
 
   async store(
@@ -123,7 +192,7 @@ export class GlitchCloudSave {
     const payload = bytesToBase64(rawBytes);
     const checksum = await sha256Hex(rawBytes);
 
-    const result = await this.client.post<CloudSaveRecord | CloudSaveConflict>(
+    const result = await this.client.post<CloudSaveRecordResponse | CloudSaveConflict>(
       `/titles/${this.titleId}/installs/${installId}/saves`,
       {
         slot_index: slotIndex,
@@ -153,16 +222,21 @@ export class GlitchCloudSave {
       };
     }
 
-    const record = result.data as CloudSaveRecord;
+    const record = cloudSaveRecord(result.data as CloudSaveRecordResponse);
+    if (!record) {
+      return {
+        kind: 'unavailable',
+        reason: 'Glitch accepted the save but returned no save record.',
+        code: 'MISSING_SAVE_RECORD',
+      };
+    }
     this.#rememberVersion(slotIndex, record.version);
     return { kind: 'saved', record };
   }
 
   /**
-   * Resolves a conflict with an explicit choice.
-   *
-   * `keep_server` discards the local run; `use_client` overwrites the cloud.
-   * The caller must have asked the player - this method does not decide.
+   * Resolves a conflict with the policy selected by the save director.
+   * `keep_server` discards the local write; `use_client` commits it.
    */
   async resolve(
     installId: string,
@@ -171,14 +245,32 @@ export class GlitchCloudSave {
     choice: 'keep_server' | 'use_client',
     slotIndex: number,
   ): Promise<CloudSaveRecord | null> {
-    const result = await this.client.post<CloudSaveRecord>(
+    const result = await this.client.post<CloudSaveRecordResponse>(
       `/titles/${this.titleId}/installs/${installId}/saves/${saveId}/resolve`,
       { conflict_id: conflictId, choice },
     );
     if (!result.ok || !result.data) return null;
+    const record = cloudSaveRecord(result.data);
+    if (!record) return null;
     // The returned version becomes the new base for the next write.
-    this.#rememberVersion(slotIndex, result.data.version);
-    return result.data;
+    this.#rememberVersion(slotIndex, record.version);
+    return record;
+  }
+
+  /** Resolves captures where Glitch omitted save_id from the 409 body. */
+  async resolveConflict(
+    installId: string,
+    conflict: CloudSaveConflict,
+    choice: 'keep_server' | 'use_client',
+    slotIndex: number,
+  ): Promise<CloudSaveRecord | null> {
+    let saveId = conflict.save_id;
+    if (!saveId) {
+      const records = await this.list(installId);
+      saveId = records?.find((record) => record.slot_index === slotIndex)?.id;
+    }
+    if (!saveId) return null;
+    return this.resolve(installId, saveId, conflict.conflict_id, choice, slotIndex);
   }
 
   #rememberVersion(slotIndex: number, version: number): void {
@@ -204,4 +296,11 @@ export class GlitchCloudSave {
       /* start from zero */
     }
   }
+}
+
+/** Save writes and resolves are wrapped as `{ data: record }` by the live API. */
+function cloudSaveRecord(response: CloudSaveRecordResponse): CloudSaveRecord | null {
+  if ('slot_index' in response && typeof response.version === 'number') return response;
+  const record = 'data' in response ? response.data : undefined;
+  return record && typeof record.version === 'number' ? record : null;
 }

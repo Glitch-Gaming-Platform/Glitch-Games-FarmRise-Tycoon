@@ -11,8 +11,9 @@
  *   account  Our own Next.js backend, server-authoritative with optimistic
  *            concurrency. Unlocked by creating an account with an email and
  *            password. Survives clearing the browser and moves between devices.
- *   cloud    Glitch Cloud Save, additionally, when a Glitch title token is
- *            present AND Glitch resolved a real user from the account email.
+ *   cloud    Glitch Cloud Save, when a title token is present and the validated
+ *            install resolves to a real Glitch user. On a Glitch launch this
+ *            is the first source checked when resuming.
  *
  * The local tier is never skipped. Even a signed-in player writes locally
  * first, because a save that only exists on a server is a save that is gone
@@ -24,7 +25,6 @@ import type { Disposable } from '@engine/core/types.js';
 import type { AuthClient } from '@net/AuthClient.js';
 import type { GameApi } from '@net/GameApi.js';
 import type { GlitchPlatform } from '../glitch/GlitchPlatform.js';
-import type { CloudSaveConflict } from '../glitch/GlitchCloudSave.js';
 
 export type SaveTier = 'local' | 'account' | 'cloud';
 
@@ -32,24 +32,39 @@ const LOCAL_KEY = 'farmrise:save:v1';
 const CLOUD_SLOT = 0;
 
 export interface LocalSaveEnvelope {
+  /**
+   * Version of the *envelope*, not of the save inside it. The document's own
+   * schemaVersion is what the migration chain reads, so an old career keeps
+   * loading after the save format changes.
+   */
   readonly schemaVersion: 1;
   readonly savedAt: number;
   readonly revision: number;
-  readonly state: SaveState;
+  readonly state: unknown;
 }
 
 export interface SaveDirectorEvents extends Record<string, unknown> {
   'save:written': { tiers: readonly SaveTier[]; at: number };
   'save:tier-changed': { tier: SaveTier };
-  'save:conflict': { conflict: CloudSaveConflict };
   'save:error': { tier: SaveTier; reason: string };
 }
+
+export type SavedDocumentResult =
+  | {
+      readonly document: unknown;
+      readonly careerId: string;
+      readonly tier: SaveTier;
+    }
+  | { readonly error: string; readonly tier: SaveTier }
+  | null;
 
 export class SaveDirector implements Disposable {
   readonly events = new EventBus<SaveDirectorEvents>();
   #revision = 0;
   #lastTier: SaveTier = 'local';
   #syncing = false;
+  #preparedCloudInstallId: string | null = null;
+  #blockedCloudInstallId: string | null = null;
 
   constructor(
     private readonly auth: AuthClient,
@@ -66,6 +81,12 @@ export class SaveDirector implements Disposable {
 
   get revision(): number {
     return this.#revision;
+  }
+
+  /** Prevents this session from replacing a cloud document it could not safely read. */
+  blockCloudWrites(): void {
+    const installId = this.glitch?.installId;
+    if (installId) this.#blockedCloudInstallId = installId;
   }
 
   // -- local -------------------------------------------------------------
@@ -122,8 +143,8 @@ export class SaveDirector implements Disposable {
    * Writes to every tier available.
    *
    * Local first and always. Then the account backend, which owns the
-   * authoritative revision. Then Glitch, which is additive telemetry-grade
-   * durability rather than the source of truth.
+   * authoritative revision. Then Glitch, which provides the cross-device
+   * career that is checked first the next time the title launches from Glitch.
    */
   async save(state: SaveState): Promise<readonly SaveTier[]> {
     const written: SaveTier[] = [];
@@ -176,17 +197,47 @@ export class SaveDirector implements Disposable {
     const platform = this.glitch;
     const installId = platform?.installId;
     if (!platform || !installId) return false;
+    if (this.#blockedCloudInstallId === installId) return false;
+    if (this.#preparedCloudInstallId !== installId) {
+      const records = await platform.cloudSave.list(installId);
+      if (!records) {
+        this.events.emit('save:error', {
+          tier: 'cloud',
+          reason: 'Could not read the current cloud save version.',
+        });
+        return false;
+      }
+      this.#preparedCloudInstallId = installId;
+    }
 
     const bytes = new TextEncoder().encode(JSON.stringify(state));
     const outcome = await platform.cloudSave.store(installId, CLOUD_SLOT, bytes, {
       saveType: 'auto',
       slotName: 'FarmRise season',
-      metadata: { balance: state.balance, tick: state.tick, parcels: state.landParcels },
+      metadata: {
+        balance: state.balance,
+        tick: state.tick,
+        stage: state.stage,
+        parcels: state.sites[0]?.ownedParcelIds.length ?? 1,
+      },
     });
 
     if (outcome.kind === 'conflict') {
-      // Never silently overwrite. Surface it and let the player choose.
-      this.events.emit('save:conflict', { conflict: outcome.conflict });
+      // Saving is background infrastructure, not a player decision. The game
+      // loaded the cloud career before play began, so the active session is the
+      // continuation to keep when its optimistic base becomes stale. Resolve
+      // that captured write in place and never interrupt play with a dialog.
+      const resolved = await platform.cloudSave.resolveConflict(
+        installId,
+        outcome.conflict,
+        'use_client',
+        CLOUD_SLOT,
+      );
+      if (resolved) return true;
+      this.events.emit('save:error', {
+        tier: 'cloud',
+        reason: 'Cloud sync will retry later.',
+      });
       return false;
     }
     if (outcome.kind === 'unavailable') {
@@ -196,43 +247,75 @@ export class SaveDirector implements Disposable {
     return true;
   }
 
-  /** Applies a player's answer to a cloud-save conflict. */
-  async resolveCloudConflict(
-    conflict: CloudSaveConflict,
-    choice: 'keep_server' | 'use_client',
-  ): Promise<boolean> {
-    const platform = this.glitch;
-    const installId = platform?.installId;
-    if (!platform || !installId) return false;
-    const record = await platform.cloudSave.resolve(
-      installId,
-      conflict.save_id,
-      conflict.conflict_id,
-      choice,
-      CLOUD_SLOT,
-    );
-    return record !== null;
-  }
-
   // -- load --------------------------------------------------------------
 
   /**
    * Chooses the best save to resume.
    *
-   * The account tier wins over local when signed in, because it is the
-   * authoritative one and the reason a player made an account. Local wins
-   * when there is nothing else, which is the common case.
+   * A validated Glitch cloud slot wins when present, because that is the
+   * cross-device career the Glitch player launched. The account tier wins over
+   * local otherwise; local remains the offline fallback.
    */
   async loadBest(): Promise<{ state: SaveState; tier: SaveTier } | null> {
+    const document = await this.loadBestDocument();
+    return document && 'document' in document
+      ? { state: document.document as SaveState, tier: document.tier }
+      : null;
+  }
+
+  /**
+   * The best saved document, in whatever format it was written.
+   *
+   * Returns the raw value on purpose: deciding whether it can be upgraded is
+   * the migration chain's job, and reading it as the current schema here would
+   * silently discard every save written by an older build.
+   */
+  async loadBestDocument(): Promise<SavedDocumentResult> {
+    const cloudFailure = await this.#loadFromGlitch();
+    if (cloudFailure && 'document' in cloudFailure) return cloudFailure;
+
     if (this.auth.signedIn) {
       const remote = await this.#loadFromAccount();
       if (remote) {
         this.#revision = remote.revision;
-        return { state: remote.state, tier: 'account' };
+        return {
+          document: remote.state,
+          careerId: this.auth.user?.id ?? 'account-career',
+          tier: 'account',
+        };
       }
     }
     const local = this.readLocal();
-    return local ? { state: local.state, tier: 'local' } : null;
+    if (local) return { document: local.state, careerId: 'local-career', tier: 'local' };
+    return cloudFailure;
+  }
+
+  async #loadFromGlitch(): Promise<SavedDocumentResult> {
+    const platform = this.glitch;
+    const installId = platform?.installId;
+    if (!platform?.canUseCloudFeatures || !installId) return null;
+
+    const outcome = await platform.cloudSave.loadSlot(installId, CLOUD_SLOT);
+    if (outcome.kind === 'empty') return null;
+    if (outcome.kind === 'unavailable') {
+      this.#blockedCloudInstallId = installId;
+      return { error: outcome.reason, tier: 'cloud' };
+    }
+    this.#preparedCloudInstallId = installId;
+
+    try {
+      const document = JSON.parse(new TextDecoder().decode(outcome.rawBytes)) as unknown;
+      const careerId =
+        typeof document === 'object' &&
+        document !== null &&
+        typeof (document as { careerId?: unknown }).careerId === 'string'
+          ? (document as { careerId: string }).careerId
+          : `glitch-${installId}`;
+      return { document, careerId, tier: 'cloud' };
+    } catch {
+      this.#blockedCloudInstallId = installId;
+      return { error: 'The cloud save is not valid FarmRise JSON.', tier: 'cloud' };
+    }
   }
 
   async #loadFromAccount(): Promise<{ state: SaveState; revision: number } | null> {

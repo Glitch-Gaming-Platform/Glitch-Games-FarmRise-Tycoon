@@ -17,7 +17,7 @@ authority.**
 ```
         CLIENT (untrusted)                        SERVER (authority)
  ┌──────────────────────────────┐         ┌────────────────────────────────┐
- │ FarmWorld                    │         │ SaveService                    │
+│ Career + FarmWorld           │         │ SaveService                    │
  │  runs shared rules locally   │         │  optimistic concurrency        │
  │  so the game feels instant   │         │  plausibility validation       │
  │                              │         │                                │
@@ -52,7 +52,7 @@ because a client that could predict order generation could farm favourable contr
 
 Be precise about this, because "server-authoritative" is often claimed more broadly than it is true.
 
-### Grade 1 — fully authoritative: money from trades
+### Grade 1 — fully authoritative routes: money from server market trades
 
 `POST /market/orders/:id/fulfill` and `POST /market/spot-sell` take **only an intent**:
 
@@ -65,6 +65,11 @@ the new balance, and appends a ledger entry. There is no field through which a c
 an amount — asserted by a test that pins the request schema's key list, and by a test that sends
 `unitPrice` and `payout` and confirms they are ignored.
 
+The persistent-career buyer board introduced in save v2 is currently an offline-first Grade 2
+system. Its contracts, trust and payouts are transition-validated in the career save rather than
+routed through the older server order table. Do not describe those career-board deliveries as fully
+authoritative until dedicated intent routes replace that boundary.
+
 ### Grade 2 — plausibility-checked: the save document
 
 `PUT /save` accepts the client's whole simulation state. Re-simulating every session server-side
@@ -75,13 +80,18 @@ Instead `validateSaveTransition` rejects anything physically impossible:
 | --- | --- |
 | Tick monotonic | Time running backwards |
 | Tick vs server clock (`MAX_TICK_DRIFT_TICKS`) | Fast-forwarding to grow crops instantly |
-| Balance gain ≤ `MAX_PLAUSIBLE_EARNINGS_PER_TICK × elapsed` | `balance = 99999999` |
+| Balance gain ≤ earnings + known loan/milestone sources | `balance = 99999999` |
 | Item gain ≤ `MAX_PLAUSIBLE_ITEMS_PER_TICK × elapsed` | Goods materialising |
-| `storageUsed ≤ storageCapacity` | Deleting the sell-or-hold decision |
-| Land parcels: monotonic, +1 max per write | Granting yourself the map |
+| Milestones and unlocks follow the shared progression table | Inserting processors or workers early |
+| Local stores and carriers stay within their own capacity | Deleting the hauling decision |
+| Land, buildings, animals, workers and carriers match known costs/unlocks | Granting yourself the estate |
 | Growth ≤ crop maximum, and ≤ elapsed ticks | Instant harvests |
+| Loans and insurance match fixed offers/policies | Inventing free credit or full cover |
+| Town projects match materials, cost, timer and prosperity sources | Granting permanent town bonuses |
 
-Spending down is always allowed — a player may lose money any way they like.
+Unexplained losses remain harmless, but known purchases and repayments must actually reduce the
+balance. The validator deliberately remains a transition checker rather than a second full
+simulation.
 
 **What this does not catch:** a patient attacker staying inside every bound gains a modest,
 bounded advantage. That is an accepted trade for a single-player game with no leaderboard and no
@@ -142,13 +152,32 @@ is real.
 
 ## Offline behaviour
 
-Losing the connection must never stop play. `ConnectionState` tracks `online | offline |
-reconnecting | unauthenticated`, and queues mutations attempted while disconnected, replaying them
-oldest-first with their original idempotency keys. A poisoned item is dropped after five attempts
-rather than blocking the queue forever.
+Losing the connection never stops the local career. Every checkpoint writes local storage first;
+account/cloud failure leaves that local document intact and a later autosave retries the durable
+tiers. `ConnectionState` contains an idempotent mutation queue for future intent-route integration,
+but current career-board progression does not claim durable queued server intents.
 
 `HttpTransport` adds: a timeout (fetch has none by default), exponential backoff with jitter on
 retryable codes only, and exactly one transparent refresh-and-retry on a 401.
+
+## Glitch Cloud Save resume
+
+A validated Glitch `user_id` is also the player's authentication identity in a Glitch launch. The
+game must not layer its email/password form on top of that session.
+
+A validated, login-backed Glitch install is checked before account or local storage when the game is
+launched through Glitch. Slot `0` is listed with its payload, the decoded bytes are checksum-verified,
+and only then is the career migrated and hydrated. This ensures the same losses and gains resume on a
+different Glitch device rather than merely uploading a backup that is never read.
+
+Timed autosave snapshots the whole career every 20 seconds, not only after command events. Autonomous
+simulation changes—animal losses and production, spoilage, incident response/impact, construction
+timers and elapsed career time—therefore participate in cloud persistence.
+
+Unreadable cloud data is fail-closed: a local/account fallback may keep the player running, but cloud
+writes are disabled for that session so a fresh or older local farm cannot overwrite the damaged
+remote record. Optimistic concurrency still applies after load; listing the slot establishes the
+`base_version`, and a 409 requires an explicit `keep_server` or `use_client` choice.
 
 ## Rate limiting
 

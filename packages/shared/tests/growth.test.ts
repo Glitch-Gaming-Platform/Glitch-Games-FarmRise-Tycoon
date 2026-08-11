@@ -8,10 +8,15 @@ import {
   asPlotId,
   computeYield,
   emptyPlot,
+  isThirsty,
   plantCrop,
   plotStage,
   requireCrop,
   tendPlot,
+  ticksUntilThirsty,
+  THIRSTY_WATER,
+  type PlotState,
+  ticksSinceReady,
   ticksUntilReady,
 } from '../src/index.js';
 
@@ -30,10 +35,12 @@ describe('plot lifecycle', () => {
     expect(plotStage(state)).toBe('ready');
   });
 
-  it('never exceeds the crop maximum growth', () => {
+  it('tracks how long a mature crop has waited to be harvested', () => {
     const wheat = requireCrop('wheat');
     const state = advancePlot({ ...plot(), irrigated: true }, wheat.growthTicks * 10);
-    expect(state.grownTicks).toBe(wheat.growthTicks);
+    expect(state.grownTicks).toBeGreaterThan(wheat.growthTicks);
+    expect(ticksSinceReady(state)).toBeGreaterThan(0);
+    expect(ticksUntilReady(state)).toBe(0);
   });
 
   it('grows more slowly without irrigation as water depletes', () => {
@@ -98,5 +105,50 @@ describe('immutability', () => {
     const snapshot = { ...before };
     advancePlot(before, 100);
     expect(before).toEqual(snapshot);
+  });
+});
+
+describe('water gauge', () => {
+  const thirstyPlot = (water: number, overrides: Partial<PlotState> = {}): PlotState => ({
+    ...emptyPlot(asPlotId('plot-1')),
+    cropId: 'corn',
+    water,
+    ...overrides,
+  });
+
+  it('calls a bed thirsty only once it is actually struggling', () => {
+    expect(isThirsty(thirstyPlot(1))).toBe(false);
+    expect(isThirsty(thirstyPlot(THIRSTY_WATER - 0.01))).toBe(true);
+  });
+
+  it('never calls an irrigated or an empty bed thirsty', () => {
+    expect(isThirsty(thirstyPlot(0, { irrigated: true }))).toBe(false);
+    expect(isThirsty(thirstyPlot(0, { cropId: null }))).toBe(false);
+  });
+
+  it('counts down to the moment a bed needs attention', () => {
+    const wet = ticksUntilThirsty(thirstyPlot(1)) ?? 0;
+    const drier = ticksUntilThirsty(thirstyPlot(0.6)) ?? 0;
+    expect(wet).toBeGreaterThan(drier);
+    expect(ticksUntilThirsty(thirstyPlot(THIRSTY_WATER))).toBe(0);
+  });
+
+  it('agrees with what advancePlot actually does to the water', () => {
+    const plot = thirstyPlot(1);
+    const ticks = ticksUntilThirsty(plot) ?? 0;
+    const later = advancePlot(plot, ticks);
+    expect(later.water).toBeLessThanOrEqual(THIRSTY_WATER + 0.001);
+    expect(advancePlot(plot, ticks - 1).water).toBeGreaterThan(THIRSTY_WATER);
+  });
+
+  it('dries out faster in summer than in spring', () => {
+    const summer = ticksUntilThirsty(thirstyPlot(1), 'summer') ?? 0;
+    const spring = ticksUntilThirsty(thirstyPlot(1), 'spring') ?? 0;
+    expect(summer).toBeLessThan(spring);
+  });
+
+  it('has no countdown for a bed that will never get there', () => {
+    expect(ticksUntilThirsty(thirstyPlot(1, { irrigated: true }))).toBeNull();
+    expect(ticksUntilThirsty(thirstyPlot(1, { cropId: null }))).toBeNull();
   });
 });

@@ -83,6 +83,22 @@ def add_cube(name: str, location, scale, palette_name: str, rotation_z=0.0):
     return obj
 
 
+def add_cylinder(name: str, location, radius: float, depth: float, palette_name: str, vertices=16):
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=vertices,
+        radius=radius,
+        depth=depth,
+        location=location,
+    )
+    obj = mark(bpy.context.active_object)
+    obj.name = name
+    obj.data.materials.append(material(f"M_UI_{palette_name}", palette_name))
+    bevel = obj.modifiers.new("UI bevel", "BEVEL")
+    bevel.width = 0.035
+    bevel.segments = 2
+    return obj
+
+
 def add_ground_disc(radius=1.52):
     bpy.ops.mesh.primitive_cylinder_add(vertices=48, radius=radius, depth=0.08, location=(0, 0, -0.05))
     disc = mark(bpy.context.active_object)
@@ -132,6 +148,62 @@ def add_eggs():
         egg.data.materials.append(material("M_UI_Egg", "chicken_body", 0.92))
         eggs.append(egg)
     return eggs
+
+
+def add_milk():
+    can = add_cylinder("UI_MilkCan", (0, 0, 0.66), 0.48, 1.02, "metal_galv", 18)
+    neck = add_cylinder("UI_MilkNeck", (0, 0, 1.20), 0.28, 0.24, "trim_white", 16)
+    lid = add_cylinder("UI_MilkLid", (0, 0, 1.36), 0.34, 0.10, "wall_teal", 16)
+    return [can, neck, lid]
+
+
+def add_flour():
+    sack = add_cube("UI_FlourSack", (0, 0, 0.62), (0.62, 0.30, 0.70), "trim_white")
+    tie = add_cube("UI_FlourTie", (0, 0, 1.36), (0.25, 0.20, 0.12), "timber_warm", 0.12)
+    wheat = instance("SM_crop_wheat_s4", (0, -0.34, 0.08), rotation_z=-0.18, scale=0.38)
+    return [sack, tie, wheat]
+
+
+def add_cheese():
+    body = add_cube("UI_Cheese", (0, 0, 0.55), (0.72, 0.32, 0.50), "corn_ready", -0.18)
+    rind = add_cube("UI_CheeseRind", (-0.58, -0.04, 0.55), (0.12, 0.34, 0.52), "wheat_head", -0.18)
+    return [body, rind]
+
+
+def add_preserves():
+    jars = []
+    for index, (x, scale) in enumerate(((-0.48, 0.82), (0.0, 1.0), (0.48, 0.78))):
+        jars.append(add_cylinder(f"UI_Jar_{index}", (x, 0, 0.48 * scale), 0.24 * scale, 0.76 * scale, "pumpkin_body", 14))
+        jars.append(add_cylinder(f"UI_JarLid_{index}", (x, 0, 0.91 * scale), 0.26 * scale, 0.10 * scale, "metal_galv", 14))
+    return jars
+
+
+def add_avocado():
+    """Stage-4 orchard plus a produce close-up that survives a 192 px card."""
+    objects = [instance("SM_crop_avocado_s4", (0.05, 0.28, 0), scale=0.68)]
+    for index, (x, z, scale) in enumerate(((-0.42, 0.43, 1.0), (0.35, 0.34, 0.82))):
+        bpy.ops.mesh.primitive_uv_sphere_add(
+            segments=14,
+            ring_count=8,
+            location=(x, -0.34, z),
+            scale=(0.24 * scale, 0.18 * scale, 0.34 * scale),
+        )
+        fruit = mark(bpy.context.active_object)
+        fruit.name = f"UI_Avocado_{index}"
+        fruit.data.materials.append(material("M_UI_Avocado", "avocado_shadow"))
+        objects.append(fruit)
+
+        bpy.ops.mesh.primitive_uv_sphere_add(
+            segments=10,
+            ring_count=6,
+            location=(x - 0.045 * scale, -0.51, z + 0.055 * scale),
+            scale=(0.075 * scale, 0.035 * scale, 0.095 * scale),
+        )
+        highlight = mark(bpy.context.active_object)
+        highlight.name = f"UI_AvocadoHighlight_{index}"
+        highlight.data.materials.append(material("M_UI_AvocadoHighlight", "avocado_body"))
+        objects.append(highlight)
+    return objects
 
 
 def add_contract_sign():
@@ -266,12 +338,37 @@ ICONS = {
     "wheat.webp": (single("SM_crop_wheat_s4"), 192, 192, False),
     "corn.webp": (single("SM_crop_corn_s4"), 192, 192, False),
     "pumpkin.webp": (single("SM_crop_pumpkin_s4"), 192, 192, False),
+    "clover.webp": (single("SM_crop_clover_s4"), 192, 192, False),
+    "radish.webp": (single("SM_crop_radish_s4"), 192, 192, False),
+    "pea.webp": (single("SM_crop_pea_s4"), 192, 192, False),
+    "strawberry.webp": (single("SM_crop_strawberry_s4"), 192, 192, False),
+    "sunflower.webp": (single("SM_crop_sunflower_s4"), 192, 192, False),
+    "tomato.webp": (single("SM_crop_tomato_s4"), 192, 192, False),
+    "avocado.webp": (add_avocado, 192, 192, False),
+    "beetroot.webp": (single("SM_crop_beetroot_s4"), 192, 192, False),
+    "cranberry.webp": (single("SM_crop_cranberry_s4"), 192, 192, False),
+    "grape.webp": (single("SM_crop_grape_s4"), 192, 192, False),
+    "carrot.webp": (single("SM_crop_carrot_s4"), 192, 192, False),
+    "cabbage.webp": (single("SM_crop_cabbage_s4"), 192, 192, False),
+    "garlic.webp": (single("SM_crop_garlic_s4"), 192, 192, False),
     "eggs.webp": (add_eggs, 192, 192, False),
+    "milk.webp": (add_milk, 192, 192, False),
+    "flour.webp": (add_flour, 192, 192, False),
+    "cheese.webp": (add_cheese, 192, 192, False),
+    "preserves.webp": (add_preserves, 192, 192, False),
     "barn.webp": (single("SM_building_barn"), 192, 192, False),
     "irrigation.webp": (single("SM_building_irrigation"), 192, 192, False),
     "road.webp": (single("SM_building_road"), 192, 192, False),
     "fence.webp": (single("SM_building_fence"), 192, 192, False),
     "chicken.webp": (single("SM_animal_chicken"), 192, 192, False),
+    "cow.webp": (single("SM_animal_cow"), 192, 192, False),
+    "loading-pad.webp": (single("SM_building_loading_pad"), 192, 192, False),
+    "cold-store.webp": (single("SM_building_cold_store"), 192, 192, False),
+    "worker-hut.webp": (single("SM_building_worker_hut"), 192, 192, False),
+    "well.webp": (single("SM_building_well"), 192, 192, False),
+    "mill.webp": (single("SM_building_mill"), 192, 192, False),
+    "creamery.webp": (single("SM_building_creamery"), 192, 192, False),
+    "preserve-kitchen.webp": (single("SM_building_preserve_kitchen"), 192, 192, False),
     "land.webp": (land_group, 192, 192, False),
     "warning.webp": (single("SM_animal_fox"), 192, 192, False),
     "watering.webp": (single("SM_tool_watering_can", math.radians(-18)), 192, 192, False),

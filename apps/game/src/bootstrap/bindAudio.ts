@@ -14,10 +14,22 @@ import type { AudioSystem } from '@engine/audio/AudioSystem.js';
 import type { AssetLoader } from '@assets/loaders/AssetLoader.js';
 import { SOUND } from '@assets/audio/soundIds.js';
 import { ALL_SOUND_IDS, registerProceduralSfx } from '@assets/audio/proceduralSfx.js';
-import { registerProceduralMusic } from '@assets/audio/proceduralMusic.js';
-import { DEFAULT_MUSIC_ID } from '@assets/audio/musicIds.js';
+import type { MusicId } from '@assets/audio/musicIds.js';
 import type { FarmScene } from '@game/scenes/FarmScene.js';
 import type { GameStateMachine } from '@game/states/GameStateMachine.js';
+import { MusicPlayer } from './MusicPlayer.js';
+
+export interface PrepareAudioOptions {
+  /** Uses a short mono procedural bed instead of decoding the 92 MB PCM music file. */
+  readonly lowMemoryMusic?: boolean;
+  readonly initialMusicTrack?: MusicId;
+  readonly disabledMusicTracks?: readonly MusicId[];
+}
+
+export interface PreparedAudio {
+  readonly music: MusicPlayer;
+  dispose(): void;
+}
 
 /**
  * Renders and registers all audio once the context is live.
@@ -25,10 +37,18 @@ import type { GameStateMachine } from '@game/states/GameStateMachine.js';
  * Returns immediately; registration happens on the unlock event. Callers must
  * not assume audio is available on the next line.
  */
-export function prepareAudio(audio: AudioSystem, assets: AssetLoader): Unsubscribe {
+export function prepareAudio(
+  audio: AudioSystem,
+  assets: AssetLoader,
+  options: PrepareAudioOptions = {},
+): PreparedAudio {
   let done = false;
   let disposed = false;
-  let music: ReturnType<AudioSystem['play']> | null = null;
+  const music = new MusicPlayer(audio, assets, {
+    initialTrack: options.initialMusicTrack,
+    disabledTracks: options.disabledMusicTracks,
+    lowMemory: options.lowMemoryMusic,
+  });
 
   // Fetching does not require an AudioContext, so start it while the player is
   // reading the menu. Catch here to prevent optional preloads becoming
@@ -42,11 +62,6 @@ export function prepareAudio(audio: AudioSystem, assets: AssetLoader): Unsubscri
         .catch((error: unknown) => ({ data: null, error })),
     ]),
   );
-  const musicLoad = assets
-    .load<ArrayBuffer>(DEFAULT_MUSIC_ID)
-    .then((data) => ({ data, error: null }))
-    .catch((error: unknown) => ({ data: null, error }));
-
   const unsubscribe = audio.events.on('audio:unlocked', () => {
     if (done) return;
     done = true;
@@ -54,28 +69,11 @@ export function prepareAudio(audio: AudioSystem, assets: AssetLoader): Unsubscri
     if (!context) return;
     try {
       registerProceduralSfx(context, (id, buffer) => audio.registerBuffer(id, buffer));
-      registerProceduralMusic(context, (id, buffer) => audio.registerBuffer(id, buffer));
     } catch (error) {
       // Audio is never allowed to break the game.
       console.warn('[audio] procedural registration failed', error);
     }
-
-    // Start the real music as soon as its decode completes. If fetching or
-    // decoding failed, the procedural buffer registered above has the same id.
-    void musicLoad.then(async ({ data, error }) => {
-      if (data) {
-        try {
-          await audio.registerClip(DEFAULT_MUSIC_ID, data);
-        } catch (decodeError) {
-          console.warn('[audio] music decode failed; using procedural fallback', decodeError);
-        }
-      } else if (error) {
-        console.warn('[audio] music preload failed; using procedural fallback', error);
-      }
-      if (!disposed) {
-        music = audio.play(DEFAULT_MUSIC_ID, { bus: 'music', loop: true, volume: 0.9 });
-      }
-    });
+    if (!disposed) music.unlock(context);
 
     // Effect decoding can finish behind the music. The first interaction may
     // use the procedural fallback; every later play resolves to the real clip.
@@ -94,10 +92,13 @@ export function prepareAudio(audio: AudioSystem, assets: AssetLoader): Unsubscri
     }
   });
 
-  return () => {
-    disposed = true;
-    music?.stop(0.2);
-    unsubscribe();
+  return {
+    music,
+    dispose(): void {
+      disposed = true;
+      music.dispose();
+      unsubscribe();
+    },
   };
 }
 
@@ -111,10 +112,11 @@ export function prepareAudio(audio: AudioSystem, assets: AssetLoader): Unsubscri
 export function bindSceneAudio(scene: FarmScene, audio: AudioSystem): Unsubscribe {
   const world = scene.world;
   const interaction = scene.interaction;
-  const eventDirector = scene.eventDirector;
+  const incidents = scene.incidents;
+  const session = scene.session;
   const enemies = scene.enemyDirector;
   const playerController = scene.playerController;
-  if (!world || !interaction || !eventDirector || !playerController) {
+  if (!world || !interaction || !incidents || !session || !playerController) {
     throw new Error('bindSceneAudio requires a loaded FarmScene.');
   }
 
@@ -124,39 +126,45 @@ export function bindSceneAudio(scene: FarmScene, audio: AudioSystem): Unsubscrib
   subscriptions.push(
     interaction.events.on('interaction:performed', ({ action }) => {
       if (action === 'plant') play(SOUND.plant);
-      else if (action === 'tend') play(SOUND.tend);
-      else if (action === 'harvest') play(SOUND.harvest);
+      else if (action === 'tend' || action === 'respond') play(SOUND.tend);
+      else if (action === 'repair') play(SOUND.buildPlace, 0.7);
+      else play(SOUND.harvest);
     }),
     // A refusal gets the soft deny, never a harsh buzzer: the player is
     // usually exploring, and exploring must not feel punished.
     interaction.events.on('interaction:refused', () => play(SOUND.uiDeny, 0.7)),
     interaction.events.on('interaction:crop-selected', () => play(SOUND.uiClick, 0.6)),
 
-    world.events.on('world:sold', ({ viaContract, payout }) => {
+    session.events.on('session:sold', ({ viaContract, payout }) => {
       if (payout >= 8_000) play(SOUND.coinBig);
       else play(viaContract ? SOUND.sellContract : SOUND.sellSpot);
     }),
+    // Hauling is the most repeated action in the mid game, so its cue is
+    // quiet and short: audible confirmation, never a fanfare.
+    session.events.on('session:hauled', () => play(SOUND.buildPlace, 0.45)),
     world.events.on('world:building-completed', () => play(SOUND.buildComplete)),
     world.events.on('world:building-placed', () => play(SOUND.buildPlace)),
     world.events.on('world:animal-purchased', () => play(SOUND.chicken, 0.55)),
-    world.events.on('world:land-purchased', () => play(SOUND.goalReached)),
+    world.events.on('world:parcel-acquired', () => play(SOUND.goalReached)),
     world.events.on('world:storage-full', () => play(SOUND.uiDeny, 0.6)),
     world.events.on('world:produce', () => play(SOUND.chicken, 0.5)),
 
     // The warning is the most important sound in the game: it is the only
     // cue that a decision window has opened. It gets the ui bus, which is
     // not ducked, and full volume.
-    eventDirector.events.on('event:warned', () =>
+    incidents.events.on('incident:warned', () =>
       audio.play(SOUND.eventWarning, { bus: 'ui', volume: 1 }),
     ),
-    eventDirector.events.on('event:started', ({ kind, mitigated }) => {
+    incidents.events.on('incident:impact', ({ instance, definition }) => {
       // Foxes announce their own arrival below. Layering the generic weather
       // impact over the bark made the critical alert less distinct.
-      if (kind === 'drought') {
-        play(mitigated ? SOUND.eventPrevented : SOUND.eventImpact, mitigated ? 0.65 : 1);
-      }
+      if (definition.id === 'incident-fox-raid') return;
+      const answered = instance.responseProgress > 0;
+      play(answered ? SOUND.eventPrevented : SOUND.eventImpact, answered ? 0.65 : 1);
     }),
-    eventDirector.events.on('event:mitigated', () => play(SOUND.eventPrevented)),
+    incidents.events.on('incident:resolved', ({ mitigated }) => {
+      if (mitigated) play(SOUND.eventPrevented);
+    }),
 
     playerController.events.on('player:stepped', ({ sprinting }) =>
       audio.play(SOUND.footstep, {

@@ -1,63 +1,47 @@
-/**
- * The complete core loop, headless.
- *
- * This is the test that proves the slice: plant -> tend -> harvest -> sell ->
- * reinvest -> expand, plus the two ways a run ends. It drives the real
- * SessionController against the real world model, with only input and the
- * camera stubbed - so a regression anywhere in the chain shows up here.
- */
 import { beforeEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import {
-  LAND_PARCEL_COST,
-  asOrderId,
-  cents,
-  requireCrop,
-  type MarketOrder,
-} from '@farmrise/shared';
+import type { IncidentInstance } from '@farmrise/shared';
 import { InputSystem } from '@engine/input/InputSystem.js';
 import { ServiceContainer } from '@engine/core/ServiceContainer.js';
-import { FarmWorld } from '@game/world/FarmWorld.js';
-import { STARTER_FARM } from '@game/world/levels/starterFarm.js';
+import { CareerDirector } from '@game/career/CareerDirector.js';
+import { IncidentDirector } from '@game/events/IncidentDirector.js';
+import { DEFAULT_BINDINGS, type GameAction } from '@game/GameActions.js';
 import { Player } from '@game/player/Player.js';
 import { PlayerController } from '@game/player/PlayerController.js';
-import { EventDirector } from '@game/events/EventDirector.js';
 import { SessionController } from '@game/systems/SessionController.js';
-import { build, harvest, plant, tend } from '@game/world/FarmCommands.js';
-import { DEFAULT_BINDINGS, type GameAction } from '@game/GameActions.js';
+import {
+  addToYard,
+  depositCarriedAtYard,
+  fundedCareer,
+  growAndHarvest,
+} from '../helpers/career.js';
 
 const STEP = { stepSeconds: 1 / 60, tick: 0 };
 
-function makeSession(options: { skipOnboarding?: boolean } = {}) {
-  const world = new FarmWorld(STARTER_FARM, 42);
-  const spawn = world.grid.tileToWorld(STARTER_FARM.spawn.tileX, STARTER_FARM.spawn.tileZ);
+function makeSession(contractsUnlocked = true, skipOnboarding = true) {
+  const career = fundedCareer(100_000);
+  if (contractsUnlocked) career.grant(['contracts']);
+  const world = career.world;
+  const spawn = world.grid.tileToWorld(world.level.spawn.tileX, world.level.spawn.tileZ);
   const player = new Player(spawn.x, spawn.z);
   const target = document.createElement('div');
   document.body.append(target);
   const input = new InputSystem<GameAction>({ target, bindings: DEFAULT_BINDINGS });
   input.init({ services: new ServiceContainer() });
-  const controller = new PlayerController(player, world, world.physics, input);
-  const director = new EventDirector(world, { graceTicks: Number.MAX_SAFE_INTEGER });
+  const playerController = new PlayerController(player, world, world.physics, input);
+  const incidents = new IncidentDirector(career);
+  const careerDirector = new CareerDirector(career);
   const session = new SessionController(
-    world,
+    career,
     player,
-    controller,
-    director,
+    playerController,
+    incidents,
+    careerDirector,
     input,
     new THREE.PerspectiveCamera(),
-    { skipOnboarding: options.skipOnboarding ?? true, now: () => 0 },
+    { skipOnboarding, now: () => 0 },
   );
-  return { world, player, session, director, input };
-}
-
-/** Grows a plot to harvestable and picks it. Returns the units gained. */
-function growAndHarvest(world: FarmWorld, plotId: string, cropId = 'wheat'): number {
-  plant(world, plotId, cropId);
-  const plot = world.getPlot(plotId)!;
-  world.setPlot(plotId, { ...plot, irrigated: true });
-  world.advance(requireCrop(cropId).growthTicks + 5);
-  const result = harvest(world, plotId);
-  return result.ok ? result.value.quantity : 0;
+  return { career, world, player, session, incidents, careerDirector, input, target };
 }
 
 let harness: ReturnType<typeof makeSession>;
@@ -65,281 +49,195 @@ beforeEach(() => {
   harness = makeSession();
 });
 
-describe('the core loop', () => {
-  it('turns a planted seed into money', () => {
-    const { world, session } = harness;
-    const startingBalance = world.balance;
-
-    const picked = growAndHarvest(world, STARTER_FARM.plots[0]!.id);
-    expect(picked).toBeGreaterThan(0);
-
-    session.sell('wheat', picked);
-
-    expect(world.inventory['wheat'] ?? 0).toBe(0);
-    expect(world.balance).toBeGreaterThan(startingBalance - requireCrop('wheat').seedCost);
-    expect(world.stats.itemsSold).toBe(picked);
+describe('the physical core loop', () => {
+  it('persists tutorial completion in the career that is uploaded to cloud save', () => {
+    const fresh = makeSession(true, false);
+    expect(fresh.career.onboardingCompleted).toBe(false);
+    fresh.session.skipOnboarding();
+    expect(fresh.career.toSaveState().onboardingCompleted).toBe(true);
   });
 
-  it('carries a new player from watering through selling and placed reinvestment', () => {
-    const { world, player, session } = makeSession({ skipOnboarding: false });
-    const plotId = STARTER_FARM.plots[0]!.id;
-    const plotPosition = world.grid.tileToWorld(
-      STARTER_FARM.plots[0]!.tileX,
-      STARTER_FARM.plots[0]!.tileZ,
-    );
-    player.position.x = plotPosition.x;
-    player.position.z = plotPosition.z;
-
-    session.fixedUpdate(STEP);
-    expect(session.onboarding.currentBeat?.id).toBe('plant');
-
-    plant(world, plotId, 'wheat');
-    session.fixedUpdate(STEP);
-    expect(session.onboarding.currentBeat?.id).toBe('tend');
-
-    tend(world, plotId);
-    session.fixedUpdate(STEP);
-    expect(session.onboarding.currentBeat?.id).toBe('harvest');
-
-    for (let tick = 0; tick < 420 && world.readyPlotIds().length === 0; tick += 1) {
-      session.fixedUpdate(STEP);
-      world.advance(1);
-    }
-    expect(world.readyPlotIds()).toContain(plotId);
-
-    const harvested = harvest(world, plotId);
-    expect(harvested.ok).toBe(true);
-    session.fixedUpdate(STEP);
-    expect(session.onboarding.currentBeat?.id).toBe('sell');
-
-    session.sell('wheat', harvested.ok ? harvested.value.quantity : 0);
-    session.fixedUpdate(STEP);
-    expect(session.onboarding.currentBeat?.id).toBe('reinvest');
-
-    expect(build(world, 'road', 0, 0).ok).toBe(true);
-    expect(world.stats.buildingsBuilt).toBe(0);
-    session.fixedUpdate(STEP);
-    expect(session.onboarding.currentBeat?.id).toBe('goal');
+  it('keeps contract offers hidden until the milestone unlocks them', () => {
+    const locked = makeSession(false);
+    expect(locked.session.contracts).toHaveLength(0);
   });
 
-  it('pays more for a contract than for the same goods at spot', () => {
-    const { world, session } = harness;
-    const picked = growAndHarvest(world, STARTER_FARM.plots[0]!.id);
+  it('grows into carried goods, hauls them to a store, then sells them', () => {
+    const { career, session, world } = harness;
+    const startingBalance = career.balance;
+    const harvested = growAndHarvest(career);
+    expect(harvested).toBeGreaterThan(0);
+    expect(world.carry.used).toBeGreaterThan(0);
 
-    const order: MarketOrder = {
-      id: asOrderId('order-1'),
-      buyerId: 'millbrook_grocers',
-      itemId: 'wheat',
-      quantity: picked,
-      unitPrice: cents(requireCrop('wheat').baseUnitPrice * 1.4),
-      deadlineTick: world.tick + 100_000,
-      status: 'open',
-    };
-    session.setContracts([order]);
+    const stored = depositCarriedAtYard(career);
+    expect(stored).toBeGreaterThan(0);
+    session.sell('wheat', stored);
 
-    const before = world.balance;
-    session.fulfil(String(order.id));
-    const contractPayout = world.balance - before;
-
-    expect(contractPayout).toBeGreaterThan(picked * requireCrop('wheat').baseUnitPrice);
-    expect(session.contracts).toHaveLength(0);
+    expect(world.stores.totalOf('wheat')).toBe(0);
+    expect(career.balance).toBeGreaterThan(startingBalance);
+    expect(career.statistics.itemsSold).toBe(stored);
   });
 
-  it('refuses a contract the player cannot cover, without taking the goods', () => {
-    const { world, session } = harness;
-    growAndHarvest(world, STARTER_FARM.plots[0]!.id);
-    const held = world.inventory['wheat'] ?? 0;
+  it('pays more for fresh high-quality produce than a weathered batch', () => {
+    const fresh = makeSession();
+    const weathered = makeSession();
+    fresh.world.stores.deposit('store-yard', 'wheat', 1, 1);
+    weathered.world.stores.deposit('store-yard', 'wheat', 1, 0.2);
+    let freshPayout = 0;
+    let weatheredPayout = 0;
+    fresh.session.events.on('session:sold', ({ payout }) => {
+      freshPayout = payout;
+    });
+    weathered.session.events.on('session:sold', ({ payout }) => {
+      weatheredPayout = payout;
+    });
 
-    session.setContracts([
-      {
-        id: asOrderId('big'),
-        buyerId: 'millbrook_grocers',
-        itemId: 'wheat',
-        quantity: held + 50,
-        unitPrice: cents(100),
-        deadlineTick: world.tick + 10_000,
-        status: 'open',
-      },
-    ]);
+    fresh.session.sell('wheat', 1);
+    weathered.session.sell('wheat', 1);
 
+    expect(freshPayout).toBeGreaterThan(weatheredPayout);
+  });
+
+  it('accepts an offline buyer offer and completes it from localized storage', () => {
+    const { career, session } = harness;
+    const entry = session.contracts[0];
+    expect(entry).toBeDefined();
+    addToYard(career, entry!.offer.itemId, entry!.offer.quantity);
+    const before = career.balance;
+
+    session.accept(entry!.offer.id);
+    expect(career.contracts.some((contract) => contract.id === entry!.offer.id)).toBe(true);
+    session.deliver(entry!.offer.id, entry!.offer.quantity);
+
+    expect(career.balance).toBeGreaterThan(before);
+    expect(career.statistics.contractsCompleted).toBe(1);
+    expect(career.relationship(entry!.offer.buyerId).deliveries).toBe(1);
+  });
+
+  it('refuses a delivery that the farm cannot cover without removing stock', () => {
+    const { career, session } = harness;
+    const entry = session.contracts[0]!;
+    const stockBefore = career.world.stores.totalOf(entry.offer.itemId);
+    session.accept(entry.offer.id);
     const refusals: string[] = [];
     session.events.on('session:refused', ({ reason }) => refusals.push(reason));
-    session.fulfil('big');
-
+    session.deliver(entry.offer.id, entry.offer.quantity);
     expect(refusals).toHaveLength(1);
-    expect(world.inventory['wheat']).toBe(held);
+    expect(career.world.stores.totalOf(entry.offer.itemId)).toBe(stockBefore);
   });
 });
 
-describe('reinvestment', () => {
-  it('lets the player buy a hen with the shelter they have', () => {
-    const { world, session } = harness;
-    world.adjustBalance(cents(50_000));
-    session.purchaseChicken();
-    expect(world.animals.reduce((sum, group) => sum + group.count, 0)).toBeGreaterThan(0);
+describe('progression remains continuous', () => {
+  it('opens the north parcel and its beds without ending the career', () => {
+    const { career, session } = harness;
+    const before = career.world.parcels.count;
+    session.purchaseLand('parcel-north-field');
+    expect(career.world.parcels.count).toBe(before + 1);
+    expect(career.world.fields.placements.some((plot) => plot.id === 'plot-n1')).toBe(true);
+    expect(session.summary().outcome).toBe('season');
   });
 
-  it('refuses a hen when there is no shelter space', () => {
-    const { world, session } = harness;
-    world.adjustBalance(cents(500_000));
+  it('buys livestock only while shelter space remains', () => {
+    const { career, session } = harness;
+    const before = career.world.livestock.totalCount();
+    session.purchaseAnimal('chicken');
+    expect(career.world.livestock.totalCount()).toBe(before + 1);
     const refusals: string[] = [];
     session.events.on('session:refused', ({ reason }) => refusals.push(reason));
-    for (let i = 0; i < 12; i += 1) session.purchaseChicken();
+    for (let index = 0; index < 20; index += 1) session.purchaseAnimal('chicken');
     expect(refusals.length).toBeGreaterThan(0);
   });
-});
 
-describe('the success state', () => {
-  it('ends the run when the neighbouring parcel is bought', () => {
-    const { world, session } = harness;
-    const outcomes: string[] = [];
-    session.events.on('session:outcome', ({ summary }) => outcomes.push(summary.outcome));
-
-    world.adjustBalance(LAND_PARCEL_COST);
-    session.purchaseLand();
-    session.fixedUpdate(STEP);
-
-    expect(world.landParcels).toBe(2);
-    expect(outcomes).toEqual(['expanded']);
-    expect(session.finished).toBe(true);
-  });
-
-  it('refuses the purchase when the money is not there', () => {
-    const { world, session } = harness;
-    const refusals: string[] = [];
-    session.events.on('session:refused', ({ reason }) => refusals.push(reason));
-    session.purchaseLand();
-    expect(refusals).toHaveLength(1);
-    expect(world.landParcels).toBe(1);
-  });
-
-  it('reports a summary a playtester can read', () => {
-    const { world, session } = harness;
-    growAndHarvest(world, STARTER_FARM.plots[0]!.id);
+  it('reports career statistics instead of a terminal win or loss', () => {
+    const { career, session } = harness;
+    growAndHarvest(career);
     const summary = session.summary();
     expect(summary.cropsHarvested).toBeGreaterThan(0);
     expect(summary.cyclesCompleted).toBeGreaterThan(0);
-    expect(summary.totalSpent).toBeGreaterThan(0);
+    expect(summary.stage).toBe(career.stage);
   });
 });
 
-describe('the failure state', () => {
-  it('ends the run only when there is genuinely no way back', () => {
-    const { world, session } = harness;
-    const outcomes: string[] = [];
-    session.events.on('session:outcome', ({ summary }) => outcomes.push(summary.outcome));
+describe('incident response and panels', () => {
+  it('routes a warned response through the session and charges its real cost', () => {
+    const { career, session, incidents } = harness;
+    const incident: IncidentInstance = {
+      id: 'session-drought',
+      definitionId: 'incident-drought',
+      siteId: career.world.id,
+      severity: 'minor',
+      warnedTick: career.tick,
+      impactTick: career.tick + 100,
+      endsTick: career.tick + 200,
+      targetIds: [career.world.fields.placements[0]!.id],
+      responseKind: null,
+      responseProgress: 0,
+      resolved: false,
+      appliedMultiplier: null,
+    };
+    career.setIncidents([incident]);
+    const responses: string[] = [];
+    session.events.on('session:responded', ({ response }) => responses.push(response));
+    const before = career.balance;
 
-    // Broke, but a crop is still in the ground - that is a bad run, not a
-    // lost one, and the design pillar forbids calling it over.
-    plant(world, STARTER_FARM.plots[0]!.id, 'wheat');
-    world.adjustBalance(cents(-world.balance));
-    session.fixedUpdate(STEP);
-    expect(outcomes).toHaveLength(0);
+    session.respondToIncident('pay');
 
-    // Now clear the field as well: no money, no goods, nothing growing.
-    world.setPlot(STARTER_FARM.plots[0]!.id, {
-      ...world.getPlot(STARTER_FARM.plots[0]!.id)!,
-      cropId: null,
-    });
-    session.fixedUpdate(STEP);
-    expect(outcomes).toEqual(['bankrupt']);
+    expect(responses).toEqual(['pay']);
+    expect(career.balance).toBeLessThan(before);
+    expect(incidents.mostUrgent?.responseKind).toBe('pay');
   });
 
-  it('does not declare bankruptcy while goods remain to sell', () => {
-    const { world, session } = harness;
-    const outcomes: string[] = [];
-    session.events.on('session:outcome', ({ summary }) => outcomes.push(summary.outcome));
-
-    world.addToInventory('wheat', 4);
-    world.adjustBalance(cents(-world.balance));
-    session.fixedUpdate(STEP);
-
-    expect(outcomes).toHaveLength(0);
-  });
-});
-
-describe('the signature mechanic', () => {
-  it('lets the player pay to prevent a warned event', () => {
-    // A director that will fire quickly, wired into a session so prevention
-    // goes through the real player-facing command.
-    const world = new FarmWorld(STARTER_FARM, 42);
-    for (const placement of STARTER_FARM.plots) plant(world, placement.id, 'wheat');
-    world.adjustBalance(cents(50_000));
-
-    const spawn = world.grid.tileToWorld(STARTER_FARM.spawn.tileX, STARTER_FARM.spawn.tileZ);
-    const player = new Player(spawn.x, spawn.z);
-    const target = document.createElement('div');
-    document.body.append(target);
-    const input = new InputSystem<GameAction>({ target, bindings: DEFAULT_BINDINGS });
-    input.init({ services: new ServiceContainer() });
-    const director = new EventDirector(world, { graceTicks: 1, meanIntervalTicks: 120 });
-    const session = new SessionController(
-      world,
-      player,
-      new PlayerController(player, world, world.physics, input),
-      director,
-      input,
-      new THREE.PerspectiveCamera(),
-      { skipOnboarding: true, now: () => 0 },
-    );
-
-    // Drive until a warning window opens.
-    for (let i = 0; i < 5_000 && director.current?.phase !== 'warning'; i += 1) {
-      world.advance(1);
-      director.fixedUpdate(1);
-    }
-    expect(director.current?.phase).toBe('warning');
-
-    const prevented: string[] = [];
-    session.events.on('session:prevented', ({ kind }) => prevented.push(kind));
-    const before = world.balance;
-
-    session.prevent();
-
-    expect(prevented).toHaveLength(1);
-    expect(world.balance).toBeLessThan(before);
-    expect(director.current?.mitigated).toBe(true);
-  });
-
-  it('refuses prevention when nothing is warned', () => {
-    const { session } = harness;
+  it('does not perform a physical incident response remotely through Protect', () => {
+    const { career, session, incidents } = harness;
+    career.setIncidents([
+      {
+        id: 'session-cart-axle',
+        definitionId: 'incident-cart-axle',
+        siteId: career.world.id,
+        severity: 'minor',
+        warnedTick: career.tick,
+        impactTick: career.tick + 100,
+        endsTick: career.tick + 200,
+        targetIds: ['carried'],
+        responseKind: null,
+        responseProgress: 0,
+        resolved: false,
+        appliedMultiplier: null,
+      },
+    ]);
     const refusals: string[] = [];
-    session.events.on('session:refused', ({ action }) => refusals.push(action));
-    session.prevent();
-    expect(refusals).toEqual(['prevent']);
+    session.events.on('session:refused', ({ reason }) => refusals.push(reason));
+
+    session.respondToIncident();
+
+    expect(refusals).toContain('Go to the marked problem and use Work to answer it.');
+    expect(incidents.mostUrgent?.responseKind).toBeNull();
   });
 
-  it('counts survived and prevented events in the run summary', () => {
-    const { world, session, director } = harness;
-    // The harness director never fires on its own; emit the lifecycle the
-    // session subscribes to.
-    director.events.emit('event:ended', { kind: 'drought', mitigated: true });
-    director.events.emit('event:ended', { kind: 'fox_raid', mitigated: false });
-    void world;
-
-    const summary = session.summary();
-    expect(summary.eventsSurvived).toBe(2);
-    expect(summary.eventsPrevented).toBe(1);
-  });
-});
-
-describe('panels', () => {
-  it('opens, toggles and closes', () => {
+  it('opens, toggles, and prevents placement and a panel coexisting', () => {
     const { session } = harness;
-    expect(session.panel).toBe('none');
     session.togglePanel('market');
     expect(session.panel).toBe('market');
     session.togglePanel('market');
     expect(session.panel).toBe('none');
-    session.openPanel('build');
-    expect(session.panel).toBe('build');
-  });
 
-  it('cancels a placement when a panel opens, so two cursors never coexist', () => {
-    const { session } = harness;
     session.chooseBuilding('road');
     expect(session.placement.active).toBe(true);
-    session.openPanel('market');
+    session.openPanel('build');
     expect(session.placement.active).toBe(false);
+    expect(session.panel).toBe('build');
+    session.openPanel('career');
+    expect(session.panel).toBe('career');
+    session.openPanel('town');
+    expect(session.panel).toBe('town');
+  });
+
+  it('keeps contract offers refreshing on the career clock', () => {
+    const { career, session } = harness;
+    const firstIds = session.contracts.map((entry) => entry.offer.id);
+    career.advance(60 * 300);
+    session.fixedUpdate(STEP);
+    expect(session.contracts.length).toBeGreaterThan(0);
+    expect(session.contracts.map((entry) => entry.offer.id)).not.toEqual(firstIds);
   });
 });

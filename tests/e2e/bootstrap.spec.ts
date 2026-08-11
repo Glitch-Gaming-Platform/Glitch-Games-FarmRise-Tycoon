@@ -17,33 +17,16 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openMainMenuInterface(page: Page, triggerTestId: string, targetTestId: string) {
-  // Vite can perform one dependency-optimisation reload on the first request
-  // of a fresh dev server. Retry the semantic action instead of mistaking that
-  // development-only reload for a broken menu button.
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.getByTestId(triggerTestId).dispatchEvent('click');
-    try {
-      await expect(page.getByTestId(targetTestId)).toBeVisible({ timeout: 3_000 });
-      return;
-    } catch {
-      await expect(page.getByTestId('main-menu')).toBeVisible();
-    }
-  }
+  await page.getByTestId(triggerTestId).dispatchEvent('click');
   await expect(page.getByTestId(targetTestId)).toBeVisible();
 }
 
 async function enterFarm(page: Page, path = '/') {
   await page.goto(path);
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    await page.getByTestId('menu-play').dispatchEvent('click');
-    try {
-      await expect(page.getByTestId('hud')).toBeVisible({ timeout: 12_000 });
-      return;
-    } catch {
-      await expect(page.getByTestId('main-menu')).toBeVisible();
-    }
-  }
-  await expect(page.getByTestId('hud')).toBeVisible();
+  await page.getByTestId('menu-play').dispatchEvent('click');
+  // The HUD intentionally hides before onboarding reveals its first feature;
+  // the gameplay shortcut dock is the stable signal that the farm is ready.
+  await expect(page.getByTestId('menu-shortcuts')).toBeVisible({ timeout: 30_000 });
 }
 
 test('boots to the main menu', async ({ page }) => {
@@ -62,6 +45,8 @@ test('main-menu settings and account interfaces open, render and close', async (
   await openMainMenuInterface(page, 'menu-settings', 'settings-panel');
   await expect(page.getByTestId('settings-panel')).toBeVisible();
   await expect(page.getByRole('slider', { name: 'Master volume' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Current song' })).toBeVisible();
+  await expect(page.getByRole('checkbox', { name: 'Play Sunrise Rows' })).toBeChecked();
   await page.getByRole('button', { name: 'Back' }).click();
   await expect(page.getByTestId('main-menu')).toBeVisible();
 
@@ -86,10 +71,10 @@ test('creates a WebGL canvas sized to the viewport', async ({ page }) => {
   expect(size.height).toBeGreaterThan(0);
 });
 
-test('starts a session and shows the HUD', async ({ page }) => {
+test('starts a session and shows the gameplay interface', async ({ page }) => {
   await enterFarm(page);
 
-  await expect(page.getByTestId('hud')).toBeVisible();
+  await expect(page.getByTestId('menu-shortcuts')).toBeVisible();
   await expect(page.getByTestId('coach-mark')).toContainText(/brown plots/i);
 });
 
@@ -125,11 +110,11 @@ test('handles a viewport resize without errors', async ({ page }) => {
 
 test('pauses and resumes', async ({ page }) => {
   await enterFarm(page);
-  await expect(page.getByTestId('hud')).toBeVisible();
+  await expect(page.getByTestId('menu-shortcuts')).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('pause-menu')).toBeVisible();
 
-  await page.getByTestId('pause-resume').click();
+  await page.getByTestId('pause-resume').dispatchEvent('click');
   await expect(page.getByTestId('pause-menu')).toBeHidden();
 });

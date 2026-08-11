@@ -1,0 +1,38 @@
+import { describe, expect, it } from 'vitest';
+import { cowPose, createCowPose } from '@game/animals/cowMotion.js';
+
+describe('cow motion', () => {
+  it('is deterministic and separates walking from grazing', () => {
+    const shelter = { x: 4, z: -2 };
+    const walk = cowPose(shelter, 0, 2, 2, 1, createCowPose());
+    const repeated = cowPose(shelter, 0, 2, 2, 1, createCowPose());
+    const graze = cowPose(shelter, 0, 2, 9, 1, createCowPose());
+
+    expect(repeated).toEqual(walk);
+    expect(walk.motion).toBe(1);
+    expect(walk.graze).toBe(0);
+    expect(graze.motion).toBe(0);
+    expect(graze.graze).toBeGreaterThan(0.8);
+  });
+
+  it('holds its world position while grazing instead of skating under the action', () => {
+    const shelter = { x: 4, z: -2 };
+    const first = cowPose(shelter, 0, 2, 8.4, 1, createCowPose());
+    const later = cowPose(shelter, 0, 2, 9.4, 1, createCowPose());
+
+    expect(first.motion).toBe(0);
+    expect(later.motion).toBe(0);
+    expect(later.x).toBeCloseTo(first.x, 6);
+    expect(later.z).toBeCloseTo(first.z, 6);
+    expect(later.gaitPhase).toBeCloseTo(first.gaitPhase, 6);
+  });
+
+  it('keeps purchase introduction scale uniform across all axes', () => {
+    const pose = cowPose({ x: 0, z: 0 }, 1, 3, 3, 0.4, createCowPose());
+    const maximum = Math.max(pose.scaleX, pose.scaleY, pose.scaleZ);
+    const minimum = Math.min(pose.scaleX, pose.scaleY, pose.scaleZ);
+
+    expect(maximum).toBeLessThan(0.45);
+    expect(maximum - minimum).toBeLessThan(0.02);
+  });
+});

@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-08-10T15:29:30",
+  "generated_at": "2026-08-11T02:29:53",
   "blender": "5.2.0 LTS",
-  "duration_seconds": 0.92,
-  "palette_entries": 77,
+  "duration_seconds": 2.58,
+  "palette_entries": 101,
   "palette_contrast_failures": [],
   "budgets": {
     "crop": 900,
@@ -15,20 +15,20 @@
     {
       "name": "SM_crop_wheat_s1",
       "asset": "crop_wheat_s1",
-      "triangles": 96,
-      "vertices": 120
+      "triangles": 72,
+      "vertices": 90
     },
     {
       "name": "SM_crop_wheat_s2",
       "asset": "crop_wheat_s2",
-      "triangles": 192,
-      "vertices": 240
+      "triangles": 288,
+      "vertices": 360
     },
     {
       "name": "SM_crop_wheat_s3",
       "asset": "crop_wheat_s3",
-      "triangles": 720,
-      "vertices": 648
+      "triangles": 660,
+      "vertices": 594
     },
     {
       "name": "SM_crop_wheat_s4",
@@ -39,8 +39,8 @@
     {
       "name": "SM_crop_corn_s1",
       "asset": "crop_corn_s1",
-      "triangles": 96,
-      "vertices": 120
+      "triangles": 160,
+      "vertices": 160
     },
     {
       "name": "SM_crop_corn_s2",
@@ -57,14 +57,14 @@
     {
       "name": "SM_crop_corn_s4",
       "asset": "crop_corn_s4",
-      "triangles": 684,
-      "vertices": 744
+      "triangles": 636,
+      "vertices": 684
     },
     {
       "name": "SM_crop_pumpkin_s1",
       "asset": "crop_pumpkin_s1",
-      "triangles": 96,
-      "vertices": 90
+      "triangles": 126,
+      "vertices": 123
     },
     {
       "name": "SM_crop_pumpkin_s2",
@@ -85,16 +85,328 @@
       "vertices": 429
     },
     {
+      "name": "SM_crop_clover_s1",
+      "asset": "crop_clover_s1",
+      "triangles": 150,
+      "vertices": 145
+    },
+    {
+      "name": "SM_crop_clover_s2",
+      "asset": "crop_clover_s2",
+      "triangles": 210,
+      "vertices": 203
+    },
+    {
+      "name": "SM_crop_clover_s3",
+      "asset": "crop_clover_s3",
+      "triangles": 270,
+      "vertices": 261
+    },
+    {
+      "name": "SM_crop_clover_s4",
+      "asset": "crop_clover_s4",
+      "triangles": 416,
+      "vertices": 392
+    },
+    {
+      "name": "SM_crop_radish_s1",
+      "asset": "crop_radish_s1",
+      "triangles": 60,
+      "vertices": 90
+    },
+    {
+      "name": "SM_crop_radish_s2",
+      "asset": "crop_radish_s2",
+      "triangles": 140,
+      "vertices": 210
+    },
+    {
+      "name": "SM_crop_radish_s3",
+      "asset": "crop_radish_s3",
+      "triangles": 544,
+      "vertices": 464
+    },
+    {
+      "name": "SM_crop_radish_s4",
+      "asset": "crop_radish_s4",
+      "triangles": 544,
+      "vertices": 464
+    },
+    {
+      "name": "SM_crop_pea_s1",
+      "asset": "crop_pea_s1",
+      "triangles": 160,
+      "vertices": 152
+    },
+    {
+      "name": "SM_crop_pea_s2",
+      "asset": "crop_pea_s2",
+      "triangles": 260,
+      "vertices": 260
+    },
+    {
+      "name": "SM_crop_pea_s3",
+      "asset": "crop_pea_s3",
+      "triangles": 500,
+      "vertices": 430
+    },
+    {
+      "name": "SM_crop_pea_s4",
+      "asset": "crop_pea_s4",
+      "triangles": 680,
+      "vertices": 530
+    },
+    {
+      "name": "SM_crop_strawberry_s1",
+      "asset": "crop_strawberry_s1",
+      "triangles": 72,
+      "vertices": 84
+    },
+    {
+      "name": "SM_crop_strawberry_s2",
+      "asset": "crop_strawberry_s2",
+      "triangles": 510,
+      "vertices": 391
+    },
+    {
+      "name": "SM_crop_strawberry_s3",
+      "asset": "crop_strawberry_s3",
+      "triangles": 380,
+      "vertices": 330
+    },
+    {
+      "name": "SM_crop_strawberry_s4",
+      "asset": "crop_strawberry_s4",
+      "triangles": 610,
+      "vertices": 485
+    },
+    {
+      "name": "SM_crop_sunflower_s1",
+      "asset": "crop_sunflower_s1",
+      "triangles": 120,
+      "vertices": 110
+    },
+    {
+      "name": "SM_crop_sunflower_s2",
+      "asset": "crop_sunflower_s2",
+      "triangles": 160,
+      "vertices": 170
+    },
+    {
+      "name": "SM_crop_sunflower_s3",
+      "asset": "crop_sunflower_s3",
+      "triangles": 272,
+      "vertices": 216
+    },
+    {
+      "name": "SM_crop_sunflower_s4",
+      "asset": "crop_sunflower_s4",
+      "triangles": 432,
+      "vertices": 456
+    },
+    {
+      "name": "SM_crop_tomato_s1",
+      "asset": "crop_tomato_s1",
+      "triangles": 240,
+      "vertices": 192
+    },
+    {
+      "name": "SM_crop_tomato_s2",
+      "asset": "crop_tomato_s2",
+      "triangles": 416,
+      "vertices": 344
+    },
+    {
+      "name": "SM_crop_tomato_s3",
+      "asset": "crop_tomato_s3",
+      "triangles": 704,
+      "vertices": 504
+    },
+    {
+      "name": "SM_crop_tomato_s4",
+      "asset": "crop_tomato_s4",
+      "triangles": 848,
+      "vertices": 584
+    },
+    {
+      "name": "SM_crop_avocado_s1",
+      "asset": "crop_avocado_s1",
+      "triangles": 276,
+      "vertices": 168
+    },
+    {
+      "name": "SM_crop_avocado_s2",
+      "asset": "crop_avocado_s2",
+      "triangles": 184,
+      "vertices": 112
+    },
+    {
+      "name": "SM_crop_avocado_s3",
+      "asset": "crop_avocado_s3",
+      "triangles": 328,
+      "vertices": 200
+    },
+    {
+      "name": "SM_crop_avocado_s4",
+      "asset": "crop_avocado_s4",
+      "triangles": 760,
+      "vertices": 440
+    },
+    {
+      "name": "SM_crop_beetroot_s1",
+      "asset": "crop_beetroot_s1",
+      "triangles": 60,
+      "vertices": 90
+    },
+    {
+      "name": "SM_crop_beetroot_s2",
+      "asset": "crop_beetroot_s2",
+      "triangles": 140,
+      "vertices": 210
+    },
+    {
+      "name": "SM_crop_beetroot_s3",
+      "asset": "crop_beetroot_s3",
+      "triangles": 544,
+      "vertices": 464
+    },
+    {
+      "name": "SM_crop_beetroot_s4",
+      "asset": "crop_beetroot_s4",
+      "triangles": 544,
+      "vertices": 464
+    },
+    {
+      "name": "SM_crop_cranberry_s1",
+      "asset": "crop_cranberry_s1",
+      "triangles": 108,
+      "vertices": 132
+    },
+    {
+      "name": "SM_crop_cranberry_s2",
+      "asset": "crop_cranberry_s2",
+      "triangles": 176,
+      "vertices": 224
+    },
+    {
+      "name": "SM_crop_cranberry_s3",
+      "asset": "crop_cranberry_s3",
+      "triangles": 620,
+      "vertices": 540
+    },
+    {
+      "name": "SM_crop_cranberry_s4",
+      "asset": "crop_cranberry_s4",
+      "triangles": 640,
+      "vertices": 512
+    },
+    {
+      "name": "SM_crop_grape_s1",
+      "asset": "crop_grape_s1",
+      "triangles": 180,
+      "vertices": 144
+    },
+    {
+      "name": "SM_crop_grape_s2",
+      "asset": "crop_grape_s2",
+      "triangles": 180,
+      "vertices": 144
+    },
+    {
+      "name": "SM_crop_grape_s3",
+      "asset": "crop_grape_s3",
+      "triangles": 678,
+      "vertices": 441
+    },
+    {
+      "name": "SM_crop_grape_s4",
+      "asset": "crop_grape_s4",
+      "triangles": 894,
+      "vertices": 561
+    },
+    {
+      "name": "SM_crop_carrot_s1",
+      "asset": "crop_carrot_s1",
+      "triangles": 108,
+      "vertices": 144
+    },
+    {
+      "name": "SM_crop_carrot_s2",
+      "asset": "crop_carrot_s2",
+      "triangles": 240,
+      "vertices": 320
+    },
+    {
+      "name": "SM_crop_carrot_s3",
+      "asset": "crop_carrot_s3",
+      "triangles": 400,
+      "vertices": 416
+    },
+    {
+      "name": "SM_crop_carrot_s4",
+      "asset": "crop_carrot_s4",
+      "triangles": 400,
+      "vertices": 416
+    },
+    {
+      "name": "SM_crop_cabbage_s1",
+      "asset": "crop_cabbage_s1",
+      "triangles": 160,
+      "vertices": 176
+    },
+    {
+      "name": "SM_crop_cabbage_s2",
+      "asset": "crop_cabbage_s2",
+      "triangles": 240,
+      "vertices": 264
+    },
+    {
+      "name": "SM_crop_cabbage_s3",
+      "asset": "crop_cabbage_s3",
+      "triangles": 336,
+      "vertices": 320
+    },
+    {
+      "name": "SM_crop_cabbage_s4",
+      "asset": "crop_cabbage_s4",
+      "triangles": 336,
+      "vertices": 320
+    },
+    {
+      "name": "SM_crop_garlic_s1",
+      "asset": "crop_garlic_s1",
+      "triangles": 90,
+      "vertices": 120
+    },
+    {
+      "name": "SM_crop_garlic_s2",
+      "asset": "crop_garlic_s2",
+      "triangles": 180,
+      "vertices": 240
+    },
+    {
+      "name": "SM_crop_garlic_s3",
+      "asset": "crop_garlic_s3",
+      "triangles": 396,
+      "vertices": 360
+    },
+    {
+      "name": "SM_crop_garlic_s4",
+      "asset": "crop_garlic_s4",
+      "triangles": 690,
+      "vertices": 500
+    },
+    {
       "name": "SM_ground_plot",
       "asset": "ground_plot",
-      "triangles": 220,
-      "vertices": 120
+      "triangles": 280,
+      "vertices": 167
     },
     {
       "name": "SM_building_barn",
       "asset": "building_barn",
-      "triangles": 880,
-      "vertices": 480
+      "triangles": 892,
+      "vertices": 488
     },
     {
       "name": "SM_building_irrigation",
@@ -105,8 +417,8 @@
     {
       "name": "SM_building_road",
       "asset": "building_road",
-      "triangles": 108,
-      "vertices": 64
+      "triangles": 180,
+      "vertices": 104
     },
     {
       "name": "SM_building_fence",
@@ -117,26 +429,104 @@
     {
       "name": "SM_building_coop",
       "asset": "building_coop",
-      "triangles": 748,
-      "vertices": 408
+      "triangles": 760,
+      "vertices": 416
+    },
+    {
+      "name": "SM_building_loading_pad",
+      "asset": "building_loading_pad",
+      "triangles": 660,
+      "vertices": 360
+    },
+    {
+      "name": "SM_building_cold_store",
+      "asset": "building_cold_store",
+      "triangles": 580,
+      "vertices": 320
+    },
+    {
+      "name": "SM_building_worker_hut",
+      "asset": "building_worker_hut",
+      "triangles": 716,
+      "vertices": 392
+    },
+    {
+      "name": "SM_building_well",
+      "asset": "building_well",
+      "triangles": 292,
+      "vertices": 162
+    },
+    {
+      "name": "SM_building_mill",
+      "asset": "building_mill",
+      "triangles": 632,
+      "vertices": 344
+    },
+    {
+      "name": "SM_building_creamery",
+      "asset": "building_creamery",
+      "triangles": 420,
+      "vertices": 232
+    },
+    {
+      "name": "SM_building_preserve_kitchen",
+      "asset": "building_preserve_kitchen",
+      "triangles": 508,
+      "vertices": 284
+    },
+    {
+      "name": "SM_building_mill_wheel",
+      "asset": "building_mill_wheel",
+      "triangles": 228,
+      "vertices": 146
+    },
+    {
+      "name": "SM_building_vent_fan",
+      "asset": "building_vent_fan",
+      "triangles": 124,
+      "vertices": 76
+    },
+    {
+      "name": "SM_building_well_crank",
+      "asset": "building_well_crank",
+      "triangles": 104,
+      "vertices": 64
+    },
+    {
+      "name": "SM_building_steam_puff",
+      "asset": "building_steam_puff",
+      "triangles": 48,
+      "vertices": 28
+    },
+    {
+      "name": "SM_building_dust_puff",
+      "asset": "building_dust_puff",
+      "triangles": 48,
+      "vertices": 28
     },
     {
       "name": "SM_char_farmer",
       "asset": "char_farmer",
-      "triangles": 2438,
-      "vertices": 1341
+      "triangles": 2310,
+      "vertices": 1281
     },
     {
       "name": "SM_animal_chicken",
       "asset": "animal_chicken",
-      "triangles": 508,
-      "vertices": 328
+      "triangles": 502,
+      "vertices": 320
+    },
+    {
+      "name": "SM_animal_cow",
+      "asset": "animal_cow",
+      "triangles": 678,
+      "vertices": 395
     },
     {
       "name": "SM_animal_fox",
       "asset": "animal_fox",
-      "triangles": 562,
-      "vertices": 321
+      "triangles": 682,
+      "vertices": 393
     },
     {
       "name": "SM_prop_rock",
@@ -151,6 +541,18 @@
       "vertices": 70
     },
     {
+      "name": "SM_prop_grass_carpet",
+      "asset": "prop_grass_carpet",
+      "triangles": 123,
+      "vertices": 174
+    },
+    {
+      "name": "SM_prop_dirt_clods",
+      "asset": "prop_dirt_clods",
+      "triangles": 196,
+      "vertices": 147
+    },
+    {
       "name": "SM_prop_bush",
       "asset": "prop_bush",
       "triangles": 114,
@@ -159,14 +561,20 @@
     {
       "name": "SM_prop_eucalyptus",
       "asset": "prop_eucalyptus",
-      "triangles": 272,
-      "vertices": 162
+      "triangles": 280,
+      "vertices": 346
     },
     {
       "name": "SM_prop_eucalyptus_tall",
       "asset": "prop_eucalyptus_tall",
-      "triangles": 212,
-      "vertices": 126
+      "triangles": 236,
+      "vertices": 294
+    },
+    {
+      "name": "SM_prop_eucalyptus_wide",
+      "asset": "prop_eucalyptus_wide",
+      "triangles": 296,
+      "vertices": 356
     },
     {
       "name": "SM_prop_dead_tree",
@@ -217,55 +625,87 @@
       "vertices": 48
     }
   ],
-  "total_triangles": 13241,
+  "total_triangles": 37712,
   "family_bytes": {
     "crops": {
-      "raw": 424668,
-      "raw_gzip": 128926,
-      "draco": 102568,
-      "draco_gzip": 89140,
-      "meshopt": 204036,
-      "meshopt_gzip": 112785
+      "raw": 594980,
+      "raw_gzip": 192491,
+      "draco": 207372,
+      "draco_gzip": 168663,
+      "meshopt": 346976,
+      "meshopt_gzip": 155897
+    },
+    "crops-spring": {
+      "raw": 469812,
+      "raw_gzip": 140810,
+      "draco": 157368,
+      "draco_gzip": 132496,
+      "meshopt": 272784,
+      "meshopt_gzip": 124094
+    },
+    "crops-summer": {
+      "raw": 467408,
+      "raw_gzip": 134358,
+      "draco": 157348,
+      "draco_gzip": 129150,
+      "meshopt": 278812,
+      "meshopt_gzip": 136443
+    },
+    "crops-autumn": {
+      "raw": 443560,
+      "raw_gzip": 111217,
+      "draco": 140868,
+      "draco_gzip": 111464,
+      "meshopt": 261916,
+      "meshopt_gzip": 105921
+    },
+    "crops-winter": {
+      "raw": 369684,
+      "raw_gzip": 107130,
+      "draco": 126308,
+      "draco_gzip": 99605,
+      "meshopt": 216088,
+      "meshopt_gzip": 83627
     },
     "ground": {
-      "raw": 19876,
-      "raw_gzip": 3182,
-      "draco": 3936,
-      "draco_gzip": 3160,
-      "meshopt": 9156,
-      "meshopt_gzip": 2881
+      "raw": 28248,
+      "raw_gzip": 8296,
+      "draco": 9868,
+      "draco_gzip": 8076,
+      "meshopt": 16872,
+      "meshopt_gzip": 8992
     },
     "buildings": {
-      "raw": 236316,
-      "raw_gzip": 38774,
-      "draco": 41388,
-      "draco_gzip": 36023,
-      "meshopt": 95328,
-      "meshopt_gzip": 31814
+      "raw": 672932,
+      "raw_gzip": 126410,
+      "draco": 182964,
+      "draco_gzip": 148244,
+      "meshopt": 382832,
+      "meshopt_gzip": 115529
     },
     "characters": {
-      "raw": 130680,
-      "raw_gzip": 34814,
-      "draco": 26856,
-      "draco_gzip": 24785,
-      "meshopt": 58484,
-      "meshopt_gzip": 38967
+      "raw": 150164,
+      "raw_gzip": 41582,
+      "draco": 44440,
+      "draco_gzip": 39053,
+      "meshopt": 87568,
+      "meshopt_gzip": 47045
     },
     "animals": {
-      "raw": 69052,
-      "raw_gzip": 19097,
-      "draco": 16828,
-      "draco_gzip": 14768,
-      "meshopt": 35040,
-      "meshopt_gzip": 23547
+      "raw": 138816,
+      "raw_gzip": 41023,
+      "draco": 46976,
+      "draco_gzip": 39949,
+      "meshopt": 86548,
+      "meshopt_gzip": 47379
     },
     "props": {
-      "raw": 146336,
-      "raw_gzip": 33814,
-      "draco": 39232,
-      "draco_gzip": 29351,
-      "meshopt": 79212,
-      "meshopt_gzip": 38713
+      "raw": 219636,
+      "raw_gzip": 75416,
+      "draco": 79920,
+      "draco_gzip": 61416,
+      "meshopt": 144224,
+      "meshopt_gzip": 69494
     }
   },
   "blend": "art/source/farmrise_assets.blend"

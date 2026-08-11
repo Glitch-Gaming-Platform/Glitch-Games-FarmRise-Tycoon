@@ -7,7 +7,9 @@
  * file is that promise expressed as an assertion.
  */
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import {
+  CROP_IDS,
   advancePlot,
   asPlotId,
   emptyPlot,
@@ -16,6 +18,9 @@ import {
   requireCrop,
 } from '@farmrise/shared';
 import { cropMeshName, cropStress, stagePopScale, visualStage } from '@game/world/view/PlotView.js';
+import { PlotView } from '@game/world/view/PlotView.js';
+import { createFarmMaterials } from '@game/world/view/materials.js';
+import { makeCareer } from '../helpers/career.js';
 
 const plant = (cropId: string) => plantCrop(emptyPlot(asPlotId('p1')), cropId);
 
@@ -72,7 +77,7 @@ describe('cropMeshName', () => {
   });
 
   it('covers every crop and stage the build produces', () => {
-    for (const cropId of ['wheat', 'corn', 'pumpkin']) {
+    for (const cropId of CROP_IDS) {
       for (const stage of [1, 2, 3, 4] as const) {
         expect(cropMeshName(cropId, stage)).toMatch(/^SM_crop_[a-z]+_s[1-4]$/);
       }
@@ -97,5 +102,19 @@ describe('crop animation presentation', () => {
     expect(cropStress({ ...healthy, water: 0.2 })).toBeGreaterThan(0.5);
     expect(cropStress({ ...healthy, eventMultiplier: 0.4 })).toBeCloseTo(0.6);
     expect(cropStress({ ...healthy, diseased: true })).toBe(0.72);
+  });
+
+  it('keeps dynamically re-bucketed plot instances out of stale frustum bounds', () => {
+    const world = makeCareer().world;
+    const materials = createFarmMaterials();
+    const view = new PlotView(world, materials);
+    const instances: THREE.InstancedMesh[] = [];
+    view.object.traverse((node) => {
+      if (node instanceof THREE.InstancedMesh) instances.push(node);
+    });
+    expect(instances.length).toBeGreaterThan(0);
+    expect(instances.every((mesh) => mesh.frustumCulled === false)).toBe(true);
+    view.dispose();
+    materials.dispose();
   });
 });

@@ -1,98 +1,88 @@
-/**
- * Win and loss conditions.
- *
- * Shared with the server, so these are the rules that decide whether a run
- * ended - not a client-side opinion about it.
- */
 import { describe, expect, it } from 'vitest';
 import {
-  LAND_PARCEL_COST,
-  MAX_LAND_PARCELS,
+  HOMESTEAD_PARCEL_ID,
+  PARCELS_BY_ID,
+  careerHealth,
   cents,
   cheapestSeedCost,
-  evaluateRun,
-  expansionProgress,
-  isBankrupt,
+  landProgress,
+  stageName,
   validateLandPurchase,
-  type RunState,
+  type CareerHealthState,
 } from '../src/index.js';
 
-const run = (overrides: Partial<RunState> = {}): RunState => ({
+const health = (overrides: Partial<CareerHealthState> = {}): CareerHealthState => ({
   balance: cents(0),
-  inventory: {},
-  landParcels: 1,
+  storedUnits: 0,
   growingPlots: 0,
   buildingInProgress: false,
+  debt: cents(0),
+  dailyCosts: cents(0),
   ...overrides,
 });
 
-describe('bankruptcy', () => {
-  it('requires all four dead ends at once', () => {
-    expect(isBankrupt(run())).toBe(true);
+describe('career health', () => {
+  it('is insolvent only when every route back into production is gone', () => {
+    expect(careerHealth(health())).toBe('insolvent');
+    expect(careerHealth(health({ growingPlots: 1 }))).not.toBe('insolvent');
+    expect(careerHealth(health({ storedUnits: 1 }))).not.toBe('insolvent');
+    expect(careerHealth(health({ buildingInProgress: true }))).not.toBe('insolvent');
+    expect(careerHealth(health({ balance: cheapestSeedCost() }))).not.toBe('insolvent');
   });
 
-  it('is not declared while a crop is still growing', () => {
-    expect(isBankrupt(run({ growingPlots: 1 }))).toBe(false);
-  });
-
-  it('is not declared while goods remain to sell', () => {
-    expect(isBankrupt(run({ inventory: { wheat: 1 } }))).toBe(false);
-  });
-
-  it('is not declared while a building is still going up', () => {
-    expect(isBankrupt(run({ buildingInProgress: true }))).toBe(false);
-  });
-
-  it('is not declared while the cheapest seed is still affordable', () => {
-    expect(isBankrupt(run({ balance: cheapestSeedCost() }))).toBe(false);
-  });
-
-  it('ignores zero and negative inventory entries', () => {
-    expect(isBankrupt(run({ inventory: { wheat: 0, corn: 0 } }))).toBe(true);
-  });
-});
-
-describe('evaluateRun', () => {
-  it('reports expansion once the second parcel is owned', () => {
-    expect(evaluateRun(run({ landParcels: MAX_LAND_PARCELS, balance: cents(1) }))).toBe('expanded');
-  });
-
-  it('prefers success over bankruptcy when both would apply', () => {
-    // Spending the last penny on the parcel is a win, not a loss.
-    expect(evaluateRun(run({ landParcels: MAX_LAND_PARCELS }))).toBe('expanded');
-  });
-
-  it('reports in-progress for an ordinary run', () => {
-    expect(evaluateRun(run({ balance: cents(5_000) }))).toBe('in_progress');
-  });
-});
-
-describe('land purchase', () => {
-  it('is refused without the money', () => {
-    expect(validateLandPurchase(run({ balance: cents(10) })).ok).toBe(false);
-  });
-
-  it('is refused when there is no land left', () => {
-    const result = validateLandPurchase(
-      run({ balance: cents(999_999), landParcels: MAX_LAND_PARCELS }),
+  it('warns when fixed costs or debt put the farm under strain', () => {
+    expect(careerHealth(health({ balance: cents(1_000), dailyCosts: cents(600) }))).toBe(
+      'strained',
     );
-    expect(result.ok).toBe(false);
+    expect(careerHealth(health({ balance: cents(1_000), debt: cents(4_000) }))).toBe('strained');
+    expect(careerHealth(health({ balance: cents(10_000), dailyCosts: cents(100) }))).toBe(
+      'healthy',
+    );
   });
+});
 
-  it('deducts exactly the parcel cost', () => {
-    const result = validateLandPurchase(run({ balance: cents(LAND_PARCEL_COST + 500) }));
+describe('named land purchase', () => {
+  const north = PARCELS_BY_ID['parcel-north-field']!;
+
+  it('deducts exactly the selected parcel cost and exposes its beds', () => {
+    const result = validateLandPurchase(
+      north.id,
+      [HOMESTEAD_PARCEL_ID],
+      cents(north.purchaseCost + 500),
+      0,
+    );
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.value.balance).toBe(500);
-      expect(result.value.parcels).toBe(2);
+      expect(result.value.ownedParcelIds).toContain(north.id);
+      expect(result.value.newBedIds).toEqual(north.beds.map((bed) => bed.id));
     }
+  });
+
+  it('rejects insufficient funds, duplicates and stage-gated land', () => {
+    expect(validateLandPurchase(north.id, [HOMESTEAD_PARCEL_ID], cents(10), 0).ok).toBe(false);
+    expect(
+      validateLandPurchase(north.id, [HOMESTEAD_PARCEL_ID, north.id], cents(999_999), 0).ok,
+    ).toBe(false);
+    expect(
+      validateLandPurchase('parcel-east-pasture', [HOMESTEAD_PARCEL_ID], cents(999_999), 0).ok,
+    ).toBe(false);
   });
 });
 
-describe('expansionProgress', () => {
-  it('is clamped to 0..1', () => {
-    expect(expansionProgress(cents(0))).toBe(0);
-    expect(expansionProgress(cents(LAND_PARCEL_COST * 3))).toBe(1);
-    expect(expansionProgress(cents(LAND_PARCEL_COST / 2))).toBeCloseTo(0.5, 5);
+describe('career presentation helpers', () => {
+  it('clamps progress toward the next legal parcel', () => {
+    const north = PARCELS_BY_ID['parcel-north-field']!;
+    expect(landProgress(cents(0), [HOMESTEAD_PARCEL_ID], 0)).toBe(0);
+    expect(landProgress(cents(north.purchaseCost * 3), [HOMESTEAD_PARCEL_ID], 0)).toBe(1);
+    expect(landProgress(cents(north.purchaseCost / 2), [HOMESTEAD_PARCEL_ID], 0)).toBeCloseTo(
+      0.5,
+      5,
+    );
+  });
+
+  it('names every career stage', () => {
+    expect(stageName(0)).toBeTruthy();
+    expect(stageName(5)).toBeTruthy();
   });
 });

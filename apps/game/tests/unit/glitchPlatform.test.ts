@@ -16,6 +16,12 @@ import {
 import { GlitchClient } from '@platform/glitch/GlitchClient.js';
 import { GlitchEvents } from '@platform/glitch/GlitchEvents.js';
 import { GlitchProgression } from '@platform/glitch/GlitchProgression.js';
+import type { GlitchPlatform } from '@platform/glitch/GlitchPlatform.js';
+import { GlitchSession } from '@platform/glitch/GlitchSession.js';
+import { SaveDirector } from '@platform/save/SaveDirector.js';
+import { cents, newCareer } from '@farmrise/shared';
+import type { AuthClient } from '@net/AuthClient.js';
+import type { GameApi } from '@net/GameApi.js';
 import { resolveGlitchContext, loadOrCreateUserInstallId } from '@platform/glitch/config.js';
 import { GLITCH_EVENT_MAP } from '../../src/bootstrap/bindGlitch.js';
 
@@ -64,6 +70,62 @@ describe('optionality', () => {
   });
 });
 
+describe('required cloud startup order', () => {
+  it('creates, validates, then lists the payload for a login-backed install', async () => {
+    const state = newCareer({ careerId: 'ordered-cloud-load', seed: 9 });
+    const rawBytes = new TextEncoder().encode(JSON.stringify(state));
+    fetchMock
+      .mockImplementationOnce(always({ data: { id: 'install-1' } }, 201))
+      .mockImplementationOnce(
+        always({
+          valid: true,
+          user_id: 'user-1',
+          user_name: 'Farmer',
+          license_type: 'owned',
+          trial_time_remaining: null,
+          disable_playtime_tracking: false,
+        }),
+      )
+      .mockImplementationOnce(
+        always({
+          data: [
+            {
+              id: 'S',
+              slot_index: 0,
+              version: 3,
+              payload: bytesToBase64(rawBytes),
+              checksum: await sha256Hex(rawBytes),
+              updated_at: '2026-08-10T00:00:00.000Z',
+              is_conflicted: false,
+            },
+          ],
+        }),
+      );
+    const session = new GlitchSession({
+      titleId: TITLE,
+      titleToken: 'runtime-title-token',
+      installId: null,
+      userInstallId: 'stable-user-install',
+      sessionId: 'session-1',
+      gameVersion: '0.1.0',
+      buildType: 'production',
+    });
+
+    await session.start(null, () => false);
+    const loaded = await new GlitchCloudSave(session.client, TITLE).loadSlot('install-1', 0);
+    session.dispose();
+
+    expect(session.isLoginBacked).toBe(true);
+    expect(session.validation?.user_name).toBe('Farmer');
+    expect(loaded.kind).toBe('loaded');
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      `https://api.glitch.fun/api/titles/${TITLE}/installs`,
+      `https://api.glitch.fun/api/titles/${TITLE}/installs/install-1/validate`,
+      `https://api.glitch.fun/api/titles/${TITLE}/installs/install-1/saves?include_payload=1`,
+    ]);
+  });
+});
+
 describe('cloud save payload contract', () => {
   it('round-trips raw bytes through base64', () => {
     const bytes = new Uint8Array([0, 1, 2, 250, 251, 255, 65, 66]);
@@ -82,7 +144,7 @@ describe('cloud save payload contract', () => {
   });
 
   it('sends base64 payload and a hex checksum of the raw bytes', async () => {
-    fetchMock.mockImplementation(always({ id: 's1', slot_index: 0, version: 1 }));
+    fetchMock.mockImplementation(always({ data: { id: 's1', slot_index: 0, version: 1 } }));
     const saves = new GlitchCloudSave(new GlitchClient('title-token'), TITLE);
     const bytes = new TextEncoder().encode('{"tick":1}');
 
@@ -103,15 +165,71 @@ describe('cloud save payload contract', () => {
     expect(outcome.kind).toBe('unavailable');
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('lists slot 0 with its payload and verifies decoded bytes before loading', async () => {
+    const state = { ...newCareer({ careerId: 'cloud-resume', seed: 7 }), balance: cents(1_234) };
+    const rawBytes = new TextEncoder().encode(JSON.stringify(state));
+    fetchMock.mockImplementation(
+      always({
+        data: [
+          {
+            id: 'S',
+            slot_index: 0,
+            version: 4,
+            payload: bytesToBase64(rawBytes),
+            checksum: await sha256Hex(rawBytes),
+            updated_at: '2026-08-10T00:00:00.000Z',
+            is_conflicted: false,
+          },
+        ],
+      }),
+    );
+    const saves = new GlitchCloudSave(new GlitchClient('t'), TITLE);
+
+    const outcome = await saves.loadSlot('install-1', 0);
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/saves?include_payload=1');
+    expect(outcome.kind).toBe('loaded');
+    if (outcome.kind === 'loaded') {
+      expect(JSON.parse(new TextDecoder().decode(outcome.rawBytes))).toEqual(state);
+    }
+    expect(saves.knownVersion(0)).toBe(4);
+  });
+
+  it('refuses a cloud payload whose decoded bytes fail checksum verification', async () => {
+    const rawBytes = new TextEncoder().encode('{"balance":1234}');
+    fetchMock.mockImplementation(
+      always({
+        data: [
+          {
+            id: 'S',
+            slot_index: 0,
+            version: 4,
+            payload: bytesToBase64(rawBytes),
+            checksum: '0'.repeat(64),
+            updated_at: '2026-08-10T00:00:00.000Z',
+            is_conflicted: false,
+          },
+        ],
+      }),
+    );
+
+    const outcome = await new GlitchCloudSave(new GlitchClient('t'), TITLE).loadSlot(
+      'install-1',
+      0,
+    );
+
+    expect(outcome).toMatchObject({ kind: 'unavailable', code: 'CHECKSUM_MISMATCH' });
+  });
 });
 
 describe('cloud save concurrency', () => {
   it('sends the last known server version as base_version, not always zero', async () => {
     const saves = new GlitchCloudSave(new GlitchClient('t'), TITLE);
-    fetchMock.mockImplementation(always({ id: 's1', slot_index: 0, version: 7 }));
+    fetchMock.mockImplementation(always({ data: { id: 's1', slot_index: 0, version: 7 } }));
     await saves.store('install-1', 0, new Uint8Array([1]));
 
-    fetchMock.mockImplementation(always({ id: 's1', slot_index: 0, version: 8 }));
+    fetchMock.mockImplementation(always({ data: { id: 's1', slot_index: 0, version: 8 } }));
     await saves.store('install-1', 0, new Uint8Array([2]));
 
     const second = JSON.parse(fetchMock.mock.calls[1]![1]!.body as string);
@@ -124,10 +242,9 @@ describe('cloud save concurrency', () => {
       always(
         {
           status: 'conflict',
-          save_id: 'S',
           conflict_id: 'C',
           server_version: 7,
-          your_base_version: 5,
+          message: 'A newer version exists on the server.',
         },
         409,
       ),
@@ -138,13 +255,13 @@ describe('cloud save concurrency', () => {
     expect(outcome.kind).toBe('conflict');
     if (outcome.kind === 'conflict') {
       expect(outcome.conflict.conflict_id).toBe('C');
-      expect(outcome.conflict.save_id).toBe('S');
+      expect(outcome.conflict.save_id).toBeUndefined();
     }
   });
 
   it('resolves a conflict with an explicit choice and adopts the new version', async () => {
     const saves = new GlitchCloudSave(new GlitchClient('t'), TITLE);
-    fetchMock.mockImplementation(always({ id: 'S', slot_index: 0, version: 9 }));
+    fetchMock.mockImplementation(always({ data: { id: 'S', slot_index: 0, version: 9 } }));
 
     const record = await saves.resolve('install-1', 'S', 'C', 'use_client', 0);
     expect(record?.version).toBe(9);
@@ -152,6 +269,132 @@ describe('cloud save concurrency', () => {
     const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
     expect(body).toEqual({ conflict_id: 'C', choice: 'use_client' });
     expect(saves.knownVersion(0)).toBe(9);
+  });
+
+  it('looks up the slot when the conflict response omits save_id', async () => {
+    const saves = new GlitchCloudSave(new GlitchClient('t'), TITLE);
+    fetchMock
+      .mockImplementationOnce(
+        always({
+          data: [
+            {
+              id: 'S',
+              slot_index: 0,
+              version: 7,
+              payload: null,
+              checksum: 'abc',
+              updated_at: '2026-08-10T00:00:00.000Z',
+              is_conflicted: true,
+            },
+          ],
+        }),
+      )
+      .mockImplementationOnce(always({ data: { id: 'S', slot_index: 0, version: 9 } }));
+
+    const record = await saves.resolveConflict(
+      'install-1',
+      { status: 'conflict', conflict_id: 'C', server_version: 7 },
+      'use_client',
+      0,
+    );
+
+    expect(record?.version).toBe(9);
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/saves/S/resolve');
+    expect(saves.knownVersion(0)).toBe(9);
+  });
+
+  it('silently resolves a stale background write and continues autosaving', async () => {
+    const conflict = { status: 'conflict' as const, conflict_id: 'C', server_version: 1 };
+    const record = { id: 'S', slot_index: 0, version: 2 };
+    const store = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: 'conflict', conflict })
+      .mockResolvedValue({ kind: 'saved', record });
+    const resolveConflict = vi.fn().mockResolvedValue(record);
+    // The director primes itself with the current server version before its
+    // first write, so a fake cloud has to answer `list` as well as `store`.
+    const list = vi.fn().mockResolvedValue([record]);
+    const glitch = {
+      canUseCloudFeatures: true,
+      installId: 'install-1',
+      cloudSave: { store, resolveConflict, list },
+    } as unknown as GlitchPlatform;
+    const director = new SaveDirector(
+      { signedIn: false } as unknown as AuthClient,
+      {} as GameApi,
+      glitch,
+    );
+    const state = newCareer({ careerId: 'cloud-conflict-test', seed: 42 });
+
+    await director.save(state);
+    await director.save(state);
+    expect(store).toHaveBeenCalledTimes(2);
+    expect(resolveConflict).toHaveBeenCalledWith('install-1', conflict, 'use_client', 0);
+  });
+});
+
+describe('cloud resume', () => {
+  it('chooses the verified Glitch career ahead of a different local career', async () => {
+    const localState = { ...newCareer({ careerId: 'local-career', seed: 1 }), balance: cents(500) };
+    const cloudState = {
+      ...newCareer({ careerId: 'cloud-career', seed: 2 }),
+      balance: cents(8_765),
+      onboardingCompleted: true,
+    };
+    const loadSlot = vi.fn().mockResolvedValue({
+      kind: 'loaded',
+      record: { id: 'S', slot_index: 0, version: 9 },
+      rawBytes: new TextEncoder().encode(JSON.stringify(cloudState)),
+    });
+    const glitch = {
+      canUseCloudFeatures: true,
+      installId: 'install-1',
+      cloudSave: { loadSlot },
+    } as unknown as GlitchPlatform;
+    const director = new SaveDirector(
+      { signedIn: false } as unknown as AuthClient,
+      {} as GameApi,
+      glitch,
+    );
+    director.writeLocal(localState);
+
+    const loaded = await director.loadBestDocument();
+
+    expect(loaded && 'document' in loaded ? loaded.tier : null).toBe('cloud');
+    expect(loaded && 'document' in loaded ? loaded.document : null).toEqual(cloudState);
+    expect(loadSlot).toHaveBeenCalledWith('install-1', 0);
+  });
+
+  it('does not overwrite an unreadable cloud slot with the local fallback', async () => {
+    const localState = newCareer({ careerId: 'local-fallback', seed: 3 });
+    const store = vi.fn();
+    const list = vi.fn().mockResolvedValue([]);
+    const glitch = {
+      canUseCloudFeatures: true,
+      installId: 'install-1',
+      cloudSave: {
+        loadSlot: vi.fn().mockResolvedValue({
+          kind: 'unavailable',
+          reason: 'The cloud save failed its checksum verification.',
+          code: 'CHECKSUM_MISMATCH',
+        }),
+        list,
+        store,
+      },
+    } as unknown as GlitchPlatform;
+    const director = new SaveDirector(
+      { signedIn: false } as unknown as AuthClient,
+      {} as GameApi,
+      glitch,
+    );
+    director.writeLocal(localState);
+
+    const loaded = await director.loadBestDocument();
+    await director.save(localState);
+
+    expect(loaded && 'document' in loaded ? loaded.tier : null).toBe('local');
+    expect(list).not.toHaveBeenCalled();
+    expect(store).not.toHaveBeenCalled();
   });
 });
 

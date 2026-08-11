@@ -9,9 +9,11 @@ import * as THREE from 'three';
 import type { RenderContext } from '@engine/core/types.js';
 import type { WorkAction } from './Player.js';
 
+export type FarmWorkAction = Extract<WorkAction, 'plant' | 'tend' | 'harvest'>;
+
 interface ActionParticle {
   active: boolean;
-  kind: WorkAction;
+  kind: FarmWorkAction;
   position: THREE.Vector3;
   velocity: THREE.Vector3;
   life: number;
@@ -31,6 +33,24 @@ const HARVEST_COLOURS = [
   new THREE.Color(0xe8c34a),
   new THREE.Color(0xff9440),
 ];
+
+/**
+ * Normalised contact beats for each work verb. Effects begin where the tool
+ * meets the target, not when the anticipation pose starts.
+ */
+export const ACTION_EFFECT_CONTACT: Readonly<Record<FarmWorkAction, number>> = {
+  plant: 0.38,
+  tend: 0.18,
+  harvest: 0.36,
+};
+
+export function hasActionEffect(action: WorkAction): action is FarmWorkAction {
+  return action === 'plant' || action === 'tend' || action === 'harvest';
+}
+
+export function hasReachedActionContact(action: FarmWorkAction, progress: number): boolean {
+  return progress >= ACTION_EFFECT_CONTACT[action];
+}
 
 export class PlayerActionEffects {
   readonly object: THREE.InstancedMesh;
@@ -69,7 +89,7 @@ export class PlayerActionEffects {
     }));
   }
 
-  trigger(action: WorkAction, facing: number): void {
+  trigger(action: FarmWorkAction, facing: number): void {
     this.object.visible = true;
     const count = action === 'plant' ? 8 : action === 'tend' ? 13 : 16;
     for (let i = 0; i < count; i += 1) this.#spawn(action, facing, i);
@@ -121,7 +141,7 @@ export class PlayerActionEffects {
     this.object.removeFromParent();
   }
 
-  #spawn(action: WorkAction, facing: number, index: number): void {
+  #spawn(action: FarmWorkAction, facing: number, index: number): void {
     const particle = this.#particles[this.#cursor];
     if (!particle) return;
     this.#cursor = (this.#cursor + 1) % CAPACITY;

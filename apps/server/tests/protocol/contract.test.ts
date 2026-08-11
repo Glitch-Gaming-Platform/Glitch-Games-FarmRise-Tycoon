@@ -19,6 +19,7 @@ import { GET as listOrders } from '@app/api/v1/market/orders/route';
 import { POST as spotSell } from '@app/api/v1/market/spot-sell/route';
 import { PUT as putSave } from '@app/api/v1/save/route';
 import { installHarness, request, signUp, teardownHarness, type Harness } from '../routes/setup';
+import { withActiveStoreItems } from '../helpers/career';
 
 let harness: Harness;
 
@@ -67,7 +68,7 @@ describe('response contracts', () => {
         token,
         json: {
           expectedRevision: save.revision,
-          state: { ...save.state, tick: save.state.tick + 600, inventory: { wheat: 10 } },
+          state: withActiveStoreItems(save.state, { wheat: 10 }, save.state.tick + 600),
         },
       }),
     );

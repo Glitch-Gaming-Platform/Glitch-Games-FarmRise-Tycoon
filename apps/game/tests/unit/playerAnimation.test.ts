@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import type { FixedUpdateContext, RenderContext } from '@engine/core/types.js';
 import type { InputSystem } from '@engine/input/InputSystem.js';
 import type { PhysicsPort } from '@engine/physics/PhysicsPort.js';
 import type { FarmWorld } from '../../src/game/world/FarmWorld.js';
 import type { GameAction } from '../../src/game/GameActions.js';
 import { Player } from '../../src/game/player/Player.js';
-import { PlayerActionEffects } from '../../src/game/player/PlayerActionEffects.js';
+import {
+  ACTION_EFFECT_CONTACT,
+  hasReachedActionContact,
+  PlayerActionEffects,
+} from '../../src/game/player/PlayerActionEffects.js';
 import { PlayerController } from '../../src/game/player/PlayerController.js';
 import { PlayerToolView } from '../../src/game/player/PlayerToolView.js';
 
@@ -20,7 +25,7 @@ const renderContext: RenderContext = {
   elapsedSeconds: 1,
 };
 
-function makeController(actions: Partial<Record<GameAction, boolean>>): {
+function makeController(actions: Partial<Record<GameAction, boolean | number>>): {
   player: Player;
   controller: PlayerController;
 } {
@@ -28,7 +33,7 @@ function makeController(actions: Partial<Record<GameAction, boolean>>): {
   const world = {} as FarmWorld;
   const input = {
     axis: ({ negative, positive }: { negative: GameAction; positive: GameAction }) =>
-      Number(Boolean(actions[positive])) - Number(Boolean(actions[negative])),
+      Number(actions[positive] ?? 0) - Number(actions[negative] ?? 0),
     isDown: (action: GameAction) => Boolean(actions[action]),
   } as InputSystem<GameAction>;
   const physics = {
@@ -53,6 +58,11 @@ describe('player animation state', () => {
     sprinting.controller.fixedUpdate(context);
     expect(sprinting.player.activity).toBe('walking');
     expect(sprinting.player.locomotionIntensity).toBe(sprinting.player.sprintMultiplier);
+
+    const analog = makeController({ moveForward: 0.4 });
+    analog.controller.fixedUpdate(context);
+    expect(analog.player.locomotionIntensity).toBeCloseTo(0.4);
+    expect(Math.abs(analog.player.position.z)).toBeLessThan(Math.abs(walking.player.position.z));
   });
 
   it('returns to a still pose when movement stops or work begins', () => {
@@ -96,6 +106,7 @@ describe('player animation state', () => {
     expect(wateringCan?.visible).toBe(true);
     expect(waterStream?.visible).toBe(true);
     expect(trowel?.visible).toBe(false);
+    expect(view.supportPosition(new THREE.Vector3())).not.toBeNull();
 
     view.sync('harvest', 0.5, 1.4);
     expect(sickle?.visible).toBe(true);
@@ -106,6 +117,79 @@ describe('player animation state', () => {
     expect(sickle?.visible).toBe(false);
     expect(harvestArc?.visible).toBe(false);
     view.dispose();
+  });
+
+  it('points the watering can spout ahead of the farmer, not across their body', () => {
+    // The can is authored with its spout along local +X and the farmer faces
+    // +Z, so an unrotated can pours sideways out of the right hip. The pose
+    // used to yaw it by 0.1 rad - six degrees - which left it doing exactly
+    // that, and the water effects were then placed off to the side to match.
+    const view = new PlayerToolView(null);
+    const can = view.object.getObjectByName('FarmTool_WateringCan')!;
+    const splash = view.object.getObjectByName('FarmTool_WaterSplash')!;
+
+    // Measured off the built mesh: the rose sits at (0.595, 0.327, 0) in the
+    // can's own space, and the spout emerges from the body around y = 0.24.
+    const spoutTipLocal = new THREE.Vector3(0.595, 0.327, 0);
+    const spoutBaseLocal = new THREE.Vector3(0, 0.24, 0);
+
+    view.sync('tend', 0.5, 1.2);
+    can.updateMatrix();
+    const tip = spoutTipLocal.clone().applyMatrix4(can.matrix);
+    const base = spoutBaseLocal.clone().applyMatrix4(can.matrix);
+    const spout = tip.clone().sub(base).normalize();
+
+    // Forward is the dominant axis, and it is pointing down rather than up.
+    expect(spout.z).toBeGreaterThan(0.6);
+    expect(Math.abs(spout.x)).toBeLessThan(0.3);
+    expect(spout.y).toBeLessThan(-0.2);
+
+    // The rose ends up in front of the farmer and still above the soil. It
+    // used to fall to 0.26 m once the spout was aimed, because the pour tilt
+    // had been tuned while it was rolling the can about its own axis.
+    expect(tip.z).toBeGreaterThan(0.6);
+    expect(tip.y).toBeGreaterThan(0.35);
+
+    // And the ground ring sits directly beneath the rose, because it is
+    // derived from the spout rather than tuned alongside it.
+    expect(splash.position.x).toBeCloseTo(tip.x, 5);
+    expect(splash.position.z).toBeCloseTo(tip.z, 5);
+    view.dispose();
+  });
+
+  it('runs the water stream from the spout down to the ground ring', () => {
+    // A fixed stream length pushed the cylinder through the soil at full pour
+    // and left it short of the rose at low pour. Spanning the gap means the
+    // two ends are correct by construction at every tilt.
+    const view = new PlayerToolView(null);
+    const can = view.object.getObjectByName('FarmTool_WateringCan')!;
+    const stream = view.object.getObjectByName('FarmTool_WaterStream')!;
+    const spoutTipLocal = new THREE.Vector3(0.595, 0.327, 0);
+
+    for (const progress of [0.25, 0.4, 0.55, 0.7]) {
+      view.sync('tend', progress, 1.2);
+      if (!stream.visible) continue;
+      can.updateMatrix();
+      const tip = spoutTipLocal.clone().applyMatrix4(can.matrix);
+
+      const half = stream.scale.y * 0.5;
+      const top = stream.position.y + half;
+      const bottom = stream.position.y - half;
+      // Ripple is a couple of centimetres, so allow for it at both ends.
+      expect(Math.abs(top - tip.y)).toBeLessThan(0.05);
+      expect(bottom).toBeGreaterThan(0);
+      expect(bottom).toBeLessThan(0.09);
+      expect(stream.position.x).toBeCloseTo(tip.x, 5);
+      expect(stream.position.z).toBeCloseTo(tip.z, 5);
+    }
+    view.dispose();
+  });
+
+  it('synchronises work particles to tool contact instead of anticipation', () => {
+    for (const action of ['plant', 'tend', 'harvest'] as const) {
+      expect(hasReachedActionContact(action, ACTION_EFFECT_CONTACT[action] - 0.01)).toBe(false);
+      expect(hasReachedActionContact(action, ACTION_EFFECT_CONTACT[action])).toBe(true);
+    }
   });
 
   it('never exposes a black first frame for watering or harvesting particles', () => {

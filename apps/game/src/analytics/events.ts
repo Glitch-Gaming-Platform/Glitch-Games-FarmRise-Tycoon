@@ -81,8 +81,20 @@ export type AnalyticsEvent =
     }
   | { name: 'building_placed'; payload: { kind: string; cost: number; balance: number } }
   | { name: 'building_completed'; payload: { kind: string } }
-  | { name: 'land_purchased'; payload: { parcels: number; elapsedMs: number } }
+  | {
+      name: 'land_purchased';
+      payload: { parcels: number; parcelId: string; elapsedMs: number };
+    }
+  | { name: 'goods_hauled'; payload: { stored: number; refused: number; carrier: string } }
   | { name: 'cycle_completed'; payload: { cycle: number; elapsedMs: number; balance: number } }
+
+  // --- career progression -----------------------------------------------
+  | {
+      name: 'milestone_claimed';
+      payload: { milestoneId: string; stage: number; elapsedMs: number };
+    }
+  | { name: 'career_restructured'; payload: { elapsedMs: number } }
+  | { name: 'specialization_chosen'; payload: { specialization: string } }
 
   // --- the signature mechanic -----------------------------------------
   | { name: 'farm_event_warned'; payload: { kind: string; targets: number; balance: number } }
@@ -99,7 +111,7 @@ export type AnalyticsEvent =
   | {
       name: 'run_completed';
       payload: {
-        outcome: 'expanded' | 'bankrupt' | 'quit';
+        outcome: 'expanded' | 'bankrupt' | 'quit' | 'milestone' | 'season' | 'restructured';
         elapsedMs: number;
         cyclesCompleted: number;
         finalBalance: number;
@@ -135,6 +147,7 @@ export const ONBOARDING_FUNNEL: readonly AnalyticsEventName[] = [
   'crop_planted',
   'crop_harvested',
   'first_success',
+  'goods_hauled',
   'goods_sold',
   'onboarding_complete',
 ] as const;

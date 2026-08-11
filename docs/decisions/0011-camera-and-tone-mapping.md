@@ -1,6 +1,6 @@
 # 0011. 38° camera pitch and no tone mapping
 
-- **Status:** Accepted
+- **Status:** Superseded in part by ADR 0017; the no-tone-mapping decision remains active
 - **Date:** 2026-08-10
 
 ## Context

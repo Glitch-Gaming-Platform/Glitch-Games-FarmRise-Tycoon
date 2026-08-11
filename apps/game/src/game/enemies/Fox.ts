@@ -11,7 +11,7 @@ export type FoxState = 'approaching' | 'raiding' | 'fleeing' | 'gone';
 
 export class Fox {
   readonly position: Vec2;
-  readonly radius = 0.35;
+  readonly radius = 0.42;
   state: FoxState = 'approaching';
   /** Ticks spent at the shelter; produces a loss once it reaches raidTicks. */
   raidProgress = 0;

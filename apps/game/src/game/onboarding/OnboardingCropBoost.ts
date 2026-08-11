@@ -13,7 +13,7 @@ import {
   ticksUntilReady,
   type PlotState,
 } from '@farmrise/shared';
-import type { FarmWorld } from '../world/FarmWorld.js';
+import type { Career } from '../career/Career.js';
 
 // Keep this shorter than the coach hint even on a low-frame-rate software
 // renderer. Fixed-step catch-up is capped, so six simulation seconds could
@@ -25,7 +25,7 @@ export class OnboardingCropBoost {
   #plotId: string | null = null;
   #ticksLeft = 0;
 
-  constructor(private readonly world: FarmWorld) {
+  constructor(private readonly career: Career) {
     this.#rememberTendCounts();
   }
 
@@ -41,7 +41,7 @@ export class OnboardingCropBoost {
   }
 
   #newlyTendedPlot(): string | null {
-    for (const [plotId, plot] of this.world.plots) {
+    for (const [plotId, plot] of this.career.world.plots) {
       const previous = this.#lastTendCounts.get(plotId) ?? 0;
       if (plot.tendCount > previous && plot.cropId && plotStage(plot) === 'growing') return plotId;
     }
@@ -50,22 +50,25 @@ export class OnboardingCropBoost {
 
   #advanceBoostedPlot(): void {
     if (!this.#plotId) return;
-    const plot = this.world.getPlot(this.#plotId);
+    const plot = this.career.world.getPlot(this.#plotId);
     if (!plot?.cropId || plotStage(plot) !== 'growing' || this.#ticksLeft <= 0) {
       this.#clear();
       return;
     }
 
     const acceleratedTicks = Math.max(1, Math.ceil(ticksUntilReady(plot) / this.#ticksLeft));
-    this.world.setPlot(this.#plotId, advancePlot(plot, acceleratedTicks));
+    this.career.world.setPlot(
+      this.#plotId,
+      advancePlot(plot, acceleratedTicks, this.career.season),
+    );
     this.#ticksLeft -= 1;
 
-    const next = this.world.getPlot(this.#plotId) as PlotState | undefined;
+    const next = this.career.world.getPlot(this.#plotId) as PlotState | undefined;
     if (!next || plotStage(next) !== 'growing') this.#clear();
   }
 
   #rememberTendCounts(): void {
-    for (const [plotId, plot] of this.world.plots) {
+    for (const [plotId, plot] of this.career.world.plots) {
       this.#lastTendCounts.set(plotId, plot.tendCount);
     }
   }

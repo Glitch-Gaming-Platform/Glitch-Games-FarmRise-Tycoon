@@ -5,12 +5,13 @@
  * money changes hands.
  */
 import { beforeEach, describe, expect, it } from 'vitest';
-import { spotPriceFor } from '@farmrise/shared';
+import { qualityPriceMultiplier, spotPriceFor } from '@farmrise/shared';
 import { createMemoryRepositories } from '@/repositories/memory/index';
 import { createServices, type Services } from '@/services/container';
 import { resetEnvCache } from '@/config/env';
 import { serverTick } from '@/domain/serverClock';
 import { newId } from '@/db/ids';
+import { activeInventory, withActiveStoreItems } from '../helpers/career';
 
 let repositories: ReturnType<typeof createMemoryRepositories>;
 let services: Services;
@@ -28,11 +29,11 @@ beforeEach(async () => {
   const save = await services.saves.load(userId);
   // Advance the tick alongside the inventory: the plausibility check correctly
   // refuses 60 items appearing in zero elapsed ticks.
-  await services.saves.write(userId, save.revision, {
-    ...save.state,
-    tick: save.state.tick + 600,
-    inventory: { wheat: 40, corn: 20 },
-  });
+  await services.saves.write(
+    userId,
+    save.revision,
+    withActiveStoreItems(save.state, { wheat: 40, corn: 20 }, save.state.tick + 600),
+  );
 });
 
 async function openOrder(
@@ -91,7 +92,7 @@ describe('fulfilling an order', () => {
     expect(outcome.payout).toBe(900);
     expect(outcome.balance).toBe(before.balance + 900);
     const after = (await services.saves.load(userId)).state;
-    expect(after.inventory['wheat']).toBe(30);
+    expect(activeInventory(after)['wheat']).toBe(30);
   });
 
   it('refuses when the player does not hold enough goods', async () => {
@@ -127,7 +128,7 @@ describe('spot selling', () => {
   it('pays the registry price, not a client-supplied one', async () => {
     const before = (await services.saves.load(userId)).state;
     const outcome = await services.market.spotSell(userId, 'wheat', 5);
-    expect(outcome.payout).toBe(spotPriceFor('wheat') * 5);
+    expect(outcome.payout).toBe(Math.round(spotPriceFor('wheat') * qualityPriceMultiplier(1) * 5));
     expect(outcome.balance).toBe(before.balance + outcome.payout);
   });
 

@@ -1,53 +1,59 @@
 /**
- * Owns one run: onboarding, the panels, build placement, the prevention
- * action, and deciding when the run is over.
+ * Owns one sitting: onboarding, the panels, build placement, and routing the
+ * player's verbs so that audio, analytics and the HUD see one consistent
+ * stream of outcomes.
  *
- * This exists so FarmScene can stay what the architecture doc requires it to
- * be - composition and tick order, nothing else. Every rule about *how a
- * session unfolds* lives here, and FarmScene simply ticks it.
+ * What it deliberately no longer owns is the *career*. Deciding when a stage is
+ * reached, when a season turns and what happens to an insolvent farm are long
+ * horizon questions and they live in CareerDirector
+ * (docs/PROGRESSION_GAMEPLAY_PLAN.md §39.1). This class stays what FarmScene
+ * needs: the thing that turns a keypress into a command.
  */
-import {
-  ANIMALS,
-  FARM_EVENTS,
-  LAND_PARCEL_COST,
-  evaluateRun,
-  expansionProgress,
-  type BuildingKind,
-  type Cents,
-  type MarketOrder,
-  type RunOutcome,
-  type RunSummary,
-} from '@farmrise/shared';
+import { ANIMALS, isMitigated, type BuildingKind, type Cents, type Result } from '@farmrise/shared';
 import type * as THREE from 'three';
 import { EventBus } from '@engine/core/EventBus.js';
 import type { FixedUpdateContext, RenderContext } from '@engine/core/types.js';
 import type { InputSystem } from '@engine/input/InputSystem.js';
-import type { FarmWorld } from '../world/FarmWorld.js';
+import type { Career } from '../career/Career.js';
+import type { CareerDirector } from '../career/CareerDirector.js';
+import { ContractBoard } from '../career/ContractBoard.js';
 import {
+  acceptContract,
   buyAnimal,
+  buyCarrier,
   buyLand,
-  fulfilContract,
+  borrow,
+  buyInsurance,
+  collectStack,
+  chooseSpecialization,
+  cancelInsurance,
+  deliverContract,
+  depositCarried,
+  hireWorker,
+  queueProcessing,
+  repay,
   sellSpot,
-  shelterCapacity,
+  startTownProject,
+  useCarrier,
 } from '../world/FarmCommands.js';
 import type { Player } from '../player/Player.js';
 import type { PlayerController } from '../player/PlayerController.js';
-import type { EventDirector } from '../events/EventDirector.js';
+import type { IncidentDirector } from '../events/IncidentDirector.js';
 import { PlacementController } from './PlacementController.js';
 import { OnboardingDirector, hasOnboardedBefore } from '../onboarding/OnboardingDirector.js';
 import { OnboardingCropBoost } from '../onboarding/OnboardingCropBoost.js';
-import { createContractRng, refreshLocalContracts } from '../world/localContracts.js';
 import type { OnboardingContext } from '../onboarding/beats.js';
 import type { GameAction } from '../GameActions.js';
 
-export type PanelName = 'none' | 'market' | 'build';
+export type PanelName = 'none' | 'market' | 'build' | 'career' | 'town';
 
 export interface SessionEvents extends Record<string, unknown> {
   'session:panel': { panel: PanelName };
-  'session:outcome': { summary: RunSummary };
   'session:refused': { action: string; reason: string };
-  'session:prevented': { kind: string; cost: Cents };
+  'session:responded': { incidentId: string; response: string };
   'session:sold': { itemId: string; quantity: number; payout: Cents; viaContract: boolean };
+  'session:hauled': { stored: number; refused: number };
+  'session:career-changed': { action: string };
 }
 
 export interface SessionOptions {
@@ -60,78 +66,56 @@ export class SessionController {
   readonly events = new EventBus<SessionEvents>();
   readonly onboarding: OnboardingDirector;
   readonly placement: PlacementController;
+  readonly board: ContractBoard;
   readonly #onboardingCropBoost: OnboardingCropBoost;
   readonly #startingBuildingCount: number;
 
   #panel: PanelName = 'none';
-  #outcome: RunOutcome = 'in_progress';
-  #contracts: readonly MarketOrder[] = [];
-  /**
-   * True while contracts are generated locally. Flips to false the moment the
-   * server supplies real ones, and never flips back - a signed-in player's
-   * market is the server's, permanently.
-   */
-  #contractsAreLocal = true;
-  #contractRng = createContractRng(1);
-  #nextContractCheck = 0;
   #startedAt: number;
   #hasMoved = false;
   #salesMade = 0;
   #reinvestments = 0;
-  #eventsResolved = 0;
+  #incidentsResolved = 0;
   readonly #now: () => number;
 
   constructor(
-    private readonly world: FarmWorld,
+    private readonly career: Career,
     private readonly player: Player,
     private readonly playerController: PlayerController,
-    private readonly eventDirector: EventDirector,
+    private readonly incidents: IncidentDirector,
+    private readonly careerDirector: CareerDirector,
     private readonly input: InputSystem<GameAction>,
     camera: THREE.Camera,
     options: SessionOptions = {},
   ) {
     this.#now = options.now ?? (() => performance.now());
     this.#startedAt = this.#now();
-    this.onboarding = new OnboardingDirector({
-      skip: options.skipOnboarding ?? hasOnboardedBefore(),
+    const skipOnboarding =
+      options.skipOnboarding ?? (career.onboardingCompleted || hasOnboardedBefore());
+    this.onboarding = new OnboardingDirector({ skip: skipOnboarding });
+    incidents.setRandomSchedulingEnabled(skipOnboarding);
+    if (skipOnboarding) career.setOnboardingCompleted(true);
+    this.onboarding.events.on('onboarding:complete', () => {
+      career.setOnboardingCompleted(true);
+      incidents.setRandomSchedulingEnabled(true);
     });
-    this.#onboardingCropBoost = new OnboardingCropBoost(world);
-    this.#startingBuildingCount = world.buildings.length;
-    this.placement = new PlacementController(world, input, camera);
-    this.#contractRng = createContractRng(world.rng.state());
-    this.#contracts = refreshLocalContracts([], world.tick, this.#contractRng);
+    this.#onboardingCropBoost = new OnboardingCropBoost(career);
+    this.#startingBuildingCount = career.world.buildings.length;
+    this.placement = new PlacementController(career, input, camera);
+    this.board = new ContractBoard(career);
+    this.board.refresh();
 
-    // Run scoring for events lives here because this class already owns the
-    // director's lifetime. Putting it in the scene made it invisible to any
-    // headless consumer.
-    eventDirector.events.on('event:ended', ({ mitigated }) => {
-      world.bumpStat('eventsSurvived');
-      if (mitigated) world.bumpStat('eventsPrevented');
-      this.#eventsResolved += 1;
+    incidents.events.on('incident:resolved', () => {
+      this.#incidentsResolved += 1;
     });
   }
 
   get panel(): PanelName {
     return this.#panel;
   }
-  get outcome(): RunOutcome {
-    return this.#outcome;
-  }
-  get contracts(): readonly MarketOrder[] {
-    return this.#contracts;
-  }
-  get finished(): boolean {
-    return this.#outcome !== 'in_progress';
-  }
 
-  /** Called with the server's orders. Takes precedence over local ones. */
-  setContracts(orders: readonly MarketOrder[]): void {
-    this.#contracts = orders;
-    this.#contractsAreLocal = false;
-  }
-
-  get contractsAreLocal(): boolean {
-    return this.#contractsAreLocal;
+  get contracts() {
+    return this.board.available();
   }
 
   openPanel(panel: PanelName): void {
@@ -147,11 +131,10 @@ export class SessionController {
     this.openPanel(this.#panel === panel ? 'none' : panel);
   }
 
-  // -- player-facing commands, all routed through here so onboarding,
-  //    audio and analytics see one consistent stream of outcomes ----------
+  // -- player-facing commands ---------------------------------------------
 
   sell(itemId: string, quantity: number): void {
-    const result = sellSpot(this.world, itemId, quantity);
+    const result = sellSpot(this.career, itemId, quantity);
     if (!result.ok) {
       this.events.emit('session:refused', { action: 'sell', reason: result.reason });
       return;
@@ -165,22 +148,31 @@ export class SessionController {
     });
   }
 
-  fulfil(orderId: string): void {
-    const order = this.#contracts.find((candidate) => candidate.id === orderId);
-    if (!order) {
-      this.events.emit('session:refused', { action: 'fulfil', reason: 'That contract is gone.' });
+  accept(offerId: string): void {
+    const entry = this.board.available().find((candidate) => candidate.offer.id === offerId);
+    if (!entry) {
+      this.events.emit('session:refused', { action: 'accept', reason: 'That offer is gone.' });
       return;
     }
-    const result = fulfilContract(this.world, order);
+    const result = acceptContract(this.career, entry.offer);
     if (!result.ok) {
-      this.events.emit('session:refused', { action: 'fulfil', reason: result.reason });
+      this.events.emit('session:refused', { action: 'accept', reason: result.reason });
+      return;
+    }
+    this.events.emit('session:career-changed', { action: 'acceptContract' });
+  }
+
+  deliver(contractId: string, quantity: number): void {
+    const contract = this.career.contracts.find((entry) => entry.id === contractId);
+    const result = deliverContract(this.career, contractId, quantity);
+    if (!result.ok) {
+      this.events.emit('session:refused', { action: 'deliver', reason: result.reason });
       return;
     }
     this.#salesMade += 1;
-    this.#contracts = this.#contracts.filter((candidate) => candidate.id !== orderId);
     this.events.emit('session:sold', {
-      itemId: order.itemId,
-      quantity: result.value.quantity,
+      itemId: contract?.itemId ?? 'goods',
+      quantity: result.value.delivered,
       payout: result.value.payout,
       viaContract: true,
     });
@@ -188,11 +180,11 @@ export class SessionController {
 
   chooseBuilding(kind: BuildingKind): void {
     this.openPanel('none');
-    this.placement.begin(kind, this.#now());
+    this.placement.begin(kind);
   }
 
-  purchaseChicken(): void {
-    const result = buyAnimal(this.world, 'chicken', 1);
+  purchaseAnimal(species = 'chicken'): void {
+    const result = buyAnimal(this.career, species, 1);
     if (!result.ok) {
       this.events.emit('session:refused', { action: 'buyAnimal', reason: result.reason });
       return;
@@ -200,8 +192,8 @@ export class SessionController {
     this.#reinvestments += 1;
   }
 
-  purchaseLand(): void {
-    const result = buyLand(this.world);
+  purchaseLand(parcelId: string): void {
+    const result = buyLand(this.career, parcelId);
     if (!result.ok) {
       this.events.emit('session:refused', { action: 'buyLand', reason: result.reason });
       return;
@@ -210,33 +202,117 @@ export class SessionController {
     this.openPanel('none');
   }
 
-  /** The signature mechanic's active response. */
-  prevent(): void {
-    const current = this.eventDirector.current;
-    if (!current || current.phase !== 'warning') {
-      this.events.emit('session:refused', {
-        action: 'prevent',
-        reason: 'Nothing to prevent right now.',
-      });
-      return;
-    }
-    const cost = FARM_EVENTS[current.kind].preventionCost;
-    const result = this.eventDirector.prevent();
+  purchaseCarrier(kind: string): void {
+    const result = buyCarrier(this.career, kind);
     if (!result.ok) {
-      this.events.emit('session:refused', {
-        action: 'prevent',
-        reason: result.reason ?? 'Cannot prevent that.',
+      this.events.emit('session:refused', { action: 'buyCarrier', reason: result.reason });
+      return;
+    }
+    this.#reinvestments += 1;
+    useCarrier(this.career, kind);
+  }
+
+  claimMilestone(milestoneId: string): void {
+    this.#reportCareerChange('claimMilestone', this.careerDirector.claim(milestoneId));
+  }
+
+  specialize(id: string): void {
+    this.#reportCareerChange('specialize', chooseSpecialization(this.career, id));
+  }
+
+  queueBatch(buildingId: string, recipeId: string, batches = 1): void {
+    this.#reportCareerChange(
+      'queueProcessing',
+      queueProcessing(this.career, buildingId, recipeId, batches),
+    );
+  }
+
+  employ(role: string): void {
+    this.#reportCareerChange('hireWorker', hireWorker(this.career, role));
+  }
+
+  takeLoan(offerId: string): void {
+    this.#reportCareerChange('borrow', borrow(this.career, offerId));
+  }
+
+  repayLoan(loanId: string, amount: number): void {
+    this.#reportCareerChange('repay', repay(this.career, loanId, amount));
+  }
+
+  insure(policyId: string): void {
+    this.#reportCareerChange('buyInsurance', buyInsurance(this.career, policyId));
+  }
+
+  cancelPolicy(): void {
+    this.#reportCareerChange('cancelInsurance', cancelInsurance(this.career));
+  }
+
+  fundTownProject(projectId: string): void {
+    this.#reportCareerChange('startTownProject', startTownProject(this.career, projectId));
+  }
+
+  /**
+   * The haul verb: put down what you are carrying, or pick up what is here.
+   *
+   * One key for both because they are never both available in the same place -
+   * you are either standing at a store or at a pile in a field.
+   */
+  haul(): void {
+    const tile = this.career.world.grid.worldToTile(this.player.position.x, this.player.position.z);
+    if (!this.career.world.carry.isEmpty) {
+      const result = depositCarried(this.career, tile.x, tile.z);
+      if (!result.ok) {
+        this.events.emit('session:refused', { action: 'haul', reason: result.reason });
+        return;
+      }
+      this.events.emit('session:hauled', {
+        stored: result.value.stored,
+        refused: result.value.refused,
       });
       return;
     }
-    this.events.emit('session:prevented', { kind: current.kind, cost });
+
+    const picked = collectStack(this.career, tile.x, tile.z);
+    if (!picked.ok) {
+      this.events.emit('session:refused', { action: 'haul', reason: picked.reason });
+      return;
+    }
+    this.events.emit('session:hauled', { stored: 0, refused: 0 });
+  }
+
+  /** The signature mechanic's active response. */
+  respondToIncident(responseKind?: string): void {
+    const instance = this.incidents.mostUrgentActionable;
+    const definition = instance ? this.incidents.definitionOf(instance) : undefined;
+    if (!instance || !definition) {
+      this.events.emit('session:refused', {
+        action: 'respond',
+        reason: 'Nothing to answer right now.',
+      });
+      return;
+    }
+
+    const kind =
+      responseKind ?? definition.responses.find((response) => response.kind === 'pay')?.kind;
+    if (!kind) {
+      this.events.emit('session:refused', {
+        action: 'respond',
+        reason: 'Go to the marked problem and use Work to answer it.',
+      });
+      return;
+    }
+
+    const result = this.incidents.respond(instance.id, kind);
+    if (!result.ok) {
+      this.events.emit('session:refused', { action: 'respond', reason: result.reason });
+      return;
+    }
+    this.events.emit('session:responded', { incidentId: instance.id, response: kind });
   }
 
   // -- ticking -----------------------------------------------------------
 
   fixedUpdate(context: FixedUpdateContext): void {
-    if (this.finished) return;
-
     if (this.player.position.x !== 0 || this.player.position.z !== 0) this.#hasMoved = true;
 
     // Placement confirmation must see the input edge on this fixed tick.
@@ -249,25 +325,34 @@ export class SessionController {
     // itself, so only close a panel when nothing is being placed.
     if (this.input.wasPressed('openMarket')) this.togglePanel('market');
     if (this.input.wasPressed('openBuild')) this.togglePanel('build');
-    if (this.input.wasPressed('prevent')) this.prevent();
+    if (this.input.wasPressed('openCareer')) this.togglePanel('career');
+    if (this.input.wasPressed('openTown')) this.togglePanel('town');
+    if (this.input.wasPressed('prevent')) this.respondToIncident();
+    if (this.input.wasPressed('haul')) this.haul();
     if (this.input.wasPressed('cancel') && this.#panel !== 'none' && !this.placement.active) {
       this.openPanel('none');
     }
 
-    // Keep the market stocked when playing offline. Checked on a slow cadence
-    // rather than every tick: this only needs to be right by the time the
-    // player next opens the panel.
-    if (this.#contractsAreLocal && this.world.tick >= this.#nextContractCheck) {
-      this.#nextContractCheck = this.world.tick + 300;
-      this.#contracts = refreshLocalContracts(this.#contracts, this.world.tick, this.#contractRng);
-    }
+    this.board.fixedUpdate();
 
     this.#onboardingCropBoost.update(this.onboarding.currentBeat?.id === 'tend');
-    const onboardingContext = this.#onboardingContext();
+    let onboardingContext = this.#onboardingContext();
+    // Once the player has completed the production/egg loop, guarantee one
+    // fresh warning before advancing into the incident lesson. This keeps the
+    // lesson inside onboarding and prevents it from resurfacing after Finish.
+    if (
+      this.onboarding.active &&
+      onboardingContext.reinvestments > 0 &&
+      onboardingContext.eggsCollected > 0 &&
+      (this.onboarding.currentBeat?.id === 'reinvest' || this.onboarding.currentBeat?.id === 'eggs')
+    ) {
+      this.incidents.ensureOnboardingWarning();
+      onboardingContext = this.#onboardingContext();
+    }
     this.onboarding.start(onboardingContext);
     this.onboarding.update(onboardingContext);
 
-    this.#evaluateOutcome(context);
+    void context;
   }
 
   update(context: RenderContext): void {
@@ -278,46 +363,46 @@ export class SessionController {
     this.onboarding.skip(this.#onboardingContext());
   }
 
-  landProgress(): number {
-    return expansionProgress(this.world.balance);
-  }
-
-  landAffordable(): boolean {
-    return this.world.balance >= LAND_PARCEL_COST && this.world.landParcels < 2;
+  /** Progress toward the current milestone, for the HUD objective meter. */
+  milestoneProgress(): number {
+    return this.career.milestoneProgress();
   }
 
   shelterFree(): number {
-    const used = this.world.animals.reduce(
+    const used = this.career.world.animals.reduce(
       (sum, group) => sum + group.count * (ANIMALS[group.species]?.shelterSlots ?? 1),
       0,
     );
-    return Math.max(0, shelterCapacity(this.world) - used);
+    return Math.max(0, this.career.world.shelterCapacity() - used);
   }
 
-  summary(): RunSummary {
-    const stats = this.world.stats;
-    return {
-      outcome: this.#outcome,
-      elapsedTicks: this.world.tick,
-      finalBalance: this.world.balance,
-      peakBalance: stats.peakBalance as Cents,
-      totalEarned: stats.totalEarned as Cents,
-      totalSpent: stats.totalSpent as Cents,
-      cropsHarvested: stats.cropsHarvested,
-      cyclesCompleted: stats.cyclesCompleted,
-      eventsSurvived: stats.eventsSurvived,
-      eventsPrevented: stats.eventsPrevented,
-      buildingsBuilt: stats.buildingsBuilt,
-    };
+  summary() {
+    return this.careerDirector.summary('season');
+  }
+
+  #reportCareerChange(action: string, result: Result<unknown>): void {
+    if (!result.ok) {
+      this.events.emit('session:refused', { action, reason: result.reason });
+      return;
+    }
+    this.events.emit('session:career-changed', { action });
   }
 
   #onboardingContext(): OnboardingContext {
-    const stats = this.world.stats;
+    const stats = this.career.statistics;
+    const world = this.career.world;
     let tendCount = 0;
     let planted = 0;
-    for (const plot of this.world.plots.values()) {
+    let eggsReady = 0;
+    let eggsCollected = world.carry.items['eggs'] ?? 0;
+    for (const plot of world.plots.values()) {
       if (plot.cropId) planted += 1;
       tendCount += plot.tendCount;
+    }
+    for (const store of world.stores.stores) {
+      const eggs = store.items['eggs'] ?? 0;
+      if (store.id.startsWith('stack-')) eggsReady += eggs;
+      else eggsCollected += eggs;
     }
     return {
       nowMs: this.#now() - this.#startedAt,
@@ -326,23 +411,18 @@ export class SessionController {
       plantedPlots: planted,
       tendCount,
       cropsHarvested: stats.cropsHarvested,
+      goodsHauled: stats.goodsHauled,
       salesMade: this.#salesMade,
       reinvestments:
-        this.#reinvestments +
-        Math.max(0, this.world.buildings.length - this.#startingBuildingCount),
-      warningActive: this.eventDirector.current?.phase === 'warning',
-      eventsResolved: this.#eventsResolved,
+        this.#reinvestments + Math.max(0, world.buildings.length - this.#startingBuildingCount),
+      eggsReady,
+      eggsCollected,
+      warningActive: this.incidents.active.some(
+        (instance) => this.career.tick < instance.impactTick && !isMitigated(instance as never),
+      ),
+      eventsResolved: this.#incidentsResolved,
       marketOpen: this.#panel === 'market',
       buildOpen: this.#panel === 'build',
     };
-  }
-
-  #evaluateOutcome(_context: FixedUpdateContext): void {
-    const next = evaluateRun(this.world.runState());
-    if (next === 'in_progress' || next === this.#outcome) return;
-    this.#outcome = next;
-    this.openPanel('none');
-    this.placement.cancel('player');
-    this.events.emit('session:outcome', { summary: this.summary() });
   }
 }

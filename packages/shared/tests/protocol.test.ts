@@ -21,6 +21,9 @@ import {
   putSaveRequestSchema,
   spotSellRequestSchema,
   marketOrderSchema,
+  newCareer,
+  type FarmSiteSaveState,
+  type SaveState,
 } from '../src/index.js';
 import { z } from 'zod';
 
@@ -37,7 +40,7 @@ describe('protocol version', () => {
 
   it('pins the current version, so a bump is a deliberate edit', () => {
     expect(PROTOCOL_VERSION).toBe('1.0');
-    expect(SAVE_SCHEMA_VERSION).toBe(1);
+    expect(SAVE_SCHEMA_VERSION).toBe(2);
   });
 });
 
@@ -91,20 +94,25 @@ describe('envelope', () => {
 });
 
 describe('save schema hardening', () => {
-  const validState = {
-    schemaVersion: 1,
-    tick: 10,
-    balance: 5000,
-    plots: [],
-    buildings: [],
-    animals: [],
-    inventory: {},
-    landParcels: 1,
-    rngState: 12,
-  };
+  const validState = newCareer({ careerId: 'protocol-career', seed: 12 });
+
+  const updateSite = (
+    state: SaveState,
+    mutate: (site: FarmSiteSaveState) => FarmSiteSaveState,
+  ): SaveState => ({
+    ...state,
+    sites: state.sites.map((site) => (site.id === state.activeSiteId ? mutate(site) : site)),
+  });
 
   it('accepts a well-formed save', () => {
     expect(saveStateSchema.safeParse(validState).success).toBe(true);
+    expect(validState.onboardingCompleted).toBe(false);
+  });
+
+  it('treats a save from before the tutorial flag as already onboarded', () => {
+    const previousFormat = { ...validState } as Record<string, unknown>;
+    delete previousFormat['onboardingCompleted'];
+    expect(saveStateSchema.parse(previousFormat).onboardingCompleted).toBe(true);
   });
 
   it('rejects fractional money', () => {
@@ -116,33 +124,37 @@ describe('save schema hardening', () => {
   });
 
   it('rejects an unknown crop id', () => {
-    const state = {
-      ...validState,
-      plots: [
-        {
-          id: 'p1',
-          cropId: 'diamonds',
-          grownTicks: 0,
-          tendCount: 0,
-          water: 1,
-          irrigated: false,
-          diseased: false,
-          eventMultiplier: 1,
-        },
-      ],
-    };
+    const state = updateSite(validState, (site) => ({
+      ...site,
+      plots: site.plots.map((plot, index) =>
+        index === 0 ? { ...plot, cropId: 'diamonds' as never } : plot,
+      ),
+    }));
     expect(saveStateSchema.safeParse(state).success).toBe(false);
   });
 
   it('rejects an unbounded inventory', () => {
     const inventory: Record<string, number> = {};
     for (let i = 0; i < 100; i += 1) inventory[`item${i}`] = 1;
-    expect(saveStateSchema.safeParse({ ...validState, inventory }).success).toBe(false);
+    const state = updateSite(validState, (site) => ({
+      ...site,
+      stores: site.stores.map((store, index) =>
+        index === 0 ? { ...store, items: inventory } : store,
+      ),
+    }));
+    expect(saveStateSchema.safeParse(state).success).toBe(false);
   });
 
   it('rejects an inventory key that is not a safe id', () => {
     expect(
-      saveStateSchema.safeParse({ ...validState, inventory: { '../../etc/passwd': 1 } }).success,
+      saveStateSchema.safeParse(
+        updateSite(validState, (site) => ({
+          ...site,
+          stores: site.stores.map((store, index) =>
+            index === 0 ? { ...store, items: { '../../etc/passwd': 1 } } : store,
+          ),
+        })),
+      ).success,
     ).toBe(false);
   });
 
@@ -157,7 +169,9 @@ describe('save schema hardening', () => {
       diseased: false,
       eventMultiplier: 1,
     }));
-    expect(saveStateSchema.safeParse({ ...validState, plots }).success).toBe(false);
+    expect(
+      saveStateSchema.safeParse(updateSite(validState, (site) => ({ ...site, plots }))).success,
+    ).toBe(false);
   });
 
   it('requires an expected revision on writes', () => {

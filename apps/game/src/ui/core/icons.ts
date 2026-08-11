@@ -36,8 +36,11 @@ export function iconButton(
 }
 
 export function itemIcon(itemId: string): UiIconId {
-  if (itemId === 'corn') return 'corn';
-  if (itemId === 'pumpkin') return 'pumpkin';
+  if (Object.hasOwn(UI_ICON_URLS, itemId)) return itemId as UiIconId;
   if (itemId === 'eggs') return 'eggs';
+  if (itemId === 'milk') return 'milk';
+  if (itemId === 'flour') return 'flour';
+  if (itemId === 'cheese') return 'cheese';
+  if (itemId === 'preserves') return 'preserves';
   return 'wheat';
 }

@@ -44,11 +44,10 @@ export class OnboardingDirector {
   /**
    * Beats whose trigger has not fired yet.
    *
-   * The setback beat teaches a response to a warning, and a warning may not
-   * happen during onboarding at all. Blocking the sequence on it would leave
-   * the player staring at "Something is coming" with a clear sky; dropping it
-   * would mean never teaching the countermeasure. So it is deferred and shown
-   * just-in-time - even after onboarding has otherwise completed.
+   * The setback beat teaches a response to a warning, so it remains deferred
+   * until the session has scheduled a real actionable incident. Deferred beats
+   * are discarded at completion: a finished or skipped tutorial must never
+   * resurrect an old coach mark.
    */
   readonly #deferred: Beat[] = [];
   #index = -1;
@@ -69,7 +68,7 @@ export class OnboardingDirector {
     return this.#started && !this.#finished;
   }
 
-  /** True while a just-in-time beat is still waiting for its trigger. */
+  /** True while an optional beat is still waiting during active onboarding. */
   get hasDeferredBeats(): boolean {
     return this.#deferred.length > 0;
   }
@@ -107,10 +106,12 @@ export class OnboardingDirector {
 
   /** Called every fixed tick with a fresh snapshot. */
   update(context: OnboardingContext): void {
-    if (!this.#started) return;
+    if (!this.#started || this.#finished) return;
 
-    // A deferred beat fires the moment its trigger does, whether or not the
-    // main sequence has finished.
+    // A deferred beat fires the moment its trigger does while onboarding is
+    // still active. Once the tutorial finishes it stays finished: resurrecting
+    // an old coach mark made Skip a no-op and trapped returning players in a
+    // lesson they had already completed.
     if (!this.currentBeat) {
       const readyAt = this.#deferred.findIndex((candidate) => candidate.waitsFor?.(context));
       if (readyAt >= 0) {
@@ -219,6 +220,7 @@ export class OnboardingDirector {
     if (this.#finished) return;
     this.#finished = true;
     this.#index = this.#beats.length;
+    this.#deferred.length = 0;
     this.#revealAll();
     this.events.emit('onboarding:complete', {
       durationMs: context.nowMs - this.#startedAt,

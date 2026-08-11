@@ -1,378 +1,448 @@
 /**
- * The authoritative *client-side* model of one farm.
+ * One farm site: the land, and everything standing on it.
  *
- * Responsibilities, and deliberately nothing else:
- *   - hold the simulation state (plots, buildings, animals, inventory, wallet)
- *   - advance that state by whole ticks using the shared rules
- *   - serialise to and from the shared save schema
+ * FarmWorld used to hold all of the state and all of the evolution. Adding
+ * hauling, processing, workers and utilities to that class would have produced
+ * exactly the monolith docs/AI_INSTRUCTIONS.md forbids, so it is now a facade
+ * over focused models and the owner of one thing they cannot own individually:
+ * the order they tick in (docs/PROGRESSION_GAMEPLAY_PLAN.md §36).
  *
- * It contains no Three.js, no DOM and no fetch, which is what lets the entire
- * economy be unit-tested in Node and re-simulated by the server. Player-issued
- * mutations live in FarmCommands.ts so that "how the world evolves" and "what
- * the player may do to it" stay separable.
+ * It still contains no Three.js, no DOM and no fetch, which is what lets the
+ * entire simulation be unit-tested in Node and re-checked by the server.
+ * Money is deliberately *not* here - a site does not have a wallet, a career
+ * does - so advancing a site reports what it cost rather than paying for it.
  */
 import {
   ANIMALS,
-  BUILDINGS,
-  advancePlot,
-  computeYield,
-  emptyPlot,
-  plotStage,
-  requireCrop,
-  storageCapacity,
-  upkeepForTicks,
-  addItems,
-  asPlotId,
-  cents,
-  createRng,
-  type BuildingKind,
-  type Cents,
+  FIELD_SPOILAGE_MULTIPLIER,
+  STORED_SPOILAGE_MULTIPLIER,
+  bedsForParcels,
+  type AnimalSpecies,
+  type FarmSiteSaveState,
   type Inventory,
   type PlotState,
-  type Rng,
-  type AnimalSpecies,
-  type RunState,
-  type SaveState,
-  SAVE_SCHEMA_VERSION,
-  STARTING_BALANCE,
+  type Season,
+  type SpecializationId,
 } from '@farmrise/shared';
 import { EventBus } from '@engine/core/EventBus.js';
 import { GridPhysics } from '@engine/physics/GridPhysics.js';
 import { TileFlag, TileGrid } from '@engine/physics/TileGrid.js';
 import type { LevelDefinition } from './levels/LevelDefinition.js';
-import { addBuildingCollision, addShelterCollision } from './collisionProfiles.js';
+import { addShelterCollision } from './collisionProfiles.js';
+import { ParcelModel } from './models/ParcelModel.js';
+import { FieldModel } from './models/FieldModel.js';
+import { BuildingModel, storageContribution, type PlacedBuilding } from './models/BuildingModel.js';
+import { StoreModel, type StoreState } from './models/StoreModel.js';
+import { AnimalModel } from './models/AnimalModel.js';
+import { ProcessingModel } from './models/ProcessingModel.js';
+import { WorkerModel, type WorkBoard } from './models/WorkerModel.js';
+import { CarryModel } from './models/CarryModel.js';
 
-export interface PlacedBuilding {
-  kind: BuildingKind;
-  tileX: number;
-  tileZ: number;
-  remainingBuildTicks: number;
+export type { PlacedBuilding } from './models/BuildingModel.js';
+
+export interface SiteTickContext {
+  readonly season: Season;
+  readonly specialization: SpecializationId | null;
+  readonly workBoard?: WorkBoard;
+  /** Items temporarily protected from field spoilage by a guided lesson. */
+  readonly protectedFieldItems?: readonly string[];
 }
 
-export interface AnimalGroup {
-  species: AnimalSpecies;
-  count: number;
-  cycleTicks: number;
-}
-
-/**
- * Counters the outcome screen and the analytics funnel read.
- *
- * Deliberately NOT part of the save: they describe a single sitting, not
- * persistent progress, and the core playtest question ("does this create an
- * engaging reason to begin another production cycle?") is about behaviour
- * within a session.
- */
-export interface RunStats {
-  totalEarned: number;
-  totalSpent: number;
-  peakBalance: number;
-  cropsHarvested: number;
-  /** A cycle is counted when a plot goes from planted to harvested. */
-  cyclesCompleted: number;
-  eventsSurvived: number;
-  eventsPrevented: number;
-  buildingsBuilt: number;
-  itemsSold: number;
+/** What one tick of a site cost and produced. The career applies the money. */
+export interface SiteTickReport {
+  readonly upkeep: number;
+  readonly wages: number;
+  readonly completedBuildings: readonly PlacedBuilding[];
+  /** Units completed by processor batches. Animal produce is intentionally excluded. */
+  readonly processedUnits: number;
+  readonly producedUnits: number;
+  readonly spoiledUnits: number;
 }
 
 export interface FarmWorldEvents extends Record<string, unknown> {
   'world:plot-changed': { plotId: string };
-  'world:harvested': { plotId: string; itemId: string; quantity: number; spilled: number };
-  'world:balance-changed': { balance: Cents; delta: Cents };
-  'world:building-placed': { kind: BuildingKind; tileX: number; tileZ: number };
-  'world:building-completed': { kind: BuildingKind; tileX: number; tileZ: number };
+  'world:plots-added': { plotIds: readonly string[] };
+  'world:harvested': { plotId: string; itemId: string; quantity: number; carried: number };
+  'world:building-placed': { kind: string; tileX: number; tileZ: number };
+  'world:building-completed': { kind: string; tileX: number; tileZ: number };
   'world:animal-purchased': { species: AnimalSpecies; count: number };
   'world:produce': { itemId: string; quantity: number };
   'world:storage-full': { itemId: string; spilled: number };
-  'world:sold': { itemId: string; quantity: number; payout: Cents; viaContract: boolean };
-  'world:land-purchased': { parcels: number };
+  'world:parcel-acquired': { parcelId: string; displayName: string };
+  'world:carry-changed': { units: number; capacity: number };
 }
 
 export class FarmWorld {
+  readonly id: string;
   readonly grid: TileGrid;
   readonly physics: GridPhysics;
   readonly events = new EventBus<FarmWorldEvents>();
   readonly level: LevelDefinition;
 
-  #tick = 0;
-  #balance: Cents = STARTING_BALANCE;
-  #plots = new Map<string, PlotState>();
-  #buildings: PlacedBuilding[] = [];
-  #animals: AnimalGroup[] = [];
-  #inventory: Inventory = {};
-  #landParcels = 1;
-  #rng: Rng;
-  /** Fractional upkeep carried between ticks so rounding cannot be farmed. */
-  #upkeepRemainder = 0;
-  readonly #stats: RunStats = {
-    totalEarned: 0,
-    totalSpent: 0,
-    peakBalance: 0,
-    cropsHarvested: 0,
-    cyclesCompleted: 0,
-    eventsSurvived: 0,
-    eventsPrevented: 0,
-    buildingsBuilt: 0,
-    itemsSold: 0,
-  };
+  readonly parcels: ParcelModel;
+  readonly fields: FieldModel;
+  readonly structures: BuildingModel;
+  readonly stores: StoreModel;
+  readonly livestock: AnimalModel;
+  readonly processing: ProcessingModel;
+  readonly workforce: WorkerModel;
+  readonly carry = new CarryModel();
 
-  constructor(level: LevelDefinition, rngSeed: number) {
+  #tick = 0;
+  #upkeepRemainder = 0;
+  #wageRemainder = 0;
+
+  constructor(level: LevelDefinition, ownedParcelIds: readonly string[], siteId: string) {
+    this.id = siteId;
     this.level = level;
     this.grid = new TileGrid(level.grid.width, level.grid.depth, level.grid.tileSize);
     this.physics = new GridPhysics(this.grid, { roadMultiplier: 0.55 });
-    this.#rng = createRng(rngSeed);
+
     this.#applyLevelToGrid();
-    for (const placement of level.plots) {
-      this.#plots.set(placement.id, emptyPlot(asPlotId(placement.id)));
-      this.grid.setFlag(placement.tileX, placement.tileZ, TileFlag.Soil, true);
-    }
+    this.parcels = new ParcelModel(this.grid, ownedParcelIds);
+    this.fields = new FieldModel(this.grid);
+    this.structures = new BuildingModel(this.grid);
+    this.stores = new StoreModel();
+    this.livestock = new AnimalModel();
+    this.processing = new ProcessingModel();
+    this.workforce = new WorkerModel();
+
+    this.fields.addBeds(bedsForParcels(this.parcels.ownedIds));
+    this.#bridgeEvents();
+
     for (const building of level.startingBuildings) {
-      this.#buildings.push({ ...building, remainingBuildTicks: 0 });
-      this.#applyBuildingToGrid(building.kind, building.tileX, building.tileZ);
+      this.structures.add({
+        id: this.structures.nextId(),
+        kind: building.kind,
+        tileX: building.tileX,
+        tileZ: building.tileZ,
+        rotation: 0,
+        remainingBuildTicks: 0,
+        broken: false,
+      });
     }
+    this.refreshIrrigation();
   }
 
   get tick(): number {
     return this.#tick;
   }
-  get balance(): Cents {
-    return this.#balance;
-  }
-  get inventory(): Inventory {
-    return this.#inventory;
-  }
+
   get plots(): ReadonlyMap<string, PlotState> {
-    return this.#plots;
+    return this.fields.plots;
   }
+
   get buildings(): readonly PlacedBuilding[] {
-    return this.#buildings;
-  }
-  get animals(): readonly AnimalGroup[] {
-    return this.#animals;
-  }
-  get landParcels(): number {
-    return this.#landParcels;
-  }
-  get rng(): Rng {
-    return this.#rng;
+    return this.structures.buildings;
   }
 
-  get stats(): Readonly<RunStats> {
-    return this.#stats;
+  get animals(): readonly { species: AnimalSpecies; count: number }[] {
+    return this.livestock.groups;
   }
 
-  /** Mutable access for the systems that own a counter. Kept narrow on purpose. */
-  bumpStat(key: keyof RunStats, by = 1): void {
-    this.#stats[key] += by;
-  }
-
-  /**
-   * Projection used to decide whether the run is won, lost, or continuing.
-   * Shared with the server, which evaluates the identical predicate.
-   */
-  runState(): RunState {
-    return {
-      balance: this.#balance,
-      inventory: this.#inventory,
-      landParcels: this.#landParcels,
-      growingPlots: [...this.#plots.values()].filter((plot) => plot.cropId !== null).length,
-      buildingInProgress: this.#buildings.some((b) => b.remainingBuildTicks > 0),
-    };
-  }
-
-  setLandParcels(parcels: number): void {
-    this.#landParcels = parcels;
-    this.events.emit('world:land-purchased', { parcels });
+  /** Everything the farm holds anywhere, for the market and milestone counts. */
+  get inventory(): Inventory {
+    return this.stores.combined();
   }
 
   get storageCapacity(): number {
-    return storageCapacity(this.completedBuildings('barn').length);
-  }
-
-  completedBuildings(kind?: BuildingKind): PlacedBuilding[] {
-    return this.#buildings.filter(
-      (building) => building.remainingBuildTicks <= 0 && (!kind || building.kind === kind),
-    );
+    return this.stores.totalCapacity();
   }
 
   getPlot(plotId: string): PlotState | undefined {
-    return this.#plots.get(plotId);
+    return this.fields.get(plotId);
   }
 
   plotPlacement(plotId: string) {
-    return this.level.plots.find((plot) => plot.id === plotId);
+    return this.fields.placement(plotId);
   }
 
   setPlot(plotId: string, next: PlotState): void {
-    this.#plots.set(plotId, next);
-    this.events.emit('world:plot-changed', { plotId });
+    this.fields.set(plotId, next);
   }
 
-  adjustBalance(delta: Cents): void {
-    this.#balance = cents(Math.max(0, this.#balance + delta));
-    if (delta > 0) this.#stats.totalEarned += delta;
-    else this.#stats.totalSpent += -delta;
-    this.#stats.peakBalance = Math.max(this.#stats.peakBalance, this.#balance);
-    this.events.emit('world:balance-changed', { balance: this.#balance, delta });
+  readyPlotIds(): string[] {
+    return this.fields.readyPlotIds();
   }
 
-  addToInventory(itemId: string, quantity: number): { stored: number; spilled: number } {
-    const result = addItems(this.#inventory, itemId, quantity, this.storageCapacity);
-    this.#inventory = result.inventory;
-    if (result.spilled > 0) {
-      this.events.emit('world:storage-full', { itemId, spilled: result.spilled });
-    }
-    return { stored: result.stored, spilled: result.spilled };
-  }
-
-  setInventory(inventory: Inventory): void {
-    this.#inventory = inventory;
-  }
-
-  addBuilding(building: PlacedBuilding): void {
-    this.#buildings.push(building);
-    // The footprint is reserved immediately, so two builds cannot claim the
-    // same tiles while the first is still under construction.
-    this.#applyBuildingToGrid(building.kind, building.tileX, building.tileZ);
-    this.events.emit('world:building-placed', {
-      kind: building.kind,
-      tileX: building.tileX,
-      tileZ: building.tileZ,
-    });
-  }
-
-  addAnimals(species: AnimalSpecies, count: number): void {
-    const existing = this.#animals.find((group) => group.species === species);
-    if (existing) existing.count += count;
-    else this.#animals.push({ species, count, cycleTicks: 0 });
-    this.events.emit('world:animal-purchased', { species, count });
+  completedBuildings(kind?: PlacedBuilding['kind']): PlacedBuilding[] {
+    return this.structures.completed(kind);
   }
 
   /**
-   * Advances the whole farm by one fixed tick. Called from the game loop's
-   * fixedUpdate, and by the server when it replays a submitted save.
+   * Advances the whole site by one fixed tick, in dependency order.
+   *
+   * Fields grow, construction finishes, machines run, animals eat, goods
+   * spoil, and only then do workers look for something to do - so a worker
+   * never picks up a crop that this tick's growth had not yet ripened.
    */
-  advance(dtTicks = 1): void {
+  advance(dtTicks: number, context: SiteTickContext): SiteTickReport {
     this.#tick += dtTicks;
-    this.#advancePlots(dtTicks);
-    this.#advanceConstruction(dtTicks);
-    this.#advanceAnimals(dtTicks);
-    this.#chargeUpkeep(dtTicks);
-  }
 
-  toSaveState(): SaveState {
-    return {
-      schemaVersion: SAVE_SCHEMA_VERSION,
-      tick: this.#tick,
-      balance: this.#balance,
-      plots: [...this.#plots.values()].map((plot) => ({
-        id: plot.id,
-        cropId: plot.cropId,
-        grownTicks: plot.grownTicks,
-        tendCount: plot.tendCount,
-        water: plot.water,
-        irrigated: plot.irrigated,
-        diseased: plot.diseased,
-        eventMultiplier: plot.eventMultiplier,
-      })),
-      buildings: this.#buildings.map((building) => ({ ...building })),
-      animals: this.#animals.map((group) => ({ ...group })),
-      inventory: { ...this.#inventory },
-      landParcels: this.#landParcels,
-      rngState: this.#rng.state(),
-    };
-  }
+    this.fields.advance(dtTicks, context.season);
+    const completedBuildings = this.structures.advance(dtTicks);
+    if (completedBuildings.length > 0) {
+      this.refreshIrrigation();
+      this.#syncStoresWithBuildings();
+    }
 
-  /** Rebuilds a world from a save. The level is looked up by the caller. */
-  static fromSaveState(level: LevelDefinition, state: SaveState): FarmWorld {
-    const world = new FarmWorld(level, state.rngState);
-    world.#tick = state.tick;
-    world.#balance = state.balance;
-    world.#landParcels = state.landParcels;
-    world.#inventory = { ...state.inventory };
-    world.#buildings = state.buildings.map((building) => ({ ...building }));
-    world.#animals = state.animals.map((group) => ({ ...group }));
-    world.#plots = new Map(
-      state.plots.map((plot) => [plot.id as string, { ...plot, id: asPlotId(plot.id as string) }]),
+    const batches = this.processing.advance(dtTicks, context.specialization, (buildingId) => {
+      const building = this.structures.get(buildingId);
+      if (!building) return undefined;
+      return {
+        kind: building.kind as never,
+        tileX: building.tileX,
+        tileZ: building.tileZ,
+        broken: building.broken,
+      };
+    });
+
+    let processedUnits = 0;
+    let producedUnits = 0;
+    for (const batch of batches) {
+      for (const [itemId, quantity] of Object.entries(batch.items)) {
+        processedUnits += quantity;
+        producedUnits += quantity;
+        this.depositNear(batch.tileX, batch.tileZ, itemId, quantity, 1);
+        this.events.emit('world:produce', { itemId, quantity });
+      }
+    }
+
+    const produce = this.livestock.advance(dtTicks, {
+      available: (itemId) => this.stores.totalOf(itemId),
+      consume: (itemId, quantity) => {
+        this.stores.withdrawAnywhere(itemId, quantity);
+      },
+    });
+    for (const entry of produce) {
+      producedUnits += entry.quantity;
+      // Animal products are a physical pickup, not an invisible transfer into
+      // the yard inventory. The tile in front of the shelter remains
+      // walkable, and putting the stack one tile away also prevents the yard
+      // store from winning the nearest-store tie when the player collects it.
+      this.dropAt(entry.tileX, entry.tileZ + 1, entry.itemId, entry.quantity, 1);
+    }
+
+    const spoiledUnits = this.stores.advance(
+      dtTicks,
+      STORED_SPOILAGE_MULTIPLIER,
+      FIELD_SPOILAGE_MULTIPLIER,
+      context.protectedFieldItems,
     );
-    for (const building of world.#buildings) {
-      world.#applyBuildingToGrid(building.kind, building.tileX, building.tileZ);
+
+    if (context.workBoard) this.workforce.advance(dtTicks, context.workBoard);
+
+    const owedUpkeep = this.structures.upkeepFor(dtTicks) + this.#upkeepRemainder;
+    const upkeep = Math.floor(owedUpkeep);
+    this.#upkeepRemainder = owedUpkeep - upkeep;
+
+    const owedWages = this.workforce.wagesFor(dtTicks) + this.#wageRemainder;
+    const wages = Math.floor(owedWages);
+    this.#wageRemainder = owedWages - wages;
+
+    return { upkeep, wages, completedBuildings, processedUnits, producedUnits, spoiledUnits };
+  }
+
+  /**
+   * Puts goods into the nearest store, or leaves them on the ground as a field
+   * stack if there is nothing in range.
+   *
+   * A field stack is a real place with a real spoilage rate, which is what
+   * makes "I will come back for it" a decision with a cost.
+   */
+  depositNear(
+    tileX: number,
+    tileZ: number,
+    itemId: string,
+    quantity: number,
+    quality: number,
+  ): void {
+    const store = this.stores.nearest(tileX, tileZ, 3);
+    if (store) {
+      const { spilled } = this.stores.deposit(store.id, itemId, quantity, quality);
+      if (spilled > 0) this.events.emit('world:storage-full', { itemId, spilled });
+      return;
     }
-    world.#refreshIrrigation();
-    return world;
+    this.dropAt(tileX, tileZ, itemId, quantity, quality);
   }
 
-  #advancePlots(dtTicks: number): void {
-    for (const [plotId, plot] of this.#plots) {
-      if (!plot.cropId) continue;
-      const next = advancePlot(plot, dtTicks);
-      if (next !== plot) this.#plots.set(plotId, next);
+  /** Leaves goods at an exact tile even when a store is nearby. */
+  dropAt(tileX: number, tileZ: number, itemId: string, quantity: number, quality: number): void {
+    const stackId = `stack-${tileX}-${tileZ}`;
+    if (!this.stores.get(stackId)) {
+      this.stores.add({
+        id: stackId,
+        buildingId: null,
+        tileX,
+        tileZ,
+        capacity: 999,
+        preserving: false,
+        items: {},
+        quality: {},
+        spoilageRemainder: {},
+      });
     }
+    this.stores.deposit(stackId, itemId, quantity, quality);
   }
 
-  #advanceConstruction(dtTicks: number): void {
-    for (const building of this.#buildings) {
-      if (building.remainingBuildTicks <= 0) continue;
-      building.remainingBuildTicks = Math.max(0, building.remainingBuildTicks - dtTicks);
-      if (building.remainingBuildTicks === 0) {
-        this.#stats.buildingsBuilt += 1;
-        this.#refreshIrrigation();
-        this.events.emit('world:building-completed', {
-          kind: building.kind,
-          tileX: building.tileX,
-          tileZ: building.tileZ,
-        });
-      }
-    }
+  acquireParcel(parcelId: string): boolean {
+    const parcel = this.parcels.acquire(parcelId);
+    if (!parcel) return false;
+    this.fields.addBeds([...parcel.beds]);
+    this.structures.reapplyAll();
+    this.events.emit('world:parcel-acquired', {
+      parcelId: parcel.id,
+      displayName: parcel.displayName,
+    });
+    return true;
   }
 
-  #advanceAnimals(dtTicks: number): void {
-    for (const group of this.#animals) {
-      if (group.count <= 0) continue;
-      const definition = ANIMALS[group.species];
-      if (!definition) continue;
-      group.cycleTicks += dtTicks;
-      if (group.cycleTicks < definition.cycleTicks) continue;
-      group.cycleTicks -= definition.cycleTicks;
-
-      // Feed is consumed from stores. No feed means no produce this cycle -
-      // a visible, recoverable consequence rather than losing the animals.
-      const feedNeeded = definition.feedPerCycle * group.count;
-      const feedHeld = this.#inventory[definition.feedItemId] ?? 0;
-      if (feedHeld < feedNeeded) continue;
-      this.#inventory = { ...this.#inventory, [definition.feedItemId]: feedHeld - feedNeeded };
-
-      const produced = definition.producePerCycle * group.count;
-      const { stored } = this.addToInventory(definition.producesItemId, produced);
-      if (stored > 0) {
-        this.events.emit('world:produce', { itemId: definition.producesItemId, quantity: stored });
-      }
-    }
-  }
-
-  #chargeUpkeep(dtTicks: number): void {
-    const kinds = this.completedBuildings().map((building) => building.kind);
-    if (kinds.length === 0) return;
-    const owed = upkeepForTicks(kinds, dtTicks) + this.#upkeepRemainder;
-    const whole = Math.floor(owed);
-    this.#upkeepRemainder = owed - whole;
-    if (whole > 0) this.adjustBalance(cents(-whole));
-  }
-
-  /** Marks plots adjacent to a completed irrigation building as irrigated. */
-  #refreshIrrigation(): void {
-    const sources = this.completedBuildings('irrigation');
-    for (const [plotId, plot] of this.#plots) {
-      const placement = this.plotPlacement(plotId);
+  /** Marks plots served by a completed irrigation point or well. */
+  refreshIrrigation(): void {
+    const sources = this.structures.irrigatedTiles();
+    for (const [plotId, plot] of this.fields.plots) {
+      const placement = this.fields.placement(plotId);
       if (!placement) continue;
       const irrigated = sources.some(
         (source) =>
-          Math.abs(source.tileX - placement.tileX) <= 1 &&
-          Math.abs(source.tileZ - placement.tileZ) <= 1,
+          Math.abs(source.tileX - placement.tileX) <= source.radius &&
+          Math.abs(source.tileZ - placement.tileZ) <= source.radius,
       );
-      if (irrigated !== plot.irrigated) this.#plots.set(plotId, { ...plot, irrigated });
+      if (irrigated !== plot.irrigated) this.fields.set(plotId, { ...plot, irrigated });
     }
+  }
+
+  /** Shelter capacity is baseline 4, plus 2 per completed fence. */
+  shelterCapacity(): number {
+    return 4 + this.structures.completed('fence').length * 2;
+  }
+
+  animalSlotsUsed(): number {
+    return this.livestock.usedSlots();
+  }
+
+  // -- persistence ---------------------------------------------------------
+
+  toSaveState(regionId: string, seed: number, careerTick: number): FarmSiteSaveState {
+    return {
+      id: this.id,
+      regionId,
+      seed,
+      levelId: this.level.id,
+      ownedParcelIds: [...this.parcels.ownedIds],
+      active: true,
+      lastSimulatedTick: careerTick,
+      plots: this.fields.toSaveState() as FarmSiteSaveState['plots'],
+      buildings: this.structures.toSaveState() as FarmSiteSaveState['buildings'],
+      stores: this.stores.toSaveState() as FarmSiteSaveState['stores'],
+      animals: this.livestock.toSaveState() as FarmSiteSaveState['animals'],
+      processors: this.processing.toSaveState() as FarmSiteSaveState['processors'],
+      workers: this.workforce.toSaveState().map((worker) => ({
+        id: worker.id,
+        role: worker.role,
+        displayName: worker.displayName,
+        skill: worker.skill,
+        tasksCompleted: worker.tasksCompleted,
+        priorities: [...worker.priorities],
+        parcelId: worker.parcelId,
+        hutBuildingId: worker.hutBuildingId,
+        actionTicks: worker.actionProgress,
+        carrying: worker.carrying,
+      })) as FarmSiteSaveState['workers'],
+      carried: this.carry.toSaveState() as FarmSiteSaveState['carried'],
+      upkeepRemainder: this.#upkeepRemainder,
+      wageRemainder: this.#wageRemainder,
+    };
+  }
+
+  /** Rebuilds a site from a save. The level is looked up by the caller. */
+  static fromSaveState(level: LevelDefinition, state: FarmSiteSaveState): FarmWorld {
+    const world = new FarmWorld(level, state.ownedParcelIds, state.id);
+    world.#tick = state.lastSimulatedTick;
+    world.#upkeepRemainder = state.upkeepRemainder;
+    world.#wageRemainder = state.wageRemainder;
+
+    world.structures.hydrate(state.buildings as unknown as PlacedBuilding[]);
+    world.fields.hydrate(state.plots as unknown as PlotState[]);
+    for (const store of state.stores) {
+      world.stores.add({ ...(store as unknown as StoreState) });
+    }
+    world.livestock.hydrate(state.animals as never);
+    world.processing.hydrate(state.processors as never);
+    world.workforce.hydrate(
+      state.workers.map((worker) => ({
+        ...worker,
+        actionProgress: worker.actionTicks,
+        currentTask: null,
+        tileX: level.shelter.tileX,
+        tileZ: level.shelter.tileZ,
+      })) as never,
+    );
+    world.carry.hydrate(state.carried as never);
+    world.refreshIrrigation();
+    world.#syncStoresWithBuildings();
+    return world;
+  }
+
+  // -- internals -----------------------------------------------------------
+
+  #syncStoresWithBuildings(): void {
+    for (const building of this.structures.completed()) {
+      const contributes =
+        building.kind === 'barn' ||
+        building.kind === 'cold_store' ||
+        building.kind === 'loading_pad';
+      if (!contributes) continue;
+      const storeId = `store-${building.id}`;
+      if (this.stores.get(storeId)) continue;
+      this.stores.add({
+        id: storeId,
+        buildingId: building.id,
+        tileX: building.tileX,
+        tileZ: building.tileZ,
+        capacity: storageContribution(building.kind),
+        preserving: building.kind === 'cold_store',
+        items: {},
+        quality: {},
+        spoilageRemainder: {},
+      });
+    }
+    for (const building of this.structures.completed()) {
+      const isProcessor =
+        building.kind === 'mill' ||
+        building.kind === 'creamery' ||
+        building.kind === 'preserve_kitchen';
+      if (isProcessor && !this.processing.forBuilding(building.id)) {
+        this.processing.add(building.id);
+      }
+    }
+  }
+
+  #bridgeEvents(): void {
+    this.fields.events.on('field:plot-changed', (payload) =>
+      this.events.emit('world:plot-changed', payload),
+    );
+    this.fields.events.on('field:plots-added', (payload) =>
+      this.events.emit('world:plots-added', payload),
+    );
+    this.structures.events.on('building:placed', (payload) =>
+      this.events.emit('world:building-placed', payload),
+    );
+    this.structures.events.on('building:completed', (payload) =>
+      this.events.emit('world:building-completed', payload),
+    );
+    this.livestock.events.on('animal:purchased', (payload) =>
+      this.events.emit('world:animal-purchased', payload),
+    );
+    this.livestock.events.on('animal:produced', (payload) =>
+      this.events.emit('world:produce', payload),
+    );
+    this.stores.events.on('store:full', (payload) =>
+      this.events.emit('world:storage-full', { itemId: payload.itemId, spilled: payload.spilled }),
+    );
+    this.carry.events.on('carry:changed', (payload) =>
+      this.events.emit('world:carry-changed', payload),
+    );
   }
 
   #applyLevelToGrid(): void {
@@ -384,51 +454,8 @@ export class FarmWorld {
     addShelterCollision(this.grid, this.level.shelter.tileX, this.level.shelter.tileZ);
   }
 
-  #applyBuildingToGrid(kind: BuildingKind, tileX: number, tileZ: number): void {
-    const definition = BUILDINGS[kind];
-    this.grid.fillRect(
-      tileX,
-      tileZ,
-      definition.footprint.width,
-      definition.footprint.depth,
-      TileFlag.Occupied,
-      true,
-    );
-    if (kind === 'road') {
-      this.grid.setFlag(tileX, tileZ, TileFlag.Road, true);
-    }
-    if (kind === 'fence') {
-      this.grid.setFlag(tileX, tileZ, TileFlag.Enclosed, true);
-    }
-    addBuildingCollision(this.grid, kind, tileX, tileZ);
-    if (kind === 'barn') {
-      // Barns fill whole tiles, so they also use coarse blocking for A*.
-      this.grid.fillRect(
-        tileX,
-        tileZ,
-        definition.footprint.width,
-        definition.footprint.depth,
-        TileFlag.Blocked,
-        true,
-      );
-    }
-  }
-
   /** Convenience for the HUD: is anything ready to pick up right now? */
-  readyPlotIds(): string[] {
-    return [...this.#plots.entries()]
-      .filter(([, plot]) => plotStage(plot) === 'ready')
-      .map(([plotId]) => plotId);
-  }
-
-  /** Preview of what a plot would yield if harvested now. Used by the HUD. */
-  previewYield(plotId: string): number {
-    const plot = this.#plots.get(plotId);
-    return plot ? computeYield(plot) : 0;
-  }
-
-  /** Cost to plant a given crop, surfaced so the UI never hardcodes prices. */
-  seedCostOf(cropId: string): Cents {
-    return requireCrop(cropId).seedCost;
+  animalDefinitionFor(species: AnimalSpecies) {
+    return ANIMALS[species];
   }
 }

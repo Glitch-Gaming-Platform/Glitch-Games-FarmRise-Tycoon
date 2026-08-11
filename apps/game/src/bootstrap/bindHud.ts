@@ -6,82 +6,170 @@
  * nothing about farms. Both directions of that ignorance are what let each be
  * tested on its own, and this file pays the small cost of joining them.
  */
-import { FARM_EVENTS, formatCents, getCrop, storageUsed, type Cents } from '@farmrise/shared';
+import {
+  SEASON_DEFINITIONS,
+  formatCents,
+  getCrop,
+  getIncident,
+  getItem,
+  incidentPhase,
+  isMitigated,
+  storageUsed,
+  type Cents,
+} from '@farmrise/shared';
 import type { FarmScene } from '@game/scenes/FarmScene.js';
 import type { SessionController } from '@game/systems/SessionController.js';
 import type { Hud } from '@ui/hud/Hud.js';
 import type { Unsubscribe } from '@engine/core/types.js';
 
 export function bindHud(scene: FarmScene, hud: Hud, session: SessionController): Unsubscribe {
+  const career = scene.career;
   const world = scene.world;
   const interaction = scene.interaction;
-  const eventDirector = scene.eventDirector;
-  if (!world || !interaction || !eventDirector) {
+  const incidents = scene.incidents;
+  const careerDirector = scene.careerDirector;
+  if (!career || !world || !interaction || !incidents || !careerDirector) {
     throw new Error('bindHud requires a loaded FarmScene.');
   }
 
   const unsubscribes: Unsubscribe[] = [];
-  let warning: { label: string; ticksRemaining: number; preventCost: Cents | null } | null = null;
+  let objectiveReady = false;
+
+  const warningSnapshot = (): {
+    label: string;
+    phase: 'warning' | 'active';
+    ticksRemaining: number;
+    preventCost: Cents | null;
+  } | null => {
+    const urgent = incidents.mostUrgent;
+    if (!urgent) return null;
+    const definition = getIncident(urgent.definitionId);
+    if (!definition) return null;
+    const phase = incidentPhase(urgent as never, career.tick);
+    if (phase === 'over') return null;
+    const pay = definition.responses.find((response) => response.kind === 'pay');
+    const canPay =
+      phase === 'warning' &&
+      !isMitigated(urgent as never) &&
+      (!urgent.responseKind || urgent.responseKind === 'pay');
+    return {
+      label: definition.displayName,
+      phase,
+      ticksRemaining: Math.max(
+        0,
+        (phase === 'warning' ? urgent.impactTick : urgent.endsTick) - career.tick,
+      ),
+      preventCost: canPay && pay ? pay.cost : null,
+    };
+  };
 
   const render = (): void => {
+    const milestone = career.milestone();
     hud.render({
-      balance: world.balance,
+      balance: career.balance,
       storageUsed: storageUsed(world.inventory),
       storageCapacity: world.storageCapacity,
       selectedCrop: getCrop(interaction.selectedCropId)?.displayName ?? interaction.selectedCropId,
       readyPlots: world.readyPlotIds().length,
-      warning,
+      warning: warningSnapshot(),
       // The HUD only shows what onboarding has revealed. Once onboarding
       // finishes, isRevealed returns true for everything.
       revealed: session.onboarding.revealed,
-      landProgress: session.landProgress(),
-      landAffordable: session.landAffordable(),
+      objectiveProgress: session.milestoneProgress(),
+      objectiveLabel: milestone?.displayName ?? 'Run the estate',
+      objectiveReady,
+      carry: { units: world.carry.used, capacity: world.carry.capacity },
+      // Season is hidden until the first boundary is crossed, so a first-time
+      // player is not asked to care about a calendar they have not met.
+      season:
+        career.statistics.seasonsCompleted > 0
+          ? SEASON_DEFINITIONS[career.season].displayName
+          : null,
     });
   };
 
   unsubscribes.push(
-    world.events.on('world:harvested', ({ itemId, quantity, spilled }) => {
+    world.events.on('world:harvested', ({ itemId, quantity, carried }) => {
+      const left = quantity - carried;
       hud.toast(
-        `Harvested ${quantity} ${itemId}${spilled > 0 ? ` (${spilled} spoiled - no space)` : ''}`,
+        `Harvested ${quantity} ${itemId}${left > 0 ? ` (${left} left in the field - hands full)` : ''}`,
       );
       render();
     }),
-    world.events.on('world:balance-changed', render),
+    career.events.on('career:balance-changed', render),
+    world.events.on('world:carry-changed', render),
     world.events.on('world:storage-full', ({ itemId }) =>
       hud.toast(`Storage is full - ${itemId} is going to waste. Build a barn.`, 'warn'),
     ),
     world.events.on('world:building-completed', ({ kind }) => hud.toast(`${kind} finished`)),
     world.events.on('world:produce', ({ itemId, quantity }) =>
-      hud.toast(`Collected ${quantity} ${itemId}`),
+      hud.toast(`${quantity} ${getItem(itemId)?.displayName ?? itemId} ready by the shelter`),
     ),
+    world.events.on('world:parcel-acquired', ({ displayName }) => {
+      hud.toast(`${displayName} is yours. The gate is open.`);
+      render();
+    }),
 
-    interaction.events.on('interaction:prompt', ({ label }) => hud.setPrompt(label)),
+    interaction.events.on('interaction:prompt', ({ label, secondaryLabel }) =>
+      hud.setPrompt(label, secondaryLabel),
+    ),
     interaction.events.on('interaction:refused', ({ reason }) => hud.toast(reason, 'warn')),
     interaction.events.on('interaction:crop-selected', render),
     interaction.events.on('interaction:performed', render),
 
-    eventDirector.events.on('event:warned', ({ message, ticksUntilImpact, kind }) => {
-      warning = {
-        label: kind === 'drought' ? 'Drought' : 'Foxes',
-        ticksRemaining: ticksUntilImpact,
-        preventCost: FARM_EVENTS[kind].preventionCost,
-      };
-      hud.toast(message, 'warn');
+    // --- incidents ---------------------------------------------------------
+    incidents.events.on('incident:warned', ({ instance, definition }) => {
+      void instance;
+      hud.toast(definition.warningText, 'warn');
       render();
     }),
-    eventDirector.events.on('event:started', ({ kind, mitigated }) => {
+    incidents.events.on('incident:impact', ({ definition }) => {
+      hud.toast(definition.impactText, 'error');
+      render();
+    }),
+    incidents.events.on('incident:resolved', ({ definition, mitigated, reimbursed }) => {
       hud.toast(
-        mitigated ? `${kind} hit, but your countermeasures held.` : `${kind} is damaging the farm!`,
-        mitigated ? 'info' : 'error',
+        mitigated ? `${definition.recoveryText} Your response held.` : definition.recoveryText,
+        mitigated ? 'info' : 'warn',
       );
-    }),
-    eventDirector.events.on('event:ended', () => {
-      warning = null;
+      if (reimbursed > 0) hud.toast(`Insurance paid ${formatCents(reimbursed as Cents)}.`);
       render();
     }),
-    eventDirector.events.on('event:mitigated', ({ kind }) => {
-      if (warning) warning.preventCost = null;
-      hud.toast(`Countermeasures in place for the ${kind}.`);
+    incidents.events.on('incident:response-progressed', render),
+
+    // --- career ------------------------------------------------------------
+    careerDirector.events.on('career:milestone-ready', ({ milestone }) => {
+      objectiveReady = true;
+      hud.toast(`${milestone.displayName} - the farm is ready for it.`);
+      render();
+    }),
+    careerDirector.events.on('career:milestone-claimed', ({ milestone }) => {
+      objectiveReady = false;
+      hud.toast(milestone.summary);
+      hud.toast(milestone.newProblem, 'warn');
+      render();
+    }),
+    careerDirector.events.on('career:season-review', ({ date, advice }) => {
+      hud.toast(`${date.season[0]?.toUpperCase()}${date.season.slice(1)}, year ${date.year}.`);
+      hud.toast(advice);
+      render();
+    }),
+    careerDirector.events.on('career:contract-failed', () =>
+      hud.toast('A contract went undelivered. That buyer will remember.', 'error'),
+    ),
+    careerDirector.events.on('career:project-completed', ({ displayName }) =>
+      hud.toast(`Millbrook finished the ${displayName}.`),
+    ),
+    careerDirector.events.on('career:warning', ({ message }) => hud.toast(message, 'warn')),
+    careerDirector.events.on('career:restructured', ({ explanation }) => {
+      hud.toast(explanation, 'error');
+      render();
+    }),
+    career.events.on('career:town-grew', ({ displayName }) =>
+      hud.toast(`Millbrook is now a ${displayName.toLowerCase()}.`),
+    ),
+    career.events.on('career:unlocked', ({ unlocks }) => {
+      if (unlocks.length > 0) hud.toast('Something new is available on the farm.');
       render();
     }),
 
@@ -95,11 +183,13 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
       );
       render();
     }),
-    session.events.on('session:prevented', ({ cost }) =>
-      hud.toast(`Countermeasures paid for: ${formatCents(cost)}`),
-    ),
-    world.events.on('world:land-purchased', () => {
-      hud.toast('The field next door is yours.');
+    session.events.on('session:hauled', ({ stored, refused }) => {
+      if (stored > 0)
+        hud.toast(`Stored ${stored}${refused > 0 ? `, ${refused} would not fit` : ''}`);
+      render();
+    }),
+    session.events.on('session:responded', () => {
+      hud.toast('You are dealing with it.');
       render();
     }),
     world.events.on('world:building-placed', ({ kind }) => {
@@ -111,10 +201,7 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
 
   // A low-frequency tick keeps the countdown and money readable without
   // rebuilding DOM every frame.
-  const interval = setInterval(() => {
-    if (warning) warning.ticksRemaining = Math.max(0, warning.ticksRemaining - 15);
-    render();
-  }, 250);
+  const interval = setInterval(render, 250);
 
   render();
 

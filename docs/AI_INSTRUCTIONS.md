@@ -35,6 +35,8 @@ expected to work inside.
 | Session orchestration (panels, placement, outcome) | `apps/game/src/game/systems/SessionController.ts` |
 | A floating panel | `apps/game/src/ui/panels/` — panels float, screens are exclusive |
 | A screen, HUD element or menu | `apps/game/src/ui/` |
+| A mobile gameplay control | `apps/game/src/ui/hud/TouchControls.ts`; feed semantic actions into `InputSystem` |
+| Mobile capability or page-lifecycle wiring | Capability in `engine/render/capabilities.ts`; ownership/wiring in `bootstrap/` |
 | Wiring between layers | `apps/game/src/bootstrap/` — **the only place that may know all layers** |
 | An API route | `apps/server/app/api/v1/…/route.ts` (thin) |
 | A server decision | `apps/server/src/services/` |
@@ -123,6 +125,7 @@ thresholds and secrets are not. See [NETWORKING.md](NETWORKING.md).
 | A money path | Test that the server ignores any client-supplied amount |
 | A migration | Extend `apps/server/tests/unit/migrator.test.ts` if the runner changed |
 | Anything visible | A Playwright spec in `tests/e2e/` |
+| A mobile control or layout change | `tests/e2e/mobile.spec.ts` plus trusted-touch hardware verification when a device is available |
 | A new or changed 3D asset | `npm run art:build` (budgets + palette must pass), then `npm run art:review` and grade it against `docs/VISUAL_RUBRIC.md` |
 | A new or changed Blender-rendered UI image | `npm run art:ui-icons`, update `uiIcons.manifest.ts`, then unit and Playwright coverage |
 | A new colour | It must appear in a `check_palette.py` pair if anything gameplay-critical sits on it |
@@ -132,6 +135,9 @@ thresholds and secrets are not. See [NETWORKING.md](NETWORKING.md).
 Rules:
 
 - **Do not stub WebGL.** A fake context lets a broken renderer pass. Rendering is Playwright's job.
+- **Do not prove touch with `element.click()`.** Mobile acceptance requires pointer/touch input that
+  produces an authoritative game-state change. Synthetic events may assist a test but are not the
+  acceptance evidence.
 - Prefer the in-memory repositories for server tests — no fixtures, no cleanup.
 - Test the failure paths. A route test that only covers the happy path proves nothing about a
   security boundary.
@@ -154,14 +160,14 @@ which is:
 npm run format:check   # prettier
 npm run lint           # eslint, including the boundary rules
 npm run typecheck      # tsc --build across all projects
-npm test               # 369 vitest tests
+npm test               # 686 vitest tests
 npm run build          # shared → client bundle → next build
 ```
 
 Also run, when relevant:
 
 ```bash
-npm run test:e2e       # after any visible change (needs `npx playwright install` once)
+npm run test:e2e       # production preview; serialized desktop/mobile projects after visible changes
 npm run db:migrate     # after a schema change
 npm run db:rollback    # verify your down migration actually works
 
@@ -181,7 +187,7 @@ npm run audio:verify   # after any music-loop change; fails on gaps, padding, ju
 `art/build_report.json`. They weight the loading bar, and stale numbers make it lie.
 
 **After `art:ui-icons`, update the `bytes` fields in `uiIcons.manifest.ts`** from
-`art/ui_icon_report.json`. Keep the complete interface-art set at or below 100 KB.
+`art/ui_icon_report.json`. Keep the complete interface-art set at or below 175 KB.
 
 **After `audio:generate`, update `audio.manifest.ts` from
 `art/audio/generation_report.json`.** The command reuses raw sources by default. `-- --force`
@@ -251,7 +257,7 @@ These are as binding as the code boundaries, and most are enforced by the build.
 | **One coach mark, ever.** Prompts replace; they never stack. | `CoachMark` is a deliberate singleton. |
 | **A panel must not pause the world; a screen must.** | Opening the market is a glance at a ledger, not a pause. |
 | **An open panel owns its full backdrop.** | Pointer, movement and interaction input must not leak to the farm behind a menu. |
-| **DOM interface art comes from the UI manifest.** | This keeps paths, measured bytes and the 100 KB budget reviewable in one catalog. |
+| **DOM interface art comes from the UI manifest.** | This keeps paths, measured bytes and the 175 KB budget reviewable in one catalog. |
 | **A new build guard ships with a negative test in `test_guards.py`.** | A guard nobody has watched fire is faith, not engineering. All three current guards have been observed rejecting their fault. |
 | **Camera constants live in two languages — change both, or the test fails.** | `sessionRules.ts` and `palette.py`; `cameraFraming.test.ts` enforces it. |
 | **Do not import `DRACOLoader`.** | Importing it emitted 836 KB of unused decoder chunks into `dist/`. See ADR 0010. |
@@ -303,6 +309,10 @@ Also update:
   call it in `dispose`.
 - **The engine owns the loop; systems own their own state.** No system reaches into another's
   internals — go through the service container or the event bus.
+- **Mobile controls emit semantic actions, never synthetic keys.** `TouchControls` owns pointer ids;
+  `InputSystem` owns fixed-tick buffering and release.
+- **Mobile page lifecycle is bootstrap wiring.** Hidden pages stop the loop, release input and
+  suspend audio; disposal removes the listeners. Do not put document lifecycle reads in gameplay.
 - **The server owns money.** The client's balance is a prediction until the server confirms it.
 - **Migrations are append-only.** Never edit one that has been applied; the checksum will catch you.
 - **`packages/shared` is a published contract.** Treat every change as breaking until you have

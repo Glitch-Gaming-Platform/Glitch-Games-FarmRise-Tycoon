@@ -1,14 +1,28 @@
 /**
- * The farm scene: the composition root for a single play session.
+ * The farm scene: the composition root for a play session.
  *
- * It wires the model (FarmWorld), the actors (Player, foxes), the controllers
- * (movement, interaction, events) and the views together, then ticks them in a
- * fixed order. It owns no rules of its own - if you find yourself writing an
- * `if` about crops or money in this file, it belongs in FarmCommands or the
- * shared rules instead.
+ * It wires the career, the site, the actors, the controllers and the views
+ * together, then ticks them in a fixed order. It owns no rules of its own - if
+ * you find yourself writing an `if` about crops or money in this file, it
+ * belongs in a command or in the shared rules instead.
+ *
+ * The change progression forced here is that the scene no longer *creates* a
+ * farm. It is handed either a validated career save or an explicit request for
+ * a new one, and the starter grants happen only in the second case
+ * (docs/PROGRESSION_GAMEPLAY_PLAN.md §32.1).
  */
 import * as THREE from 'three';
-import { seedFromString, ticksToSeconds, type BuildingKind } from '@farmrise/shared';
+import {
+  newCareer,
+  getCrop,
+  seasonalCropIds,
+  seedFromString,
+  seasonAt,
+  ticksToSeconds,
+  type BuildingKind,
+  type CareerSaveState,
+  type Season,
+} from '@farmrise/shared';
 import type { GameScene, SceneLoadContext } from '@engine/scene/GameScene.js';
 import type { FixedUpdateContext, RenderContext } from '@engine/core/types.js';
 import { CameraRigToken } from '@engine/camera/CameraRig.js';
@@ -17,39 +31,51 @@ import { InputToken, type InputSystem } from '@engine/input/InputSystem.js';
 import { disposeObject3D } from '@engine/scene/disposeObject3D.js';
 import { EventBus } from '@engine/core/EventBus.js';
 import type { AssetLoader } from '@assets/loaders/AssetLoader.js';
-import { ModelLibrary, MODEL_FAMILIES } from '@assets/registries/ModelLibrary.js';
+import {
+  cropModelFamilyForSeason,
+  ModelLibrary,
+  modelFamiliesForSeasons,
+} from '@assets/registries/ModelLibrary.js';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { FarmWorld } from '../world/FarmWorld.js';
+import { Career } from '../career/Career.js';
+import { CareerDirector } from '../career/CareerDirector.js';
 import { FarmView } from '../world/view/FarmView.js';
-import { STARTER_FARM } from '../world/levels/starterFarm.js';
-import type { LevelDefinition } from '../world/levels/LevelDefinition.js';
 import { Player } from '../player/Player.js';
 import { PlayerController } from '../player/PlayerController.js';
 import { PlayerView } from '../player/PlayerView.js';
-import { EventDirector } from '../events/EventDirector.js';
+import { IncidentDirector } from '../events/IncidentDirector.js';
 import { EnemyDirector } from '../enemies/EnemyDirector.js';
 import { InteractionController } from '../systems/InteractionController.js';
 import { SessionController } from '../systems/SessionController.js';
 import type { GameAction } from '../GameActions.js';
-import { GAMEPLAY_CAMERA, GAMEPLAY_CAMERA_PITCH_RADIANS } from '../rules/sessionRules.js';
+import {
+  GAMEPLAY_CAMERA,
+  GAMEPLAY_CAMERA_PITCH_RADIANS,
+  GAMEPLAY_CAMERA_YAW_RADIANS,
+} from '../rules/sessionRules.js';
 import type { DynamicCircleCollider } from '@engine/physics/PhysicsPort.js';
 import {
   CHICKEN_COLLISION_RADIUS,
   chickenPose,
   createChickenPose,
 } from '../animals/chickenMotion.js';
+import { COW_COLLISION_RADIUS, cowPose, createCowPose } from '../animals/cowMotion.js';
 
 export const FARM_SCENE_ID = 'farm';
 
 export interface FarmSceneEvents extends Record<string, unknown> {
-  'farm:ready': { level: string };
+  'farm:ready': { level: string; resumed: boolean };
 }
 
 export interface FarmSceneOptions {
   /** Forces onboarding off, e.g. when replaying after a finished run. */
   readonly skipOnboarding?: boolean;
-  readonly level?: LevelDefinition;
-  /** Stable seed. Supplied by the server for a signed-in player. */
+  /**
+   * A validated career to resume. When absent the scene starts a new career,
+   * which is the only path that hands out starter livestock.
+   */
+  readonly career?: CareerSaveState;
+  /** Stable seed for a brand-new career. Supplied by the server when signed in. */
   readonly seed?: string;
   /**
    * Supplies the authored art. Optional on purpose: the scene falls back to
@@ -57,6 +83,12 @@ export interface FarmSceneOptions {
    * game still runs for anyone who has not executed the Blender build.
    */
   readonly assets?: AssetLoader;
+  /** Rendering quality chosen by bootstrap from device capabilities. */
+  readonly shadowMapSize?: number;
+  /** Debug-only: start within interaction range of the first crop bed. */
+  readonly reviewActions?: boolean;
+  /** Debug-only: start at a specific tile for a focused acceptance fixture. */
+  readonly reviewSpawnTile?: { readonly tileX: number; readonly tileZ: number };
 }
 
 export class FarmScene implements GameScene {
@@ -64,11 +96,12 @@ export class FarmScene implements GameScene {
   readonly root = new THREE.Scene();
   readonly events = new EventBus<FarmSceneEvents>();
 
-  #world: FarmWorld | null = null;
+  #career: Career | null = null;
+  #careerDirector: CareerDirector | null = null;
   #player: Player | null = null;
   #playerController: PlayerController | null = null;
   #interaction: InteractionController | null = null;
-  #eventDirector: EventDirector | null = null;
+  #incidents: IncidentDirector | null = null;
   #enemyDirector: EnemyDirector | null = null;
   #farmView: FarmView | null = null;
   #playerView: PlayerView | null = null;
@@ -76,6 +109,10 @@ export class FarmScene implements GameScene {
   #session: SessionController | null = null;
   #library: ModelLibrary | null = null;
   #unbindScareReaction: (() => void) | null = null;
+  #unbindSeasonArt: (() => void) | null = null;
+  readonly #loadedSeasonPacks = new Set<Season>();
+  readonly #loadingSeasonPacks = new Set<Season>();
+  readonly #seasonArtAbort = new AbortController();
   readonly #dynamicColliders: Array<{
     id: string;
     x: number;
@@ -91,8 +128,12 @@ export class FarmScene implements GameScene {
     this.root.fog = new THREE.Fog(0xa7d7e8, 42, 108);
   }
 
-  get world(): FarmWorld | null {
-    return this.#world;
+  get career(): Career | null {
+    return this.#career;
+  }
+  /** The active site. Kept named `world` because that is what every view wants. */
+  get world() {
+    return this.#career?.world ?? null;
   }
   get player(): Player | null {
     return this.#player;
@@ -100,8 +141,11 @@ export class FarmScene implements GameScene {
   get interaction(): InteractionController | null {
     return this.#interaction;
   }
-  get eventDirector(): EventDirector | null {
-    return this.#eventDirector;
+  get incidents(): IncidentDirector | null {
+    return this.#incidents;
+  }
+  get careerDirector(): CareerDirector | null {
+    return this.#careerDirector;
   }
   get enemyDirector(): EnemyDirector | null {
     return this.#enemyDirector;
@@ -111,56 +155,85 @@ export class FarmScene implements GameScene {
   }
 
   async load(context: SceneLoadContext): Promise<void> {
-    const level = this.options.level ?? STARTER_FARM;
     context.reportProgress(0.05, 'Surveying the land');
 
-    const library = await this.#loadArt(context);
+    const resumed = this.options.career !== undefined;
+    const state =
+      this.options.career ??
+      newCareer({
+        careerId: this.options.seed ?? `career-${Date.now()}`,
+        seed: seedFromString(this.options.seed ?? 'starter-farm'),
+      });
+    const initialSeason = seasonAt(state.tick);
+    const requiredCropSeasons = new Set<Season>([initialSeason]);
+    const activeSite = state.sites.find((site) => site.id === state.activeSiteId);
+    for (const plot of activeSite?.plots ?? []) {
+      const crop = plot.cropId ? getCrop(plot.cropId) : undefined;
+      for (const plantingSeason of crop?.plantingSeasons ?? []) {
+        requiredCropSeasons.add(plantingSeason);
+      }
+    }
+
+    const library = await this.#loadArt(context, [...requiredCropSeasons]);
     this.#library = library;
     if (context.signal.aborted) {
       library?.dispose();
       return;
     }
 
-    const world = new FarmWorld(level, seedFromString(this.options.seed ?? level.id));
-    const spawn = world.grid.tileToWorld(level.spawn.tileX, level.spawn.tileZ);
+    const career = Career.fromSaveState(state);
+    const world = career.world;
+    const level = world.level;
+    const reviewPlot = this.options.reviewActions ? world.fields.placements[0] : undefined;
+    const reviewSpawn = this.options.reviewSpawnTile ?? reviewPlot;
+    const spawn = reviewSpawn
+      ? world.grid.tileToWorld(reviewSpawn.tileX, reviewSpawn.tileZ)
+      : world.grid.tileToWorld(level.spawn.tileX, level.spawn.tileZ);
     const player = new Player(spawn.x, spawn.z);
 
     context.reportProgress(0.55, 'Turning the soil');
-    const farmView = new FarmView(world, library);
+    const farmView = new FarmView(world, library, { shadowMapSize: this.options.shadowMapSize });
     const playerView = new PlayerView(player, library);
     this.root.add(farmView.object, playerView.object);
 
     context.reportProgress(0.7, 'Waking the animals');
     const input = context.services.resolve(InputToken) as InputSystem<GameAction>;
     const playerController = new PlayerController(player, world, world.physics, input);
-    const eventDirector = new EventDirector(world);
-    const enemyDirector = new EnemyDirector(world, player, world.physics, eventDirector);
-    const interaction = new InteractionController(world, player, playerController, input);
-
-    // Give the player something to look after from the first second, so the
-    // bootstrap actually exercises growth, harvesting and animal production.
-    world.addAnimals('chicken', 2);
+    const incidents = new IncidentDirector(career);
+    const careerDirector = new CareerDirector(career);
+    const enemyDirector = new EnemyDirector(
+      world,
+      player,
+      world.physics,
+      career.rng('incidents'),
+      incidents,
+    );
+    const interaction = new InteractionController(
+      career,
+      player,
+      playerController,
+      incidents,
+      input,
+    );
 
     const cameraController = new FollowController({
       getTarget: () => new THREE.Vector3(player.position.x, 1, player.position.z),
       distance: GAMEPLAY_CAMERA.distance,
-      // 38 degrees. The original 0.34*PI (61 degrees) read as near-top-down:
-      // it foreshortened away all the vertical crop mass the art depends on,
-      // hid every building front, and filled the frame with flat ground.
-      // See docs/ART_DIRECTION.md, "Camera".
       pitch: GAMEPLAY_CAMERA_PITCH_RADIANS,
+      yaw: GAMEPLAY_CAMERA_YAW_RADIANS,
     });
     const cameraRig = context.services.tryResolve(CameraRigToken);
     cameraRig?.setController(cameraController);
 
-    // The session owns onboarding, the panels, placement and the run's
-    // outcome. It needs the camera because build placement is a pointer
-    // cursor raycast against the ground plane.
+    // The session owns onboarding, the panels and placement. It needs the
+    // camera because build placement is a pointer cursor raycast against the
+    // ground plane.
     const session = new SessionController(
-      world,
+      career,
       player,
       playerController,
-      eventDirector,
+      incidents,
+      careerDirector,
       input,
       cameraRig?.camera ?? new THREE.PerspectiveCamera(),
       { skipOnboarding: this.options.skipOnboarding },
@@ -172,11 +245,12 @@ export class FarmScene implements GameScene {
       return;
     }
 
-    this.#world = world;
+    this.#career = career;
+    this.#careerDirector = careerDirector;
     this.#player = player;
     this.#playerController = playerController;
     this.#interaction = interaction;
-    this.#eventDirector = eventDirector;
+    this.#incidents = incidents;
     this.#enemyDirector = enemyDirector;
     this.#farmView = farmView;
     this.#playerView = playerView;
@@ -185,10 +259,13 @@ export class FarmScene implements GameScene {
     this.#unbindScareReaction = enemyDirector.events.on('enemy:scared-off', () =>
       playerView.triggerScareReaction(),
     );
+    this.#unbindSeasonArt = career.events.on('career:season-changed', ({ season }) => {
+      void this.#loadSeasonCropArt(season, farmView);
+    });
     this.#refreshDynamicColliders();
 
     context.reportProgress(1, 'Ready');
-    this.events.emit('farm:ready', { level: level.id });
+    this.events.emit('farm:ready', { level: level.id, resumed });
   }
 
   activate(): void {
@@ -205,13 +282,15 @@ export class FarmScene implements GameScene {
 
   /**
    * One simulation tick, in dependency order:
-   * input-driven movement -> interaction -> world evolution -> events ->
+   * input-driven movement -> interaction -> career evolution -> incidents ->
    * enemies. Anything that reads the world must run after the world advances,
    * and anything that moves the player must run before interaction range is
    * evaluated.
    */
   fixedUpdate(context: FixedUpdateContext): void {
-    if (!this.#running || !this.#world) return;
+    const career = this.#career;
+    if (!this.#running || !career) return;
+
     const worldInputEnabled = this.#session?.panel === 'none' && !this.#session?.placement.active;
     this.#playerController?.fixedUpdate(context, worldInputEnabled);
     // Placement is a modal cursor: while it is active the plot-level
@@ -219,8 +298,9 @@ export class FarmScene implements GameScene {
     // plants a seed.
     if (worldInputEnabled) this.#interaction?.fixedUpdate(context);
     this.#session?.fixedUpdate(context);
-    this.#world.advance(1);
-    this.#eventDirector?.fixedUpdate(1);
+    career.advance(1, this.#session?.onboarding.active ? ['eggs'] : []);
+    this.#incidents?.fixedUpdate(1);
+    this.#careerDirector?.fixedUpdate();
     // Refresh after player/world movement so foxes see current actor positions.
     this.#refreshDynamicColliders();
     this.#enemyDirector?.fixedUpdate(context);
@@ -230,17 +310,27 @@ export class FarmScene implements GameScene {
   }
 
   update(context: RenderContext): void {
-    if (!this.#world) return;
+    const career = this.#career;
+    if (!career) return;
     this.#session?.update(context);
     // Views sync every rendered frame, not every tick, so visuals stay smooth
     // between ticks and cost nothing extra when the sim is paused.
     this.#farmView?.sync(
-      this.#world,
+      career.world,
       this.#enemyDirector?.foxes ?? [],
-      this.#eventDirector?.current ?? null,
+      this.#incidents?.mostUrgent ?? null,
       context,
+      this.#player,
+      this.#interaction?.proximityMeters() ?? [],
     );
-    if (this.#player) this.#playerView?.sync(this.#player, context);
+    if (this.#player) {
+      const surface = this.#farmView?.surfaceAt(
+        career.world,
+        this.#player.position.x,
+        this.#player.position.z,
+      );
+      this.#playerView?.sync(this.#player, context, surface);
+    }
   }
 
   /** Zoom/orbit hooks the settings and touch UI can call. */
@@ -250,6 +340,11 @@ export class FarmScene implements GameScene {
 
   get session(): SessionController | null {
     return this.#session;
+  }
+
+  /** The document to persist. Null before the scene has loaded. */
+  saveState(): CareerSaveState | null {
+    return this.#career?.toSaveState() ?? null;
   }
 
   /**
@@ -264,7 +359,8 @@ export class FarmScene implements GameScene {
     tileZ?: number,
     valid?: boolean,
   ): void {
-    if (this.#world) this.#farmView?.setPlacementPreview(this.#world, kind, tileX, tileZ, valid);
+    const world = this.#career?.world;
+    if (world) this.#farmView?.setPlacementPreview(world, kind, tileX, tileZ, valid);
   }
 
   /** False when the scene fell back to procedural primitives. */
@@ -278,7 +374,7 @@ export class FarmScene implements GameScene {
    * when the shelter reaches its 64-instance visual cap.
    */
   #refreshDynamicColliders(): void {
-    const world = this.#world;
+    const world = this.#career?.world;
     const player = this.#player;
     if (!world || !player) return;
 
@@ -299,7 +395,7 @@ export class FarmScene implements GameScene {
     write(player.collisionId, player.position.x, player.position.z, player.radius);
 
     const chickenCount = Math.min(
-      world.animals
+      world.livestock.groups
         .filter((group) => group.species === 'chicken')
         .reduce((sum, group) => sum + group.count, 0),
       64,
@@ -311,6 +407,22 @@ export class FarmScene implements GameScene {
       for (let index = 0; index < chickenCount; index += 1) {
         chickenPose(shelter, index, chickenCount, simulationTime, 0, 1, pose);
         write(`chicken-${index}`, pose.x, pose.z, CHICKEN_COLLISION_RADIUS);
+      }
+    }
+
+    const cowCount = Math.min(
+      world.livestock.groups
+        .filter((group) => group.species === 'cow')
+        .reduce((sum, group) => sum + group.count, 0),
+      16,
+    );
+    if (cowCount > 0) {
+      const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
+      const pose = createCowPose();
+      const simulationTime = ticksToSeconds(world.tick);
+      for (let index = 0; index < cowCount; index += 1) {
+        cowPose(shelter, index, cowCount, simulationTime, 1, pose);
+        write(`cow-${index}`, pose.x, pose.z, COW_COLLISION_RADIUS);
       }
     }
 
@@ -330,25 +442,29 @@ export class FarmScene implements GameScene {
    * screen, and it keeps the jsdom test suite running without any art on
    * disk or any network.
    */
-  async #loadArt(context: SceneLoadContext): Promise<ModelLibrary | null> {
+  async #loadArt(
+    context: SceneLoadContext,
+    seasons: readonly Season[],
+  ): Promise<ModelLibrary | null> {
     const loader = this.options.assets;
     if (!loader) return null;
 
     const library = new ModelLibrary();
     let loaded = 0;
-    for (const [index, id] of MODEL_FAMILIES.entries()) {
+    const families = modelFamiliesForSeasons(seasons);
+    for (const [index, id] of families.entries()) {
       try {
         const gltf = await loader.load<GLTF>(id, context.signal);
         library.ingest(gltf);
         loaded += 1;
+        for (const season of seasons) {
+          if (id === cropModelFamilyForSeason(season)) this.#loadedSeasonPacks.add(season);
+        }
       } catch (error) {
         if (context.signal.aborted) return null;
         console.warn(`[FarmScene] art family "${id}" unavailable, falling back`, error);
       }
-      context.reportProgress(
-        0.05 + ((index + 1) / MODEL_FAMILIES.length) * 0.45,
-        'Unloading the truck',
-      );
+      context.reportProgress(0.05 + ((index + 1) / families.length) * 0.45, 'Unloading the truck');
     }
 
     if (loaded === 0) {
@@ -358,16 +474,48 @@ export class FarmScene implements GameScene {
     return library;
   }
 
+  async #loadSeasonCropArt(season: Season, farmView: FarmView): Promise<void> {
+    const loader = this.options.assets;
+    const library = this.#library;
+    if (
+      !loader ||
+      !library ||
+      this.#loadedSeasonPacks.has(season) ||
+      this.#loadingSeasonPacks.has(season)
+    )
+      return;
+    this.#loadingSeasonPacks.add(season);
+    try {
+      const gltf = await loader.load<GLTF>(
+        cropModelFamilyForSeason(season),
+        this.#seasonArtAbort.signal,
+      );
+      if (this.#seasonArtAbort.signal.aborted) return;
+      library.ingest(gltf);
+      this.#loadedSeasonPacks.add(season);
+      farmView.refreshCropGeometry(seasonalCropIds(season));
+    } catch (error) {
+      if (!this.#seasonArtAbort.signal.aborted) {
+        console.warn(`[FarmScene] seasonal crop art for ${season} unavailable`, error);
+      }
+    } finally {
+      this.#loadingSeasonPacks.delete(season);
+    }
+  }
+
   dispose(): void {
     this.#farmView?.dispose();
     this.#playerView?.dispose();
     this.#unbindScareReaction?.();
     this.#unbindScareReaction = null;
+    this.#unbindSeasonArt?.();
+    this.#unbindSeasonArt = null;
+    this.#seasonArtAbort.abort();
     this.#library?.dispose();
     this.#library = null;
     disposeObject3D(this.root);
     this.events.clear();
-    this.#world = null;
+    this.#career = null;
     this.#player = null;
   }
 }

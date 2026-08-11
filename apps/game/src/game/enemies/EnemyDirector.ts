@@ -1,15 +1,17 @@
 /**
- * Spawns and retires foxes in response to farm events.
+ * Spawns and retires foxes in response to a raid incident.
  *
  * The director is the only thing that creates enemies, so "when does a threat
- * appear?" has exactly one answer to read. It listens to the EventDirector
- * rather than rolling its own timers.
+ * appear?" has exactly one answer to read. It listens to the IncidentDirector
+ * rather than rolling its own timers, and takes its RNG explicitly because a
+ * site no longer owns a random stream - the career does, split by system.
  */
+import type { Rng } from '@farmrise/shared';
 import type { PhysicsPort } from '@engine/physics/PhysicsPort.js';
 import type { FixedUpdateContext } from '@engine/core/types.js';
 import { EventBus } from '@engine/core/EventBus.js';
 import type { FarmWorld } from '../world/FarmWorld.js';
-import type { EventDirector } from '../events/EventDirector.js';
+import type { IncidentDirector } from '../events/IncidentDirector.js';
 import type { Player } from '../player/Player.js';
 import { Fox } from './Fox.js';
 import { shelterDoorPoint } from '../world/collisionProfiles.js';
@@ -29,13 +31,18 @@ export class EnemyDirector {
     private readonly world: FarmWorld,
     private readonly player: Player,
     private readonly physics: PhysicsPort,
-    eventDirector: EventDirector,
+    private readonly rng: Rng,
+    incidents: IncidentDirector,
   ) {
-    eventDirector.events.on('event:started', ({ kind, mitigated }) => {
-      if (kind === 'fox_raid') this.#spawnRaid(mitigated ? 1 : 3);
+    incidents.events.on('incident:impact', ({ instance, definition }) => {
+      if (definition.id !== 'incident-fox-raid') return;
+      // A mitigated raid still shows up, with fewer of them: the player should
+      // see that driving the animals in worked, not that nothing happened.
+      const mitigated = instance.responseProgress > 0;
+      this.#spawnRaid(mitigated ? 1 : 3);
     });
-    eventDirector.events.on('event:ended', ({ kind }) => {
-      if (kind === 'fox_raid') this.#retireAll();
+    incidents.events.on('incident:resolved', ({ definition }) => {
+      if (definition.id === 'incident-fox-raid') this.#retireAll();
     });
   }
 
@@ -79,7 +86,7 @@ export class EnemyDirector {
 
     for (let i = 0; i < count; i += 1) {
       // Foxes come in from the map edge so the player sees them arrive.
-      const angle = this.world.rng.next() * Math.PI * 2;
+      const angle = this.rng.next() * Math.PI * 2;
       this.#foxes.push(
         new Fox(
           Math.cos(angle) * halfWidth * 0.95,

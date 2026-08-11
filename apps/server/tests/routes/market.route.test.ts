@@ -8,6 +8,7 @@ import { POST as fulfill } from '@app/api/v1/market/orders/[orderId]/fulfill/rou
 import { POST as spotSell } from '@app/api/v1/market/spot-sell/route';
 import { GET as getSave, PUT as putSave } from '@app/api/v1/save/route';
 import { installHarness, readBody, request, signUp, teardownHarness, type Harness } from './setup';
+import { activeInventory, withActiveStoreItems } from '../helpers/career';
 
 let harness: Harness;
 let token: string;
@@ -27,7 +28,7 @@ beforeEach(async () => {
       token,
       json: {
         expectedRevision: save.revision,
-        state: { ...save.state, tick: save.state.tick + 600, inventory: { wheat: 40 } },
+        state: withActiveStoreItems(save.state, { wheat: 40 }, save.state.tick + 600),
       },
     }),
   );
@@ -123,7 +124,7 @@ describe('POST /market/spot-sell', () => {
     const save = (
       await readBody<{ data: SaveEnvelope }>(await getSave(request('/api/v1/save', { token })))
     ).data;
-    expect(save.state.inventory['wheat']).toBe(37); // 40 - 3, not 40 - 6
+    expect(activeInventory(save.state)['wheat']).toBe(37); // 40 - 3, not 40 - 6
   });
 
   it('rejects a quantity the player does not hold', async () => {
@@ -183,7 +184,7 @@ describe('POST /market/orders/:id/fulfill', () => {
         token,
         json: {
           expectedRevision: save.revision,
-          state: { ...save.state, tick: save.state.tick + 600, inventory: { wheat: 60 } },
+          state: withActiveStoreItems(save.state, { wheat: 60 }, save.state.tick + 600),
         },
       }),
     );

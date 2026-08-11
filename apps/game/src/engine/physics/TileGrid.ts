@@ -6,7 +6,13 @@
  * can the player walk here, how long does hauling from A to B take. A grid
  * answers all three in constant or near-constant time, is deterministic across
  * machines, and runs identically in Node so the server can re-check it.
+ *
+ * The flag byte answers the questions movement asks. Everything else a tile
+ * needs to know lives in a named layer (see GridLayers), because a byte with
+ * six unrelated meanings in it is a byte no system can change safely.
  */
+import { GridLayers } from './GridLayers.js';
+
 export interface TileCoord {
   readonly x: number;
   readonly z: number;
@@ -24,10 +30,34 @@ export const enum TileFlag {
   Soil = 1 << 3,
   /** Inside a fence. */
   Enclosed = 1 << 4,
+  /** Passable, but not yours: walk-through gaps in a boundary you do not own. */
+  Gate = 1 << 5,
 }
+
+/**
+ * Layers the game asks for by name.
+ *
+ * The engine does not know what these mean - it only knows how to store a byte
+ * per tile. The constants live here so both the game and its tests spell them
+ * the same way.
+ */
+export const GRID_LAYER = Object.freeze({
+  /** Index into the game's parcel table, 0 = unowned. */
+  Ownership: 'ownership',
+  /** Terrain kind, for ground dressing and buildability. */
+  Terrain: 'terrain',
+  /** Utility coverage, e.g. reached by a well. */
+  Utility: 'utility',
+  /** Temporary incident state, cleared when the incident ends. */
+  Hazard: 'hazard',
+  /** Field membership, so a bed knows which field group it belongs to. */
+  Field: 'field',
+});
 
 export class TileGrid {
   readonly #flags: Uint8Array;
+  /** Additional per-tile data that does not belong in the flag byte. */
+  readonly layers: GridLayers;
   /**
    * Four collision samples per tile give solid props a 0.5 m raster without
    * turning movement into mesh collision. On the 16x16 farm this is 4 KiB.
@@ -47,6 +77,7 @@ export class TileGrid {
       throw new Error('TileGrid dimensions must be positive integers.');
     }
     this.#flags = new Uint8Array(width * depth);
+    this.layers = new GridLayers(width, depth);
     this.#fineWidth = width * this.#collisionSubdivisions;
     this.#fineDepth = depth * this.#collisionSubdivisions;
     this.#fineBlocked = new Uint8Array(this.#fineWidth * this.#fineDepth);
@@ -179,6 +210,12 @@ export class TileGrid {
 
   clear(): void {
     this.#flags.fill(TileFlag.None);
+    this.#fineBlocked.fill(0);
+    this.layers.clearAll();
+  }
+
+  /** Clears the sub-tile raster only, so static colliders can be rebuilt in place. */
+  clearFineCollision(): void {
     this.#fineBlocked.fill(0);
   }
 

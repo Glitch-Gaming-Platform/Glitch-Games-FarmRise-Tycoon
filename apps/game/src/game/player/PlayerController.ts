@@ -47,9 +47,10 @@ export class PlayerController {
     }
 
     // Normalise so diagonal movement is not ~41% faster than cardinal.
-    const magnitude = Math.hypot(inputX, inputZ);
-    inputX /= magnitude;
-    inputZ /= magnitude;
+    const rawMagnitude = Math.hypot(inputX, inputZ);
+    const magnitude = Math.min(1, rawMagnitude);
+    inputX /= rawMagnitude;
+    inputZ /= rawMagnitude;
 
     const surface = this.physics.traversalCostAt(this.player.position.x, this.player.position.z);
     // A lower traversal cost means a faster surface, hence the reciprocal.
@@ -57,7 +58,7 @@ export class PlayerController {
     const speed =
       (this.player.walkSpeed / surface) * (sprinting ? this.player.sprintMultiplier : 1);
 
-    const step = speed * context.stepSeconds;
+    const step = speed * magnitude * context.stepSeconds;
     const beforeX = this.player.position.x;
     const beforeZ = this.player.position.z;
     this.physics.moveCharacter(this.player, inputX * step, inputZ * step);
@@ -72,7 +73,7 @@ export class PlayerController {
     }
     this.player.facing = Math.atan2(inputX, inputZ);
     this.player.activity = 'walking';
-    this.player.locomotionIntensity = sprinting ? this.player.sprintMultiplier : 1;
+    this.player.locomotionIntensity = magnitude * (sprinting ? this.player.sprintMultiplier : 1);
   }
 
   /** Nearest plot within reach, or null. Drives the interact prompt and the E key. */
@@ -80,7 +81,7 @@ export class PlayerController {
     let bestId: string | null = null;
     let bestDistance = Number.POSITIVE_INFINITY;
 
-    for (const placement of this.world.level.plots) {
+    for (const placement of this.world.fields.placements) {
       const world = this.world.grid.tileToWorld(placement.tileX, placement.tileZ);
       const distance = this.player.distanceTo(world.x, world.z);
       if (distance <= this.player.interactRange && distance < bestDistance) {

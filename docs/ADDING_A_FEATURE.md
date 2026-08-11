@@ -14,27 +14,41 @@ If your addition does not change a decision, it is content, not a feature, and i
 
 ## 1. A new crop
 
-**Where:** `packages/shared/src/domain/crops.ts` — and nowhere else, if you do it right.
+**Rules:** `packages/shared/src/domain/crops.ts`. **Presentation:** four Blender stages plus a
+Blender-rendered inventory/market icon.
 
 ```ts
-strawberry: {
-  id: asCropId('strawberry'),
+strawberry: defineCrop({
+  id: 'strawberry',
   displayName: 'Strawberry',
-  seedCost: cents(450),
-  baseUnitPrice: cents(150),
-  baseYield: 7,
-  growthTicks: secondsToTicks(150),
+  rarity: 'rare',          // derives a 7x fresh premium return
+  baseUnitPrice: cents(180),
+  baseYield: 8,
+  growthTicks: secondsToTicks(360), // every higher return tier takes longer
   waterPerDay: 4,        // thirstier than corn: irrigation matters more
   diseaseRisk: 0.09,
   tendActions: 3,        // high labour, so it competes for player time
-},
+  soilDraw: 0.1,
+  favouredSeasons: ['spring'],
+  offSeasonGrowth: 0.55,
+  freshnessDecayPerDay: 0.11,
+  requiresUnlock: null,
+  plantingSeasons: ['spring'],
+}),
 ```
 
 Because `CROP_IDS`, the save schema's crop enum, the item registry, the HUD crop cycle and the
-market's item pool are all derived from this object, nothing else needs to change.
+market's spot-sale pool are derived from this object, no parallel crop enum is needed. Seasonal
+contract generation filters the same catalog by the active season.
 
-**Test:** add a case to `packages/shared/tests/growth.test.ts`. Confirm the save schema still
-rejects unknown crops (already covered) and that `CROP_IDS` includes yours.
+Add `SM_crop_<id>_s1` through `_s4` to the correct crop pack in
+`tools/blender/seasonal_crops.py`/`assets.py`; stage 4 alone may look harvestable. Add the stage-4
+composition to `render_ui_icons.py` and map its measured WebP in `uiIcons.manifest.ts` so inventory,
+field stacks, contracts and spot-sale rows never fall back to Wheat art.
+
+**Test:** cover planting-window boundaries, return tier, growth-time ordering, standing-crop price
+loss and stored freshness decay. `modelCatalog.test.ts` requires all four meshes and
+`uiIconCatalog.test.ts` requires a distinct icon.
 
 **Document:** if it changes the balance story, say so in the design blueprint. Otherwise no doc
 change is needed — the definition is self-documenting.
@@ -48,49 +62,40 @@ change is needed — the definition is self-documenting.
 1. Add the definition (cost, build time, footprint, upkeep, description).
 2. Implement the effect where it belongs:
    - storage → `rules/storage.ts`
-   - movement → the tile flag in `FarmWorld.#applyBuildingToGrid`
+   - movement/collision → `world/models/BuildingModel.ts` and `world/collisionProfiles.ts`
    - crop behaviour → `FarmWorld.#refreshIrrigation` or an equivalent
-   - event mitigation → `EventDirector.#autoMitigated`
+   - incident interaction → shared incident rules plus `IncidentDirector` target/application logic
 3. Give it a mesh in `world/view/StructureView.ts` and a material in `world/view/materials.ts`.
 
-**Watch:** `placedBuildingSchema` in `schemas/save.ts` has a literal `z.enum([...])` of building
-kinds. Add yours there or saves containing it will be rejected. This is deliberate — the wire format
-must be explicit — but it is the one place a new building needs a second edit.
+**Watch:** the career site's `placedBuildingSchema` derives its enum from `BUILDING_KINDS`, so the
+definition updates the wire type automatically. You still need to decide its unlock, save-stable
+identity, collision footprint, world presentation and whether server transition validation needs a
+new spending or state-change rule.
 
 **Test:** `apps/game/tests/unit/farmWorld.test.ts` — cost charged, tiles reserved, effect only after
 construction completes, upkeep charged.
 
 ---
 
-## 3. A new farm event
+## 3. A new farm incident
 
-**Where:** `packages/shared/src/domain/events.ts` and `apps/game/src/game/events/EventDirector.ts`.
+**Where:** `packages/shared/src/domain/incidents.ts`, `packages/shared/src/rules/incidents.ts` and
+`apps/game/src/game/events/IncidentDirector.ts`.
 
-Every event must honour the contract, or it violates the Recoverable Disruption pillar:
+Every incident must honour the contract, or it violates the Recoverable Disruption pillar:
 
 1. A warning fires `warningTicks` before impact.
-2. The player can pay to prevent, act to mitigate, or accept the loss.
-3. Damage lands on named assets, visibly.
+2. At least one response is an active task; payment may be an alternative but not the only answer.
+3. The scheduled instance stores named target ids, severity, timing and response progress in the
+   career save, so reload cannot reroll or erase it.
+4. Impact is visible and recoverable rather than an unexplained deletion.
 
-```ts
-hailstorm: {
-  id: 'hailstorm',
-  warningTicks: secondsToTicks(35),
-  durationTicks: secondsToTicks(60),
-  preventionCost: cents(900),
-  unmitigatedMultiplier: 0.5,
-  mitigatedMultiplier: 0.9,
-  targets: 'crops',
-  warningText: 'Hail forecast. Mature crops are most exposed.',
-},
-```
+Add the definition to `INCIDENTS`. Existing target kinds inherit scheduling and response math from
+the shared rules. A new target kind also needs candidate selection and impact application in
+`IncidentDirector`, a UI affordance for the response, and save/transition validation coverage.
 
-Then extend `#pickTargets` and `#autoMitigated` for the new kind, and add a HUD label in
-`bootstrap/bindHud.ts`.
-
-**Test:** `apps/game/tests/integration/farmSession.test.ts` already asserts *every* `started` is
-preceded by a `warned` — your event is covered by that the moment it can fire. Add a case for its
-specific mitigation.
+**Test:** cover eligibility, cooldown and mitigation math in `packages/shared/tests/`, then add an
+integration case proving warning → response/impact → resolution and reload persistence.
 
 ---
 

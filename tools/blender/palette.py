@@ -61,6 +61,22 @@ PALETTE: dict[str, str] = {
     "pumpkin_rib": "#E07826",
     "pumpkin_green": "#4C7A2C",
     "pumpkin_stem": "#4A7C2F",
+    "radish_body": "#F05A67",
+    "root_tip": "#F3E4CF",
+    "pea_pod": "#C9D84C",
+    "strawberry_body": "#F15D4D",
+    "tomato_body": "#F06443",
+    "sunflower_petal": "#F4C845",
+    "sunflower_centre": "#68482C",
+    "avocado_body": "#B8CF4B",
+    "avocado_shadow": "#486B2B",
+    "beetroot_body": "#EA7898",
+    "cranberry_body": "#EF5B57",
+    "grape_body": "#C29ADD",
+    "carrot_body": "#F28A38",
+    "cabbage_ready": "#C4DB72",
+    "garlic_body": "#F0E2C2",
+    "orchard_stem": "#76523A",
     "flower_yellow": "#F5D341",
     "diseased": "#8A7B4A",
 
@@ -109,6 +125,12 @@ PALETTE: dict[str, str] = {
     "fox_body": "#D0602A",
     "fox_belly": "#F5EBDC",
     "fox_dark": "#8A4A22",
+    "cow_hide": "#E7DFD1",
+    "cow_patch": "#51463E",
+    "cow_muzzle": "#D9A39A",
+    "cow_udder": "#E7AAA5",
+    "cow_hoof": "#44372F",
+    "cow_horn": "#D8C7A2",
 
     # --- Environment dressing --------------------------------------------
     # Trees and flowers are still built from broad colour masses rather than
@@ -117,6 +139,8 @@ PALETTE: dict[str, str] = {
     # farm, without textures or a second material.
     "tree_trunk": "#806044",
     "tree_trunk_light": "#A57A55",
+    "tree_dead_bark": "#8E806F",
+    "tree_dead_bark_light": "#B3A38D",
     "tree_leaf_dark": "#386A31",
     "tree_leaf_mid": "#5E8F3A",
     "tree_leaf_light": "#86AE43",
@@ -130,7 +154,10 @@ CROP_COLOURS = {
     "crop_seedling", "crop_leaf_light", "crop_young", "crop_mature", "crop_leaf_dark",
     "wheat_ready", "wheat_head", "corn_ready", "corn_husk",
     "corn_tassel", "pumpkin_body", "pumpkin_rib", "pumpkin_green", "pumpkin_stem",
-    "flower_yellow", "diseased",
+    "radish_body", "root_tip", "pea_pod", "strawberry_body", "tomato_body",
+    "sunflower_petal", "sunflower_centre", "avocado_body", "avocado_shadow",
+    "beetroot_body", "cranberry_body", "grape_body", "carrot_body",
+    "cabbage_ready", "garlic_body", "orchard_stem", "flower_yellow", "diseased",
 }
 STRUCTURE_COLOURS = {
     "wall_teal", "wall_teal_light", "wall_teal_dark", "trim_white",
@@ -158,9 +185,10 @@ DOOR_HEIGHT = 1.9                          # a 1.6 m character must fit through
 # apps/game/src/game/rules/sessionRules.ts - otherwise the review renders
 # judge a shot the engine never shows. A unit test on the TypeScript side
 # parses this file and fails if the two drift apart.
-GAMEPLAY_REVIEW_DISTANCE = 20.0
-GAMEPLAY_REVIEW_PITCH_DEGREES = 38.0
-GAMEPLAY_REVIEW_FOV_DEGREES = 48.0
+GAMEPLAY_REVIEW_DISTANCE = 13.25
+GAMEPLAY_REVIEW_PITCH_DEGREES = 34.0
+GAMEPLAY_REVIEW_FOV_DEGREES = 42.0
+GAMEPLAY_REVIEW_YAW_DEGREES = -42.0
 
 # --------------------------------------------------------------------------
 # Form language

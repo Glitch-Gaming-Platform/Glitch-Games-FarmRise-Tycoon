@@ -44,11 +44,12 @@ npm run art:ui-icons
 ```
 
 `tools/blender/render_ui_icons.py` opens the generated master blend, composes the actual game
-meshes, and writes 19 transparent WebP illustrations to
+meshes, and writes 44 transparent WebP illustrations to
 `apps/game/public/assets/ui/icons/`. Measured sizes are recorded in
 `art/ui_icon_report.json` and mirrored in `uiIcons.manifest.ts`.
 
-The current set is **about 81.6 KB total**, under the **100 KB interface-art budget**. These images
+The current set is **166,366 bytes total**, under the **175 KB interface-art budget**. Twelve crop
+icons were added as lazy inventory/market presentation under ADR 0024. These images
 are DOM presentation art. They do not add WebGL draw calls, UVs or texture sampling to the 3D world.
 
 ## Component rules
@@ -62,9 +63,22 @@ are DOM presentation art. They do not add WebGL draw calls, UVs or texture sampl
   states remain visible; they are not silently removed.
 - The HUD stays compact and transparent enough to preserve the world. It may use framed chips, but
   must not become a second large panel.
-- Active play exposes a bottom-right menu dock for important letter shortcuts. Each button pairs a
-  Blender-rendered icon, a plain-language menu name and its key cap; clicking it and pressing the
-  shown letter must open the same interface.
+- Proximity gauges appear only while the player is standing next to the thing they describe: water
+  for a planted bed, freshness for a pile of goods. Every bar reads as "how much is left", so a full
+  bar is always the good state, and every bar carries the number in words as well - a length alone
+  cannot say "dry in forty seconds", and colour alone cannot say "urgent".
+- Desktop active play exposes a bottom-right menu dock for important letter shortcuts. Each button
+  pairs a Blender-rendered icon, a plain-language menu name and its key cap; clicking it and pressing
+  the shown letter must open the same interface.
+- Touch-primary mobile play adds an analog joystick at bottom-left and action controls at
+  bottom-right, and moves the Market/Build/Office/Town dock into a two-by-two upper-left group. This
+  layout is capability-gated; never show or reserve its space on desktop.
+- The joystick feeds fractional semantic actions into `InputSystem`. Mobile UI controls must not
+  dispatch synthetic keys or mouse events.
+- During mobile placement, hide gameplay controls, leave a clear **Cancel** action and let a direct
+  canvas tap position and commit the preview.
+- Mobile layout uses `100dvh` and safe-area insets. Essential controls remain approximately 44 CSS
+  pixels or larger and inside portrait and short-landscape viewports.
 - Hide the shortcut dock whenever a panel or exclusive screen already presents menu controls. This
   avoids duplicate icons and prevents controls from competing with an open interface.
 - Coach marks state the next physical action and the target. Never say only “use WASD”; say where to
@@ -79,5 +93,6 @@ Visible interface work requires:
 1. unit coverage for generated-art catalog and measured file sizes;
 2. Playwright coverage for opening, closing and action paths;
 3. an input-isolation test proving open panels block movement, interaction and world clicks;
-4. desktop and mobile browser review for clipping, scrolling and readable action hierarchy;
-5. `npm run verify`, `npm run art:check` and `npm run test:e2e` before completion.
+4. desktop and mobile browser review for clipping, scrolling, safe areas and readable action hierarchy;
+5. trusted-touch hardware review for joystick hold/release, Work state changes and canvas placement;
+6. `npm run verify`, `npm run art:check` and `npm run test:e2e` before completion.

@@ -38,6 +38,39 @@ from palette import (  # noqa: E402
 
 COLOUR_ATTR = "Col"
 MATERIAL_NAME = "M_FarmRise_VertexColour"
+UV_ATTR = "UVMap"
+SURFACE_ATLAS_NAME = "FarmRiseSurfaceDetail"
+SURFACE_ATLAS_SIZE = 256
+SURFACE_ATLAS_COLS = 4
+SURFACE_ATLAS_ROWS = 4
+SURFACE_TYPES = (
+    "plain",
+    "wall_boards",
+    "roof_shingles",
+    "timber_grain",
+    "metal_panels",
+    "glass",
+    "live_bark",
+    "dead_bark",
+    "leaf",
+    "stone",
+    "woven",
+    "water",
+)
+SURFACE_SCALE = {
+    "plain": 0.5,
+    "wall_boards": 2.00,
+    "roof_shingles": 3.20,
+    "timber_grain": 1.25,
+    "metal_panels": 1.25,
+    "glass": 0.5,
+    "live_bark": 1.8,
+    "dead_bark": 1.7,
+    "leaf": 1.0,
+    "stone": 1.3,
+    "woven": 2.0,
+    "water": 0.8,
+}
 
 
 # ==========================================================================
@@ -66,7 +99,9 @@ class MeshBuilder:
         # Index 0 is reserved to mean "never painted" so the build can report
         # unpainted faces instead of hiding them.
         self.colour_layer = self.bm.faces.layers.int.new("farmrise_colour")
+        self.surface_layer = self.bm.faces.layers.int.new("farmrise_surface")
         self.palette_names: list[str] = []
+        self.surface_names: list[str] = []
 
     # -- internals ---------------------------------------------------------
 
@@ -76,16 +111,44 @@ class MeshBuilder:
             self.palette_names.append(colour)
         return self.palette_names.index(colour) + 1
 
-    def _paint(self, faces, colour: str) -> None:
+    def _surface_index(self, surface: str) -> int:
+        if surface not in SURFACE_TYPES:
+            raise ValueError(f"Unknown FarmRise surface type: {surface}")
+        if surface not in self.surface_names:
+            self.surface_names.append(surface)
+        return self.surface_names.index(surface) + 1
+
+    def _paint(self, faces, colour: str, surface: str = "auto") -> None:
+        if surface == "auto":
+            if colour.startswith("wall_teal"):
+                surface = "wall_boards"
+            elif colour.startswith("roof_grey"):
+                surface = "roof_shingles"
+            elif colour.startswith("timber"):
+                surface = "timber_grain"
+            elif colour.startswith("metal"):
+                surface = "metal_panels"
+            elif colour == "window_blue":
+                surface = "glass"
+            elif colour.startswith("water"):
+                surface = "water"
+            elif colour.startswith("tree_trunk"):
+                surface = "live_bark"
+            elif colour.startswith("rock") or colour.startswith("sand_stone"):
+                surface = "stone"
+            else:
+                surface = "plain"
         index = self._colour_index(colour)
+        surface_index = self._surface_index(surface)
         for face in faces:
             face[self.colour_layer] = index
+            face[self.surface_layer] = surface_index
 
-    def _emit(self, colour: str, fn):
+    def _emit(self, colour: str, fn, surface: str = "auto"):
         before = set(self.bm.faces)
         result = fn()
         new_faces = [f for f in self.bm.faces if f not in before]
-        self._paint(new_faces, colour)
+        self._paint(new_faces, colour, surface)
         verts = result.get("verts", []) if isinstance(result, dict) else []
         return new_faces, verts
 
@@ -100,13 +163,16 @@ class MeshBuilder:
 
     # -- primitives --------------------------------------------------------
 
-    def box(self, colour, size=(1, 1, 1), loc=(0, 0, 0), rot=(0, 0, 0)):
-        faces, verts = self._emit(colour, lambda: bmesh.ops.create_cube(self.bm, size=1.0))
+    def box(self, colour, size=(1, 1, 1), loc=(0, 0, 0), rot=(0, 0, 0),
+            surface="auto"):
+        faces, verts = self._emit(
+            colour, lambda: bmesh.ops.create_cube(self.bm, size=1.0), surface)
         self._place(verts, loc, rot, size)
         return faces
 
     def cylinder(self, colour, radius, depth, loc=(0, 0, 0), rot=(0, 0, 0),
-                 segments=8, radius_top=None, scale=(1, 1, 1), caps=True):
+                 segments=8, radius_top=None, scale=(1, 1, 1), caps=True,
+                 surface="auto"):
         """Cone axis is +Z. radius_top=0 gives a cone, None gives a cylinder."""
         top = radius if radius_top is None else radius_top
 
@@ -122,12 +188,12 @@ class MeshBuilder:
                     diameter1=radius * 2, diameter2=top * 2, depth=depth,
                 )
 
-        faces, verts = self._emit(colour, make)
+        faces, verts = self._emit(colour, make, surface)
         self._place(verts, loc, rot, scale)
         return faces
 
     def cylinder_between(self, colour, start, end, radius, segments=6,
-                         radius_top=None, caps=True):
+                         radius_top=None, caps=True, surface="auto"):
         """A tapered branch, limb or pipe whose local Z axis follows two points."""
         a, b = Vector(start), Vector(end)
         direction = b - a
@@ -145,22 +211,23 @@ class MeshBuilder:
             segments=segments,
             radius_top=radius_top,
             caps=caps,
+            surface=surface,
         )
 
     def polyhedron(self, colour, vertices, faces, loc=(0, 0, 0),
-                   rot=(0, 0, 0), scale=(1, 1, 1)):
+                   rot=(0, 0, 0), scale=(1, 1, 1), surface="auto"):
         """Emit a small authored convex form without creating a separate object."""
         before = set(self.bm.faces)
         verts = [self.bm.verts.new(tuple(vertex)) for vertex in vertices]
         for indices in faces:
             self.bm.faces.new(tuple(verts[index] for index in indices))
         new_faces = [face for face in self.bm.faces if face not in before]
-        self._paint(new_faces, colour)
+        self._paint(new_faces, colour, surface)
         self._place(verts, loc, rot, scale)
         return new_faces
 
     def sphere(self, colour, radius, loc=(0, 0, 0), rot=(0, 0, 0),
-               scale=(1, 1, 1), u=10, v=6):
+               scale=(1, 1, 1), u=10, v=6, surface="auto"):
         def make():
             try:
                 return bmesh.ops.create_uvsphere(
@@ -169,7 +236,7 @@ class MeshBuilder:
                 return bmesh.ops.create_uvsphere(
                     self.bm, u_segments=u, v_segments=v, diameter=radius * 2)
 
-        faces, verts = self._emit(colour, make)
+        faces, verts = self._emit(colour, make, surface)
         self._place(verts, loc, rot, scale)
         return faces, verts
 
@@ -177,7 +244,7 @@ class MeshBuilder:
                       loc=(0, 0, 0), scale=(1, 1, 1)):
         """
         A pumpkin. Built by radially modulating a UV sphere so the ribs are
-        real geometry in the silhouette rather than a texture - at 20 m the
+        real geometry in the silhouette rather than a texture - in gameplay the
         rim is the only part of a rib a player can actually see.
         """
         faces, verts = self.sphere(colour, radius, u=lobes * 2, v=6)
@@ -224,6 +291,57 @@ class MeshBuilder:
             faces,
             loc=loc,
             rot=(tilt, 0.0, yaw),
+        )
+
+    def foliage_cluster(self, colour, radius, loc=(0, 0, 0), rot=(0, 0, 0),
+                        scale=(1, 1, 1), lobes=5, inner=0.68, depth=0.14,
+                        surface="leaf"):
+        """
+        A shallow, convex spray of foliage with a broken lobed outline.
+
+        Overlapping UV spheres produce the familiar procedural "broccoli"
+        canopy: volume without branch structure or negative space. A spray is
+        still a broad gameplay-readable colour mass, but its pointed rim and
+        shallow depth let several clusters overlap like layered eucalyptus
+        leaves while the gaps between them keep the branch architecture clear.
+        """
+        ring = lobes * 2
+        points = [(0.0, 0.0, depth), (0.0, 0.0, -depth)]
+        for index in range(ring):
+            angle = index / ring * math.tau
+            length = radius if index % 2 == 0 else radius * inner
+            points.append((
+                math.cos(angle) * length,
+                math.sin(angle) * length,
+                math.sin(angle * 3.0) * depth * 0.18,
+            ))
+        faces = []
+        for index in range(ring):
+            current = index + 2
+            following = ((index + 1) % ring) + 2
+            faces.append((0, current, following))
+            faces.append((1, following, current))
+        return self.polyhedron(
+            colour, points, faces, loc=loc, rot=rot, scale=scale, surface=surface)
+
+    def lance_leaf(self, colour, length, width, loc=(0, 0, 0), rot=(0, 0, 0),
+                   curl=0.10):
+        """One eucalyptus leaf with a pointed tip and a shallow centre fold."""
+        points = [
+            (-length * 0.5, 0.0, 0.0),
+            (-length * 0.18, width * 0.5, curl * width),
+            (length * 0.18, width * 0.38, curl * width * 0.55),
+            (length * 0.5, 0.0, 0.0),
+            (length * 0.18, -width * 0.38, -curl * width * 0.55),
+            (-length * 0.18, -width * 0.5, -curl * width),
+        ]
+        return self.polyhedron(
+            colour,
+            points,
+            [(0, 1, 2, 3, 4, 5)],
+            loc=loc,
+            rot=rot,
+            surface="leaf",
         )
 
     def blade(self, colour, length, width_base, width_tip, loc=(0, 0, 0),
@@ -296,13 +414,17 @@ class MeshBuilder:
         )
         for face in self.bm.faces:
             if face[self.colour_layer] != 0:
-                continue
+                if face[self.surface_layer] != 0:
+                    continue
             for edge in face.edges:
                 neighbour = next(
-                    (f[self.colour_layer] for f in edge.link_faces
-                     if f is not face and f[self.colour_layer] != 0), 0)
+                    (f for f in edge.link_faces
+                     if f is not face and f[self.colour_layer] != 0), None)
                 if neighbour:
-                    face[self.colour_layer] = neighbour
+                    if face[self.colour_layer] == 0:
+                        face[self.colour_layer] = neighbour[self.colour_layer]
+                    if face[self.surface_layer] == 0:
+                        face[self.surface_layer] = neighbour[self.surface_layer]
                     break
 
     def build(self, collection: bpy.types.Collection, smooth: bool = False,
@@ -314,13 +436,20 @@ class MeshBuilder:
         mesh = bpy.data.meshes.new(self.name)
         unpainted = 0
         colour_names = []
+        surface_names = []
         for face in self.bm.faces:
             index = face[self.colour_layer]
+            surface_index = face[self.surface_layer]
             if index == 0:
                 unpainted += 1
                 colour_names.append("rock")
             else:
                 colour_names.append(self.palette_names[index - 1])
+            if surface_index == 0:
+                unpainted += 1
+                surface_names.append("plain")
+            else:
+                surface_names.append(self.surface_names[surface_index - 1])
         if unpainted:
             raise ValueError(
                 f"{self.name}: {unpainted} of {len(colour_names)} faces carry no "
@@ -336,6 +465,42 @@ class MeshBuilder:
             rgba = linear_rgba(name)
             for loop_index in poly.loop_indices:
                 layer.data[loop_index].color = rgba
+
+        uv_layer = mesh.uv_layers.new(name=UV_ATTR)
+        atlas_padding = 0.035
+        for poly, surface in zip(mesh.polygons, surface_names):
+            surface_index = SURFACE_TYPES.index(surface)
+            cell_x = surface_index % SURFACE_ATLAS_COLS
+            cell_y = surface_index // SURFACE_ATLAS_COLS
+            vertices = [mesh.vertices[mesh.loops[i].vertex_index].co for i in poly.loop_indices]
+            normal = poly.normal
+            if abs(normal.z) >= abs(normal.x) and abs(normal.z) >= abs(normal.y):
+                projected = [(co.x, co.y) for co in vertices]
+            elif abs(normal.y) >= abs(normal.x):
+                projected = [(co.x, co.z) for co in vertices]
+            else:
+                projected = [(co.y, co.z) for co in vertices]
+
+            if surface in {"leaf", "glass"}:
+                min_u = min(value[0] for value in projected)
+                max_u = max(value[0] for value in projected)
+                min_v = min(value[1] for value in projected)
+                max_v = max(value[1] for value in projected)
+                span_u = max(max_u - min_u, 1e-5)
+                span_v = max(max_v - min_v, 1e-5)
+                local_uvs = [((u - min_u) / span_u, (v - min_v) / span_v)
+                             for u, v in projected]
+            else:
+                scale = SURFACE_SCALE[surface]
+                local_uvs = [((u * scale) % 1.0, (v * scale) % 1.0)
+                             for u, v in projected]
+
+            for loop_index, (local_u, local_v) in zip(poly.loop_indices, local_uvs):
+                usable = 1.0 - atlas_padding * 2.0
+                uv_layer.data[loop_index].uv = (
+                    (cell_x + atlas_padding + local_u * usable) / SURFACE_ATLAS_COLS,
+                    1.0 - (cell_y + atlas_padding + local_v * usable) / SURFACE_ATLAS_ROWS,
+                )
 
         mesh.materials.append(shared_material())
         obj = bpy.data.objects.new(self.name, mesh)
@@ -369,10 +534,10 @@ def shared_material() -> bpy.types.Material:
     """
     One material for every asset in the game.
 
-    Base colour comes entirely from the COLOR_0 vertex attribute, so the
-    engine needs exactly one MeshStandardMaterial and can batch aggressively.
-    Roughness is high and metallic is zero everywhere: this art direction has
-    no specular story, and a stray highlight reads as a rendering bug.
+    Base colour comes from COLOR_0 and is multiplied by one shared greyscale
+    surface-detail atlas. The atlas gives siding, shingles, grain, bark, leaf
+    veins and panel seams close-range definition without creating additional
+    materials or draw calls.
     """
     existing = bpy.data.materials.get(MATERIAL_NAME)
     if existing:
@@ -399,12 +564,109 @@ def shared_material() -> bpy.types.Material:
         bsdf.inputs["Specular IOR Level"].default_value = 0.25
 
     attr = nodes.new("ShaderNodeVertexColor")
-    attr.location = (-160, 0)
+    attr.location = (-360, 80)
     attr.layer_name = COLOUR_ATTR
 
-    links.new(attr.outputs["Color"], bsdf.inputs["Base Color"])
+    texture = nodes.new("ShaderNodeTexImage")
+    texture.location = (-360, -120)
+    texture.image = surface_atlas_image()
+    texture.interpolation = "Linear"
+    texture.extension = "CLIP"
+
+    multiply = nodes.new("ShaderNodeMixRGB")
+    multiply.location = (-80, 20)
+    multiply.blend_type = "MULTIPLY"
+    multiply.inputs["Fac"].default_value = 1.0
+
+    links.new(attr.outputs["Color"], multiply.inputs[1])
+    links.new(texture.outputs["Color"], multiply.inputs[2])
+    links.new(multiply.outputs["Color"], bsdf.inputs["Base Color"])
     links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
     return mat
+
+
+def surface_atlas_image() -> bpy.types.Image:
+    existing = bpy.data.images.get(SURFACE_ATLAS_NAME)
+    if existing:
+        return existing
+
+    size = SURFACE_ATLAS_SIZE
+    image = bpy.data.images.new(SURFACE_ATLAS_NAME, width=size, height=size, alpha=False)
+    pixels = [1.0] * (size * size * 4)
+    cell_w = size // SURFACE_ATLAS_COLS
+    cell_h = size // SURFACE_ATLAS_ROWS
+
+    def noise(x: int, y: int, seed: int = 0) -> float:
+        value = (x * 374761393 + y * 668265263 + seed * 69069) & 0xFFFFFFFF
+        value = (value ^ (value >> 13)) * 1274126177 & 0xFFFFFFFF
+        return ((value ^ (value >> 16)) & 0xFFFF) / 65535.0
+
+    def detail(surface: str, x: int, y: int) -> float:
+        u = x / max(cell_w - 1, 1)
+        v = y / max(cell_h - 1, 1)
+        grain = (noise(x, y, SURFACE_TYPES.index(surface)) - 0.5) * 0.055
+        if surface == "plain":
+            return 1.0
+        if surface == "wall_boards":
+            groove = min(y % 10, 10 - (y % 10))
+            return (0.64 if groove < 1.5 else 0.97) + grain
+        if surface == "roof_shingles":
+            row = y // 10
+            horizontal = 0.64 if y % 10 < 2 else 0.98
+            joint = (x + (row % 2) * 9) % 18
+            vertical = 0.72 if joint < 2 and y % 10 < 8 else 1.0
+            return min(horizontal, vertical) + grain
+        if surface == "timber_grain":
+            wave = math.sin(u * 38.0 + math.sin(v * 13.0) * 2.2)
+            knot = math.hypot(u - 0.68, (v - 0.38) * 1.8)
+            knot_line = 0.76 if 0.10 < knot < 0.15 else 1.0
+            return min(0.91 + wave * 0.055, knot_line) + grain
+        if surface == "metal_panels":
+            seam = min(x % 22, 22 - (x % 22))
+            rivet = math.hypot((x % 22) - 2.5, (y % 22) - 3.0)
+            return (0.74 if seam < 1.5 else 0.97) if rivet > 1.8 else 0.68
+        if surface == "glass":
+            mullion = min(abs(u - 0.5), abs(v - 0.5))
+            if mullion < 0.026:
+                return 0.70
+            diagonal = abs((u + v * 0.58) - 0.72)
+            return 1.0 if diagonal > 0.08 else 1.16
+        if surface == "live_bark":
+            crack = abs(math.sin(u * 31.0 + math.sin(v * 17.0) * 1.9))
+            peel = noise(x // 7, y // 9, 21)
+            return 0.72 + crack * 0.24 + peel * 0.06
+        if surface == "dead_bark":
+            vertical = abs(math.sin(u * 24.0 + math.sin(v * 8.0) * 2.8))
+            cross = abs(math.sin(v * 27.0 + u * 5.0))
+            return 0.66 + min(vertical, cross) * 0.30 + grain
+        if surface == "leaf":
+            midrib = abs(v - 0.5)
+            edge_fade = min(u, 1.0 - u)
+            if midrib < 0.018 and edge_fade > 0.05:
+                return 0.80
+            return 1.0 + grain
+        if surface == "stone":
+            return 0.84 + noise(x // 3, y // 3, 8) * 0.16
+        if surface == "woven":
+            return 0.78 if x % 8 < 2 or y % 8 < 2 else 0.98
+        if surface == "water":
+            return 0.90 + math.sin(u * 28.0 + math.sin(v * 11.0)) * 0.07
+        return 1.0
+
+    for surface_index, surface in enumerate(SURFACE_TYPES):
+        cell_x = surface_index % SURFACE_ATLAS_COLS
+        cell_y = surface_index // SURFACE_ATLAS_COLS
+        for y in range(cell_h):
+            for x in range(cell_w):
+                atlas_x = cell_x * cell_w + x
+                atlas_y = size - 1 - (cell_y * cell_h + y)
+                value = max(0.48, min(1.18, detail(surface, x, y)))
+                offset = (atlas_y * size + atlas_x) * 4
+                pixels[offset:offset + 4] = [value, value, value, 1.0]
+
+    image.pixels = pixels
+    image.pack()
+    return image
 
 
 # ==========================================================================
@@ -443,16 +705,16 @@ def apply_vertex_ao(
     """
     Bakes ambient occlusion into the vertex colours.
 
-    This is the single highest-value visual upgrade available to a flat-shaded,
-    untextured, one-material game. Without it every surface is lit purely by
+    This is the single highest-value grounding upgrade available to a
+    flat-shaded, one-material game. Without it every surface is lit purely by
     its normal, so crevices, undersides, contact points and interiors are
     exactly as bright as exposed faces - which is the specific reason
-    untextured low-poly reads as "cheap" rather than "stylised". Real games in
-    this style bake occlusion; they just usually bake it into a texture.
+    low-poly reads as "cheap" rather than "stylised". Real games in this style
+    bake occlusion; they just usually bake it into a colour texture.
 
-    We have no textures, so it goes where our colour already lives: the
-    vertices. Cost at runtime is zero - it is the same COLOR_0 attribute the
-    shared material already reads.
+    Occlusion stays in the vertices rather than the generated detail atlas so
+    it remains asset-specific. Cost at runtime is zero - it is the same COLOR_0
+    attribute the shared material already reads.
 
     Two occlusion terms are combined:
       - self-occlusion, by casting rays over the hemisphere around each

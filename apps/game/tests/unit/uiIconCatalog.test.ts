@@ -1,6 +1,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { CROP_IDS } from '@farmrise/shared';
 import { CORE_MANIFEST } from '../../src/assets/manifests/core.manifest.js';
 import { UI_ICON_ASSETS, UI_ICON_URLS } from '../../src/assets/manifests/uiIcons.manifest.js';
 
@@ -13,13 +14,22 @@ const REPORT = JSON.parse(
 };
 
 describe('UI icon catalog', () => {
+  it('gives every crop its own inventory and market icon', () => {
+    for (const cropId of CROP_IDS) {
+      expect(UI_ICON_URLS).toHaveProperty(cropId);
+      expect(UI_ICON_URLS[cropId as keyof typeof UI_ICON_URLS]).toBe(
+        `assets/ui/icons/${cropId}.webp`,
+      );
+    }
+  });
+
   it('declares every Blender-rendered interface image in the core manifest', () => {
     const expectedUrls = Object.values(UI_ICON_URLS).sort();
     const manifestEntries = CORE_MANIFEST.assets.filter((entry) =>
       entry.id.startsWith('texture:ui-'),
     );
 
-    expect(UI_ICON_ASSETS).toHaveLength(19);
+    expect(UI_ICON_ASSETS).toHaveLength(Object.keys(UI_ICON_URLS).length);
     expect(manifestEntries).toEqual(UI_ICON_ASSETS);
     expect(manifestEntries.map((entry) => entry.url).sort()).toEqual(expectedUrls);
     expect(
@@ -49,6 +59,6 @@ describe('UI icon catalog', () => {
     }
 
     expect(totalBytes).toBe(REPORT.total_bytes);
-    expect(totalBytes).toBeLessThanOrEqual(100_000);
+    expect(totalBytes).toBeLessThanOrEqual(175_000);
   });
 });

@@ -6,21 +6,18 @@
  * browser. The panel exists to answer one question the player asks
  * themselves: "how do I keep this if I clear my browser or switch devices?"
  *
- * So the copy sells the benefit, not the obligation, and the panel always
- * shows what tier their progress is currently on.
+ * On Glitch, authentication belongs to Glitch itself. The player is already
+ * signed in and must never be shown a second email/password form.
  */
 import { button, clear, el } from '../core/dom.js';
 import { uiIcon } from '../core/icons.js';
-import type { SaveTier } from '@platform/save/SaveDirector.js';
 
 export interface AccountSnapshot {
-  readonly signedIn: boolean;
+  readonly provider: 'farmrise' | 'glitch' | null;
   readonly email: string | null;
   readonly displayName: string | null;
-  readonly tier: SaveTier;
   readonly busy: boolean;
   readonly error: string | null;
-  readonly cloudAvailable: boolean;
 }
 
 export interface AccountCallbacks {
@@ -29,21 +26,6 @@ export interface AccountCallbacks {
   readonly onLogout: () => void;
   readonly onClose: () => void;
 }
-
-const TIER_COPY: Record<SaveTier, { label: string; detail: string }> = {
-  local: {
-    label: 'Saved in this browser',
-    detail: 'Your farm is safe here, but it will not follow you to another device.',
-  },
-  account: {
-    label: 'Saved to your account',
-    detail: 'Your farm follows you to any device you sign in on.',
-  },
-  cloud: {
-    label: 'Saved to your account and the cloud',
-    detail: 'Backed up to your account and to Glitch cloud saves.',
-  },
-};
 
 export class AccountPanel {
   readonly root: HTMLElement;
@@ -70,7 +52,7 @@ export class AccountPanel {
             'div',
             { class: 'fr-panel-card__title' },
             uiIcon('farmer', '', 'fr-panel-card__icon'),
-            el('h2', { text: 'Your progress' }),
+            el('h2', { text: 'Your profile' }),
           ),
           button('Close', () => this.callbacks.onClose(), {
             class: 'fr-btn fr-btn--ghost fr-btn--small',
@@ -94,16 +76,6 @@ export class AccountPanel {
 
   update(snapshot: AccountSnapshot): void {
     clear(this.#body);
-    const tier = TIER_COPY[snapshot.tier];
-
-    this.#body.append(
-      el(
-        'div',
-        { class: 'fr-account__status', testId: 'account-status' },
-        el('strong', { text: tier.label }),
-        el('span', { class: 'fr-market__meta', text: tier.detail }),
-      ),
-    );
 
     if (snapshot.error) {
       this.#body.append(
@@ -111,7 +83,22 @@ export class AccountPanel {
       );
     }
 
-    if (snapshot.signedIn) {
+    if (snapshot.provider === 'glitch') {
+      this.#body.append(
+        el('p', {
+          class: 'fr-market__summary',
+          testId: 'account-glitch-identity',
+          text: `Playing as ${snapshot.displayName ?? 'your Glitch profile'}.`,
+        }),
+        el('p', {
+          class: 'fr-market__meta',
+          text: 'Your identity is provided automatically by Glitch.',
+        }),
+      );
+      return;
+    }
+
+    if (snapshot.provider === 'farmrise') {
       this.#body.append(
         el('p', {
           class: 'fr-market__summary',
@@ -188,15 +175,6 @@ export class AccountPanel {
       form,
       toggle,
     );
-
-    if (snapshot.cloudAvailable) {
-      this.#body.append(
-        el('p', {
-          class: 'fr-market__meta',
-          text: 'Signing in also enables Glitch cloud saves and progression.',
-        }),
-      );
-    }
   }
 }
 

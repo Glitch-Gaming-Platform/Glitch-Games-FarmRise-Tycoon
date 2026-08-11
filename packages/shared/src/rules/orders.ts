@@ -26,11 +26,11 @@ export interface MarketOrder {
   readonly status: OrderStatus;
 }
 
-/** The only buyer in the first playable. */
-export const DEFAULT_BUYER_ID = 'millbrook_grocers';
-export const BUYERS: Readonly<Record<string, { id: string; displayName: string }>> = Object.freeze({
-  [DEFAULT_BUYER_ID]: { id: DEFAULT_BUYER_ID, displayName: 'Millbrook Grocers' },
-});
+/**
+ * Buyers now live in domain/buyers.ts, because a buyer is a relationship with
+ * trust, quality standards and a failure penalty rather than a display name.
+ */
+export { BUYER_DEFINITIONS as BUYERS, DEFAULT_BUYER_ID } from '../domain/buyers.js';
 
 /** Total payout if the order is completed. */
 export function orderPayout(order: MarketOrder): Cents {

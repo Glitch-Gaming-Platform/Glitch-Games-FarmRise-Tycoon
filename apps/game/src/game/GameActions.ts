@@ -19,6 +19,9 @@ export type GameAction =
   | 'openBuild'
   | 'openMarket'
   | 'prevent'
+  | 'haul'
+  | 'openCareer'
+  | 'openTown'
   | 'pause'
   | 'toggleDebug';
 
@@ -35,6 +38,12 @@ export const DEFAULT_BINDINGS: ActionMap<GameAction> = {
   cycleCrop: { keys: ['KeyQ'] },
   openBuild: { keys: ['KeyB'] },
   openMarket: { keys: ['KeyM'] },
+  // Hauling is the most repeated action after moving once a second parcel is
+  // owned, so it gets a key of its own rather than a modifier: R is reachable
+  // without leaving WASD, and the context key stays free for the bed underfoot.
+  haul: { keys: ['KeyR'] },
+  openCareer: { keys: ['KeyC'] },
+  openTown: { keys: ['KeyT'] },
   // F for the countermeasure: reachable with the left hand while the right
   // stays on movement, because the prevention window is short and the player
   // may be running toward the threat when it opens.

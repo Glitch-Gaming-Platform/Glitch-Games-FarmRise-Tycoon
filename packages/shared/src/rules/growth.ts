@@ -4,10 +4,17 @@
  * The client runs these every fixed step to draw the plot. The server runs the
  * identical functions when a save is submitted, to decide whether the harvest
  * the client claims is physically possible. Neither side may fork this file.
+ *
+ * Progression adds two inputs that the player controls over a longer horizon
+ * than one cycle: the season the crop is growing in, and the state of the soil
+ * it is growing in. Both scale an existing term rather than adding a new gate,
+ * so a player who understands the original loop is never blocked by them.
  */
 import { requireCrop, type CropDefinition } from '../domain/crops.js';
 import { GAME_DAY_TICKS, type Ticks } from '../domain/time.js';
+import { seasonDefinition, type Season } from '../domain/seasons.js';
 import type { PlotId } from '../domain/ids.js';
+import { rotationFactor, soilYieldFactor } from './soil.js';
 
 export type PlotStage = 'empty' | 'growing' | 'ready' | 'dead';
 
@@ -25,9 +32,15 @@ export interface PlotState {
   readonly diseased: boolean;
   /** Yield multiplier accumulated from farm events. 1 = untouched. */
   readonly eventMultiplier: number;
+  /** Nutrient left in this bed, 0..1. */
+  readonly soil: number;
+  /** Grade of the crop currently growing, 0..1. Settled at harvest. */
+  readonly quality: number;
+  /** What grew here last cycle, so rotation can be rewarded. */
+  readonly previousCropId: string | null;
 }
 
-export function emptyPlot(id: PlotId): PlotState {
+export function emptyPlot(id: PlotId, soil = 1, previousCropId: string | null = null): PlotState {
   return {
     id,
     cropId: null,
@@ -37,6 +50,9 @@ export function emptyPlot(id: PlotId): PlotState {
     irrigated: false,
     diseased: false,
     eventMultiplier: 1,
+    soil,
+    quality: 1,
+    previousCropId,
   };
 }
 
@@ -53,28 +69,76 @@ export function plotStage(plot: PlotState): PlotStage {
  * Water is the only thing that slows growth; tending affects yield instead.
  * The floor of 0.35 is deliberate - a neglected plot should still finish
  * eventually, because a permanently stalled plot is a dead-end the player
- * cannot recover from.
+ * cannot recover from. Season scales the whole result, and winter is slow
+ * rather than impossible for the same reason.
  */
-export function growthRate(plot: PlotState): number {
-  if (plot.irrigated) return 1;
-  return Math.max(0.35, 0.35 + 0.65 * clamp01(plot.water));
+export function growthRate(plot: PlotState, season?: Season): number {
+  const water = plot.irrigated ? 1 : Math.max(0.35, 0.35 + 0.65 * clamp01(plot.water));
+  if (!season || !plot.cropId) return water;
+  const crop = requireCrop(plot.cropId);
+  const seasonal = seasonDefinition(season).growthModifier;
+  const suits = crop.favouredSeasons.includes(season);
+  return water * seasonal * (suits ? 1 : crop.offSeasonGrowth);
 }
 
 /** Advances one plot by `dtTicks`. Returns a new object; never mutates. */
-export function advancePlot(plot: PlotState, dtTicks: Ticks): PlotState {
+export function advancePlot(plot: PlotState, dtTicks: Ticks, season?: Season): PlotState {
   if (!plot.cropId || plotStage(plot) === 'dead') return plot;
   const crop = requireCrop(plot.cropId);
 
+  const drain = season ? seasonDefinition(season).waterDrainModifier : 1;
   const water = plot.irrigated
     ? 1
-    : clamp01(plot.water - (crop.waterPerDay * dtTicks) / (GAME_DAY_TICKS * 4));
+    : clamp01(plot.water - (crop.waterPerDay * drain * dtTicks) / (GAME_DAY_TICKS * 4));
 
-  const nextGrown = Math.min(
-    crop.growthTicks,
-    plot.grownTicks + dtTicks * growthRate({ ...plot, water }),
-  );
+  const rate = growthRate({ ...plot, water }, season);
+  const remaining = crop.growthTicks - plot.grownTicks;
+  let nextGrown: number;
+  if (remaining <= 0) {
+    // Once ready, grownTicks becomes the crop's harvest clock. Tracking time
+    // above the maturity threshold lets quality fall while it waits in the
+    // field, giving the player a real reason to harvest promptly.
+    nextGrown = plot.grownTicks + dtTicks;
+  } else {
+    const growthThisStep = dtTicks * rate;
+    if (growthThisStep <= remaining) nextGrown = plot.grownTicks + growthThisStep;
+    else {
+      const ticksToMaturity = remaining / Math.max(0.01, rate);
+      nextGrown = crop.growthTicks + Math.max(0, dtTicks - ticksToMaturity);
+    }
+  }
 
   return { ...plot, water, grownTicks: nextGrown };
+}
+
+/**
+ * Water level at which a bed is visibly struggling.
+ *
+ * Below this the growth rate is close to its floor, so this is the point at
+ * which walking over with a can is worth the trip rather than merely tidy.
+ */
+export const THIRSTY_WATER = 0.45;
+
+export function isThirsty(plot: PlotState): boolean {
+  return !plot.irrigated && plot.cropId !== null && plot.water < THIRSTY_WATER;
+}
+
+/**
+ * Ticks until this bed drops below the thirsty mark, or null if it never will.
+ *
+ * An irrigated bed never gets there, and neither does one with nothing in it -
+ * both return null so the interface can say "fine" rather than draw a countdown
+ * to an event that will not happen.
+ */
+export function ticksUntilThirsty(plot: PlotState, season?: Season): Ticks | null {
+  if (!plot.cropId || plot.irrigated) return null;
+  if (plot.water <= THIRSTY_WATER) return 0;
+
+  const crop = requireCrop(plot.cropId);
+  const drain = season ? seasonDefinition(season).waterDrainModifier : 1;
+  const perTick = (crop.waterPerDay * drain) / (GAME_DAY_TICKS * 4);
+  if (perTick <= 0) return null;
+  return Math.ceil((plot.water - THIRSTY_WATER) / perTick);
 }
 
 /** Applies one tending action. Extra tending beyond the crop's need is wasted. */
@@ -102,8 +166,10 @@ export function tendFactor(plot: PlotState, crop: CropDefinition): number {
  *
  * This is the single most security-sensitive function in the shared package:
  * it is the upper bound the server uses to reject an inflated harvest claim.
+ * `specializationYield` is passed in rather than looked up so that this stays a
+ * pure function of its arguments on both sides of the wire.
  */
-export function computeYield(plot: PlotState): number {
+export function computeYield(plot: PlotState, specializationYield = 1): number {
   if (!plot.cropId || plotStage(plot) !== 'ready') return 0;
   const crop = requireCrop(plot.cropId);
   const diseaseFactor = plot.diseased ? 0.4 : 1;
@@ -112,17 +178,26 @@ export function computeYield(plot: PlotState): number {
     tendFactor(plot, crop) *
     diseaseFactor *
     Math.max(0, plot.eventMultiplier) *
+    soilYieldFactor(plot.soil) *
+    rotationFactor(plot.previousCropId, plot.cropId) *
+    Math.max(0, specializationYield) *
     (plot.irrigated ? 1 : 0.7 + 0.3 * clamp01(plot.water));
   return Math.max(0, Math.floor(raw));
 }
 
 /** Ticks remaining until harvestable, given the plot's current growth rate. */
-export function ticksUntilReady(plot: PlotState): Ticks {
+export function ticksUntilReady(plot: PlotState, season?: Season): Ticks {
   if (!plot.cropId) return 0;
   const crop = requireCrop(plot.cropId);
   const remaining = crop.growthTicks - plot.grownTicks;
   if (remaining <= 0) return 0;
-  return Math.ceil(remaining / growthRate(plot));
+  return Math.ceil(remaining / Math.max(0.01, growthRate(plot, season)));
+}
+
+/** Wall-clock simulation ticks a mature crop has waited in the field. */
+export function ticksSinceReady(plot: PlotState): Ticks {
+  if (!plot.cropId) return 0;
+  return Math.max(0, plot.grownTicks - requireCrop(plot.cropId).growthTicks);
 }
 
 export function plantCrop(plot: PlotState, cropId: string): PlotState {
@@ -135,11 +210,13 @@ export function plantCrop(plot: PlotState, cropId: string): PlotState {
     water: 1,
     diseased: false,
     eventMultiplier: 1,
+    quality: 1,
   };
 }
 
+/** Clears a bed, remembering what grew there so the next crop can rotate off it. */
 export function clearPlot(plot: PlotState): PlotState {
-  return emptyPlot(plot.id);
+  return emptyPlot(plot.id, plot.soil, plot.cropId ?? plot.previousCropId);
 }
 
 function clamp01(value: number): number {

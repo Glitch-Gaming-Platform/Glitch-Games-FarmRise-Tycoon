@@ -39,6 +39,13 @@ export class GlitchPlatform implements Disposable {
     return this.session.installId;
   }
 
+  /** The validated Glitch identity. Glitch owns this authentication session. */
+  get identity(): { readonly id: string; readonly displayName: string | null } | null {
+    const validation = this.session.validation;
+    if (validation?.valid !== true || !validation.user_id) return null;
+    return { id: validation.user_id, displayName: validation.user_name };
+  }
+
   /** True when cloud saves and progression are permitted for this player. */
   get canUseCloudFeatures(): boolean {
     return Boolean(this.session.installId) && this.session.isLoginBacked;

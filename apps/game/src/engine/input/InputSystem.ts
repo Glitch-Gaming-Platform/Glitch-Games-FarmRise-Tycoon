@@ -16,9 +16,10 @@ import type { Disposable } from '../core/types.js';
 import type { ActionMap, AxisDefinition } from './ActionMap.js';
 import { EMPTY_POINTER, type PointerSnapshot } from './PointerState.js';
 
-type QueuedEvent =
+type QueuedEvent<TAction extends string> =
   | { kind: 'key'; code: string; down: boolean }
   | { kind: 'mouse'; button: number; down: boolean }
+  | { kind: 'action'; action: TAction; value: number }
   | { kind: 'blur' };
 
 export interface InputSystemOptions<TAction extends string> {
@@ -39,7 +40,11 @@ export class InputSystem<TAction extends string> implements EngineSystem, Dispos
   readonly #down = new Set<string>();
   readonly #pressed = new Set<string>();
   readonly #released = new Set<string>();
-  #queue: QueuedEvent[] = [];
+  readonly #actionDown = new Set<TAction>();
+  readonly #actionValues = new Map<TAction, number>();
+  readonly #actionPressed = new Set<TAction>();
+  readonly #actionReleased = new Set<TAction>();
+  #queue: QueuedEvent<TAction>[] = [];
 
   #pointer: PointerSnapshot = EMPTY_POINTER;
   readonly #activePointers = new Map<number, { x: number; y: number }>();
@@ -74,10 +79,28 @@ export class InputSystem<TAction extends string> implements EngineSystem, Dispos
     this.#bindings = bindings;
   }
 
+  /**
+   * Queues a semantic action from a non-keyboard control such as a touch pad.
+   * It follows the same fixed-tick buffering as DOM input, so a quick mobile
+   * tap cannot disappear between simulation steps.
+   */
+  setActionState(action: TAction, down: boolean): void {
+    this.setActionValue(action, down ? 1 : 0);
+  }
+
+  /** Fractional semantic input, used by the mobile analog joystick. */
+  setActionValue(action: TAction, value: number): void {
+    const clamped = Math.min(1, Math.max(0, value));
+    if (clamped > 0 && !this.#enabled) return;
+    this.#queue.push({ kind: 'action', action, value: clamped });
+  }
+
   /** Drains the event queue. Must run before any system that reads input. */
   fixedUpdate(): void {
     this.#pressed.clear();
     this.#released.clear();
+    this.#actionPressed.clear();
+    this.#actionReleased.clear();
 
     const queue = this.#queue;
     this.#queue = [];
@@ -87,6 +110,21 @@ export class InputSystem<TAction extends string> implements EngineSystem, Dispos
         // alt-tabbing, came back walking forever" bug.
         for (const code of this.#down) this.#released.add(code);
         this.#down.clear();
+        for (const action of this.#actionDown) this.#actionReleased.add(action);
+        this.#actionDown.clear();
+        this.#actionValues.clear();
+        continue;
+      }
+      if (event.kind === 'action') {
+        if (event.value > 0) {
+          if (!this.#actionDown.has(event.action)) this.#actionPressed.add(event.action);
+          this.#actionDown.add(event.action);
+          this.#actionValues.set(event.action, event.value);
+        } else {
+          if (this.#actionDown.has(event.action)) this.#actionReleased.add(event.action);
+          this.#actionDown.delete(event.action);
+          this.#actionValues.delete(event.action);
+        }
         continue;
       }
       const code = event.kind === 'key' ? event.code : `Mouse${event.button}`;
@@ -106,20 +144,24 @@ export class InputSystem<TAction extends string> implements EngineSystem, Dispos
   }
 
   isDown(action: TAction): boolean {
-    return this.#anyCode(action, (code) => this.#down.has(code));
+    return this.#actionDown.has(action) || this.#anyCode(action, (code) => this.#down.has(code));
   }
 
   wasPressed(action: TAction): boolean {
-    return this.#anyCode(action, (code) => this.#pressed.has(code));
+    return (
+      this.#actionPressed.has(action) || this.#anyCode(action, (code) => this.#pressed.has(code))
+    );
   }
 
   wasReleased(action: TAction): boolean {
-    return this.#anyCode(action, (code) => this.#released.has(code));
+    return (
+      this.#actionReleased.has(action) || this.#anyCode(action, (code) => this.#released.has(code))
+    );
   }
 
   /** -1, 0 or 1 from a pair of opposing actions. */
   axis(definition: AxisDefinition<TAction>): number {
-    return (this.isDown(definition.positive) ? 1 : 0) - (this.isDown(definition.negative) ? 1 : 0);
+    return this.#actionValue(definition.positive) - this.#actionValue(definition.negative);
   }
 
   get pointer(): PointerSnapshot {
@@ -131,6 +173,10 @@ export class InputSystem<TAction extends string> implements EngineSystem, Dispos
     this.#down.clear();
     this.#pressed.clear();
     this.#released.clear();
+    this.#actionDown.clear();
+    this.#actionValues.clear();
+    this.#actionPressed.clear();
+    this.#actionReleased.clear();
     this.#queue = [];
   }
 
@@ -141,6 +187,11 @@ export class InputSystem<TAction extends string> implements EngineSystem, Dispos
       (binding.keys?.some(predicate) ?? false) ||
       (binding.mouseButtons?.some((button) => predicate(`Mouse${button}`)) ?? false)
     );
+  }
+
+  #actionValue(action: TAction): number {
+    const virtualValue = this.#actionValues.get(action) ?? 0;
+    return Math.max(virtualValue, this.#anyCode(action, (code) => this.#down.has(code)) ? 1 : 0);
   }
 
   #snapshotPointer(): PointerSnapshot {
@@ -190,6 +241,11 @@ export class InputSystem<TAction extends string> implements EngineSystem, Dispos
   #onPointerDown = (event: PointerEvent): void => {
     if (!this.#enabled || this.#isIgnoredTarget(event.target)) return;
     this.#pointerType = event.pointerType as PointerSnapshot['type'];
+    // Touchscreens do not have a hover phase. A tap may therefore arrive as
+    // pointerdown/up without any preceding pointermove, so capture the contact
+    // coordinates here as the authoritative placement position.
+    this.#rawX = event.clientX;
+    this.#rawY = event.clientY;
     this.#activePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     this.#target.setPointerCapture?.(event.pointerId);
     this.#queue.push({ kind: 'mouse', button: event.button, down: true });

@@ -27,8 +27,11 @@ export interface OnboardingContext {
   readonly plantedPlots: number;
   readonly tendCount: number;
   readonly cropsHarvested: number;
+  readonly goodsHauled: number;
   readonly salesMade: number;
   readonly reinvestments: number;
+  readonly eggsReady: number;
+  readonly eggsCollected: number;
   readonly warningActive: boolean;
   readonly eventsResolved: number;
   readonly marketOpen: boolean;
@@ -40,6 +43,8 @@ export interface Beat {
   readonly title: string;
   readonly body: string;
   readonly key?: string;
+  /** Alternate copy for the mobile touch surface. */
+  readonly touch?: { readonly body: string; readonly key?: string; readonly hintBody?: string };
   /** HUD features this beat unlocks when it STARTS. */
   readonly reveals?: readonly HudFeature[];
   /** True once the player has done the thing. */
@@ -66,6 +71,11 @@ export const BEATS: readonly Beat[] = [
     title: 'Walk to the soil plots',
     body: 'Use W, A, S and D to walk over to one of the brown plots of land.',
     key: 'W A S D',
+    touch: {
+      body: 'Use the joystick to walk over to one of the brown plots of land.',
+      key: 'MOVE',
+      hintBody: 'Keep using the joystick until the Plant Wheat prompt appears.',
+    },
     isDone: (c) => c.hasMoved && c.plotInReach !== null,
     alreadySatisfied: (c) => c.plantedPlots > 0,
     hint: {
@@ -78,6 +88,11 @@ export const BEATS: readonly Beat[] = [
     title: 'Put something in the ground',
     body: 'When Plant Wheat appears, press E to sow your first crop.',
     key: 'E',
+    touch: {
+      body: 'When Plant Wheat appears, tap Work to sow your first crop.',
+      key: 'WORK',
+      hintBody: 'Tap Work while standing on a bed. Seed changes which crop you carry.',
+    },
     reveals: ['seed', 'money'],
     isDone: (c) => c.plantedPlots > 0,
     hint: {
@@ -90,6 +105,11 @@ export const BEATS: readonly Beat[] = [
     title: 'Look after it',
     body: 'Press E on the planted plot again to water it.',
     key: 'E',
+    touch: {
+      body: 'Tap Work on the planted plot again to water it.',
+      key: 'WORK',
+      hintBody: 'Tap Work on the same bed again to water it while it grows.',
+    },
     isDone: (c) => c.tendCount > 0,
     alreadySatisfied: (c) => c.cropsHarvested > 0,
     hint: { afterMs: 16_000, body: 'Press E on the same bed again to water it while it grows.' },
@@ -99,7 +119,12 @@ export const BEATS: readonly Beat[] = [
     title: 'Watch it ripen',
     body: 'Your first watered crop ripens quickly. When it turns gold or orange, press E to harvest it.',
     key: 'E',
-    reveals: ['ready', 'storage'],
+    touch: {
+      body: 'Your first watered crop ripens quickly. When it turns gold or orange, tap Work to harvest it.',
+      key: 'WORK',
+      hintBody: 'When the prompt says Harvest, tap Work.',
+    },
+    reveals: ['ready'],
     isDone: (c) => c.cropsHarvested > 0,
     hint: {
       afterMs: 8_000,
@@ -107,10 +132,33 @@ export const BEATS: readonly Beat[] = [
     },
   },
   {
+    id: 'haul',
+    title: 'Carry it home',
+    body: 'Carry the crop to the shelter. When Put down appears, press E to store it.',
+    key: 'E',
+    touch: {
+      body: 'Carry the crop to the shelter. When Put down appears, tap Work to store it.',
+      key: 'WORK',
+      hintBody: 'Walk to the shelter with the crop, then tap Work when Put down appears.',
+    },
+    reveals: ['storage'],
+    isDone: (c) => c.goodsHauled > 0,
+    alreadySatisfied: (c) => c.salesMade > 0,
+    hint: {
+      afterMs: 16_000,
+      body: 'Walk to the shelter with the crop, then press E when Put down appears.',
+    },
+  },
+  {
     id: 'sell',
     title: 'Turn crops into money',
-    body: 'Press M or click Market, then choose Sell all beside the crop you harvested.',
+    body: 'Press M or click Market, then choose Sell all beside the crop you stored.',
     key: 'M',
+    touch: {
+      body: 'Tap Market, then choose Sell all beside the crop you stored.',
+      key: 'MARKET',
+      hintBody: 'Tap Market. Contracts pay more than selling on the spot.',
+    },
     isDone: (c) => c.salesMade > 0,
     hint: {
       afterMs: 18_000,
@@ -122,6 +170,11 @@ export const BEATS: readonly Beat[] = [
     title: 'Spend it on the farm',
     body: 'Press B or click Build, then buy a hen or place a building on open ground.',
     key: 'B',
+    touch: {
+      body: 'Tap Build, then buy a hen or place a building on open ground.',
+      key: 'BUILD',
+      hintBody: 'Tap Build. A barn holds more; irrigation loses less to drought.',
+    },
     reveals: ['objective'],
     isDone: (c) => c.reinvestments > 0,
     hint: {
@@ -130,10 +183,31 @@ export const BEATS: readonly Beat[] = [
     },
   },
   {
+    id: 'eggs',
+    title: 'Collect the eggs',
+    body: 'The hens lay eggs by the shelter. Walk over and press E when Pick up Eggs appears.',
+    key: 'E',
+    touch: {
+      body: 'The hens lay eggs by the shelter. Walk over and tap Work when Pick up Eggs appears.',
+      key: 'WORK',
+      hintBody: 'Look just in front of the shelter, then tap Work beside the egg basket.',
+    },
+    isDone: (c) => c.eggsCollected > 0,
+    hint: {
+      afterMs: 14_000,
+      body: 'Look just in front of the shelter, then press E beside the egg basket.',
+    },
+  },
+  {
     id: 'setback',
     title: 'Something is coming',
     body: 'You have a moment before it lands. Pay to prevent it, or take the hit.',
     key: 'F',
+    touch: {
+      body: 'You have a moment before it lands. Tap Protect, or take the hit.',
+      key: 'PROTECT',
+      hintBody: 'Tap Protect to spend money preventing it. Doing nothing is also valid.',
+    },
     reveals: ['warning'],
     // Waits for the world, not for the player: this beat only exists once a
     // warning is actually on screen, so it can never teach a mechanic the
@@ -148,7 +222,11 @@ export const BEATS: readonly Beat[] = [
   {
     id: 'goal',
     title: 'The field next door',
-    body: 'Keep growing and selling. At $150, press B or click Build to buy the neighbouring parcel.',
+    body: 'Keep growing and selling. At $75, press B or click Build to buy the neighbouring parcel.',
+    touch: {
+      body: 'Keep growing and selling. At $75, tap Build to buy the neighbouring parcel.',
+      key: 'BUILD',
+    },
     reveals: ['objective'],
     // Completes on the next tick: this beat is a hand-off, not a task, so
     // onboarding ends with the player already inside the repeatable loop.

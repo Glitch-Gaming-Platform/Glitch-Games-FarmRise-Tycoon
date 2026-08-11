@@ -48,12 +48,27 @@ async function main(): Promise<void> {
       'seed-script',
     );
     const save = await services.saves.load(session.user.id);
+    const site = save.state.sites.find((entry) => entry.id === save.state.activeSiteId);
+    if (!site?.stores[0]) throw new Error('The starter career has no yard store.');
+    const yard = site.stores[0];
     await services.saves.write(session.user.id, save.revision, {
       ...save.state,
       // Advance the tick alongside the goods so the save passes the same
       // plausibility check a real client's write would face.
       tick: save.state.tick + 600,
-      inventory: { wheat: 12, corn: 4 },
+      sites: save.state.sites.map((entry) =>
+        entry.id === site.id
+          ? {
+              ...entry,
+              lastSimulatedTick: save.state.tick + 600,
+              stores: entry.stores.map((store) =>
+                store.id === yard.id
+                  ? { ...store, items: { ...store.items, wheat: 12, corn: 4 } }
+                  : store,
+              ),
+            }
+          : entry,
+      ),
     });
 
     console.log(`Seeded ${SEED_EMAIL}`);

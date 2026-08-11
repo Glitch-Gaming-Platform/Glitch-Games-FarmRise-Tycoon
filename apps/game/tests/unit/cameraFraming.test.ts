@@ -1,7 +1,7 @@
 /**
  * Anti-drift test for the gameplay camera.
  *
- * The camera framing is art direction (ADR 0011), and it necessarily exists
+ * The camera framing is art direction (ADR 0017), and it necessarily exists
  * twice: once in TypeScript for the engine, once in Python for the Blender
  * review renderer. If those two copies drift, the art gets judged from a shot
  * the game never shows - which is exactly how the original 61-degree problem
@@ -14,7 +14,11 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { GAMEPLAY_CAMERA, GAMEPLAY_CAMERA_PITCH_RADIANS } from '@game/rules/sessionRules.js';
+import {
+  GAMEPLAY_CAMERA,
+  GAMEPLAY_CAMERA_PITCH_RADIANS,
+  GAMEPLAY_CAMERA_YAW_RADIANS,
+} from '@game/rules/sessionRules.js';
 
 /**
  * Walks up from the working directory to find the repo root.
@@ -33,15 +37,17 @@ function findRepoFile(relative: string): string {
 }
 
 const PALETTE_PY = findRepoFile('tools/blender/palette.py');
+const REVIEW_RENDER_PY = findRepoFile('tools/blender/review_render.py');
 
 function pythonConstant(source: string, name: string): number {
-  const match = new RegExp(`^${name}\\s*=\\s*([0-9.]+)`, 'm').exec(source);
+  const match = new RegExp(`^${name}\\s*=\\s*(-?[0-9.]+)`, 'm').exec(source);
   if (!match) throw new Error(`${name} not found in palette.py`);
   return Number(match[1]);
 }
 
 describe('gameplay camera framing', () => {
   const source = readFileSync(PALETTE_PY, 'utf8');
+  const reviewSource = readFileSync(REVIEW_RENDER_PY, 'utf8');
 
   it('has not drifted from the Blender review renderer', () => {
     expect(GAMEPLAY_CAMERA.distance).toBe(pythonConstant(source, 'GAMEPLAY_REVIEW_DISTANCE'));
@@ -49,10 +55,22 @@ describe('gameplay camera framing', () => {
       pythonConstant(source, 'GAMEPLAY_REVIEW_PITCH_DEGREES'),
     );
     expect(GAMEPLAY_CAMERA.fovDegrees).toBe(pythonConstant(source, 'GAMEPLAY_REVIEW_FOV_DEGREES'));
+    expect(GAMEPLAY_CAMERA.yawDegrees).toBe(pythonConstant(source, 'GAMEPLAY_REVIEW_YAW_DEGREES'));
   });
 
   it('converts pitch to radians correctly', () => {
-    expect(GAMEPLAY_CAMERA_PITCH_RADIANS).toBeCloseTo(0.6632, 4);
+    expect(GAMEPLAY_CAMERA_PITCH_RADIANS).toBeCloseTo(0.5934, 4);
+    expect(GAMEPLAY_CAMERA_YAW_RADIANS).toBeCloseTo(-0.733, 4);
+  });
+
+  it('uses the runtime orbit convention and vertical FOV in Blender', () => {
+    // FollowController adds cos(yaw) on world Z. A minus sign here puts the
+    // review camera on the opposite diagonal even when all four constants
+    // match. Blender also specifies focal length against a horizontal sensor,
+    // while Three.js' PerspectiveCamera receives a vertical FOV.
+    expect(reviewSource).toContain('math.cos(yaw) * math.cos(pitch) * distance');
+    expect(reviewSource).not.toContain('-math.cos(yaw) * math.cos(pitch) * distance');
+    expect(reviewSource).toContain('lens_for_vertical_fov(GAMEPLAY_REVIEW_FOV_DEGREES, aspect)');
   });
 
   it('keeps the pitch in the range this art direction was built for', () => {

@@ -33,14 +33,20 @@ import {
   randomId,
   resolveAnonId,
 } from '@analytics/AnalyticsClient.js';
-import { PROTOCOL_VERSION } from '@farmrise/shared';
+import { PROTOCOL_VERSION, type CareerSaveState } from '@farmrise/shared';
 import { OutcomeState } from '@game/states/phases.js';
 import { GlitchPlatform } from '@platform/glitch/GlitchPlatform.js';
 import { SaveDirector } from '@platform/save/SaveDirector.js';
+import { AutosaveController } from '@platform/save/AutosaveController.js';
+import { loadCareer } from '@platform/save/CareerLoader.js';
 import { bindGlitchAnalytics } from './bindGlitch.js';
-import { AUTOSAVE_INTERVAL_TICKS } from '@game/rules/sessionRules.js';
+import { nextParcelFor } from '@farmrise/shared';
 import { bindSceneAudio, bindStateAudio, prepareAudio } from './bindAudio.js';
 import { SOUND, type SoundId } from '@assets/audio/soundIds.js';
+import { DEFAULT_MUSIC_ID } from '@assets/audio/musicIds.js';
+import { bindMobileLifecycle } from './bindMobileLifecycle.js';
+import { createProgressionReviewCareer } from '@game/debug/progressionReview.js';
+import { createIncidentReviewCareer } from '@game/debug/incidentReview.js';
 
 export interface StartGameOptions {
   readonly container: HTMLElement;
@@ -60,17 +66,32 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
   // already in memory instead of re-fetching them.
   const assets = new AssetLoader(CORE_MANIFEST, import.meta.env.BASE_URL ?? '/');
   const machine = new GameStateMachine();
-  const stopPreparingAudio = prepareAudio(bundle.audio, assets);
+  const settings = loadSettings();
+  const preparedAudio = prepareAudio(bundle.audio, assets, {
+    lowMemoryMusic: bundle.mobileOptimized,
+    initialMusicTrack: DEFAULT_MUSIC_ID,
+    disabledMusicTracks: settings.disabledMusicTracks,
+  });
   const unbindStateAudio = bindStateAudio(machine, bundle.audio);
 
   let activeScene: FarmScene | null = null;
   let unbindHud: Unsubscribe | null = null;
   let unbindSceneAudio: Unsubscribe | null = null;
   let unbindSession: Unsubscribe | null = null;
-  let unbindAutosave: Unsubscribe | null = null;
+  let autosave: AutosaveController | null = null;
+  /**
+   * The career to resume, chosen before any scene is built.
+   *
+   * Null means "start a new one", and that is the only path that hands out the
+   * starter livestock - which is why the decision cannot be made inside the
+   * scene (docs/PROGRESSION_GAMEPLAY_PLAN.md §32.1).
+   */
+  let resumeState: CareerSaveState | null = null;
   let unbindAnalytics: Unsubscribe | null = null;
-  /** Set after a finished run so the replay does not re-teach the tutorial. */
-  let replaying = false;
+  let unbindMobileLifecycle: Unsubscribe = () => {};
+  const incidentReview = bundle.incidentReviewId
+    ? createIncidentReviewCareer(bundle.incidentReviewId)
+    : null;
 
   const analytics = new AnalyticsClient({
     context: {
@@ -102,14 +123,13 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
   };
 
   const refreshAccount = (): void => {
+    const glitchIdentity = glitch?.identity ?? null;
     ui.account.update({
-      signedIn: net.auth.signedIn,
-      email: net.auth.user?.email ?? null,
-      displayName: net.auth.user?.displayName ?? null,
-      tier: saves.tier,
+      provider: glitchIdentity ? 'glitch' : net.auth.signedIn ? 'farmrise' : null,
+      email: glitchIdentity ? null : (net.auth.user?.email ?? null),
+      displayName: glitchIdentity?.displayName ?? net.auth.user?.displayName ?? null,
       busy: accountBusy,
       error: accountError,
-      cloudAvailable: glitch !== null,
     });
   };
 
@@ -141,6 +161,8 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     shortcuts: {
       onMarket: () => activeScene?.session?.togglePanel('market'),
       onBuild: () => activeScene?.session?.togglePanel('build'),
+      onCareer: () => activeScene?.session?.togglePanel('career'),
+      onTown: () => activeScene?.session?.togglePanel('town'),
     },
     menu: {
       onPlay: () => {
@@ -172,13 +194,50 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     },
     market: {
       onSellSpot: (itemId, quantity) => activeScene?.session?.sell(itemId, quantity),
-      onFulfil: (orderId) => activeScene?.session?.fulfil(orderId),
+      // One button for two intents: an id from the board is an offer to take,
+      // anything else is a promise already made and now being delivered.
+      onFulfil: (orderId, action) => {
+        const session = activeScene?.session;
+        if (!session) return;
+        if (action === 'accept') {
+          session.accept(orderId);
+          return;
+        }
+        const contract = activeScene?.career?.contracts.find((entry) => entry.id === orderId);
+        if (contract) {
+          const outstanding = contract.quantity - contract.delivered;
+          const held = activeScene?.career?.world.stores.totalOf(contract.itemId) ?? 0;
+          session.deliver(orderId, Math.min(held, outstanding));
+        }
+      },
       onClose: () => activeScene?.session?.openPanel('none'),
     },
     build: {
       onSelectBuilding: (kind) => activeScene?.session?.chooseBuilding(kind),
-      onBuyChicken: () => activeScene?.session?.purchaseChicken(),
-      onBuyLand: () => activeScene?.session?.purchaseLand(),
+      onBuyAnimal: (species) => activeScene?.session?.purchaseAnimal(species),
+      onBuyLand: () => {
+        const career = activeScene?.career;
+        if (!career) return;
+        const parcel = nextParcelFor(career.world.parcels.ownedIds, career.stage);
+        if (parcel) activeScene?.session?.purchaseLand(parcel.id);
+      },
+      onBuyCarrier: (kind) => activeScene?.session?.purchaseCarrier(kind),
+      onClose: () => activeScene?.session?.openPanel('none'),
+    },
+    career: {
+      onClaimMilestone: (milestoneId) => activeScene?.session?.claimMilestone(milestoneId),
+      onChooseSpecialization: (id) => activeScene?.session?.specialize(id),
+      onQueueProcessing: (buildingId, recipeId) =>
+        activeScene?.session?.queueBatch(buildingId, recipeId),
+      onHireWorker: (role) => activeScene?.session?.employ(role),
+      onTakeLoan: (offerId) => activeScene?.session?.takeLoan(offerId),
+      onRepayLoan: (loanId, amount) => activeScene?.session?.repayLoan(loanId, amount),
+      onBuyInsurance: (policyId) => activeScene?.session?.insure(policyId),
+      onCancelInsurance: () => activeScene?.session?.cancelPolicy(),
+      onClose: () => activeScene?.session?.openPanel('none'),
+    },
+    town: {
+      onStartProject: (projectId) => activeScene?.session?.fundTownProject(projectId),
       onClose: () => activeScene?.session?.openPanel('none'),
     },
     account: {
@@ -187,15 +246,16 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
           await net.auth.register({ email, displayName, password });
           // Push the current run straight up so the account is immediately
           // worth having.
-          const state = activeScene?.world?.toSaveState();
+          const state = activeScene?.saveState();
           if (state) await saves.save(state);
         }),
       onLogin: (email, password) =>
         void runAccountAction(async () => {
           await net.auth.login({ email, password });
-          const restored = await saves.loadBest();
-          if (restored?.tier === 'account') {
-            ui.hud.toast('Signed in. Your saved farm is ready from the menu.');
+          const restored = await loadCareer(saves);
+          if (restored.kind === 'resume' && restored.tier === 'account') {
+            resumeState = restored.state;
+            ui.hud.toast('Signed in. Your farm is ready from the menu.');
           }
         }),
       onLogout: () =>
@@ -210,8 +270,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     outcome: {
       onPlayAgain: () => {
         playUi(SOUND.uiConfirm);
-        replaying = true;
-        machine.transitionTo('loading', 'outcome-replay');
+        machine.transitionTo('playing', 'season-continue');
       },
       onBackToMenu: () => {
         playUi(SOUND.uiClick, 0.6);
@@ -220,6 +279,9 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     },
     settings: {
       onVolumeChange: (bus, value) => bundle.audio.setVolume(bus, value),
+      onMusicTrackChange: (trackId) => preparedAudio.music.select(trackId),
+      onMusicTrackEnabledChange: (trackId, enabled) =>
+        preparedAudio.music.setEnabled(trackId, enabled),
       onDebugToggle: () => {
         playUi(SOUND.uiClick, 0.55);
         /* Overlay visibility is resolved at boot; the toggle persists for next launch. */
@@ -229,22 +291,22 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
         ui.closeSettings();
       },
     },
+    ...(bundle.mobileOptimized
+      ? {
+          touchControls: {
+            setAction: (action, down) => bundle.input.setActionState(action, down),
+            setActionValue: (action, value) => bundle.input.setActionValue(action, value),
+          },
+        }
+      : {}),
   });
 
-  saves.events.on('save:tier-changed', ({ tier }) => {
-    refreshAccount();
-    if (tier === 'account' || tier === 'cloud') {
-      ui.hud.toast('Your farm is now saved to your account.');
-    }
-  });
-  saves.events.on('save:conflict', () => {
-    // Never silently overwrite. The player's own device wins by default
-    // because they are looking at it, but they are told what happened.
-    ui.hud.toast("Your farm was also saved elsewhere. Keeping this device's version.", 'warn');
-  });
+  ui.settings.setMusicTrack(preparedAudio.music.selectedTrack);
+  const unbindMusicSettings = preparedAudio.music.events.on('music:track-changed', ({ trackId }) =>
+    ui.settings.setMusicTrack(trackId),
+  );
 
   // Apply persisted audio preferences before anything can play a sound.
-  const settings = loadSettings();
   bundle.audio.setVolume('master', settings.master);
   bundle.audio.setVolume('music', settings.music);
   bundle.audio.setVolume('sfx', settings.sfx);
@@ -253,9 +315,18 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     activeScene = new FarmScene({
       seed: net.auth.user?.id ?? 'local-session',
       assets,
-      // A replay after a finished run never re-teaches the tutorial. The
-      // player has demonstrably just played the whole loop.
-      skipOnboarding: replaying,
+      // Resuming, when there is something to resume. Decided before the scene
+      // is constructed so that starter grants only happen for a new career.
+      ...(resumeState ? { career: resumeState } : {}),
+      // A resumed career has already passed through its first-session teaching.
+      ...(bundle.actionReview
+        ? { skipOnboarding: false }
+        : resumeState
+          ? { skipOnboarding: resumeState.onboardingCompleted }
+          : {}),
+      ...(bundle.actionReview ? { reviewActions: true } : {}),
+      ...(incidentReview ? { reviewSpawnTile: incidentReview.spawnTile } : {}),
+      ...(bundle.mobileOptimized ? { shadowMapSize: 512 } : {}),
     });
     return activeScene;
   });
@@ -285,17 +356,35 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       machine.transitionTo('outcome', 'run-finished'),
     ).unsubscribe;
 
-    // Autosave. Local always, remote tiers when available.
-    const world = scene.world;
-    if (world) {
-      let lastSaveTick = 0;
-      unbindAutosave?.();
-      unbindAutosave = world.events.on('world:balance-changed', () => {
-        if (world.tick - lastSaveTick < AUTOSAVE_INTERVAL_TICKS) return;
-        lastSaveTick = world.tick;
-        void saves.save(world.toSaveState());
-      });
-    }
+    // Autosave on a wall clock rather than on a money event, plus immediate
+    // checkpoints after the decisions a player would hate to repeat.
+    const career = scene.career;
+    autosave?.dispose();
+    autosave = null;
+    if (bundle.progressionReviewStage !== null || incidentReview) return;
+    autosave = new AutosaveController(saves, () => scene.saveState());
+    autosave.watch((onChange) => career!.events.on('career:balance-changed', onChange));
+    autosave.watch((onChange) => career!.world.events.on('world:plot-changed', onChange));
+    autosave.watch((onChange) => career!.world.events.on('world:carry-changed', onChange));
+    autosave.watch((onChange) => career!.world.events.on('world:building-placed', onChange));
+    autosave.watch((onChange) => session.onboarding.events.on('onboarding:complete', onChange));
+    const checkpoint = (): void => {
+      autosave?.markDirty();
+      void autosave?.save();
+    };
+    autosave.watch((onChange) => {
+      void onChange;
+      return career!.world.events.on('world:parcel-acquired', checkpoint);
+    });
+    autosave.watch((onChange) => {
+      void onChange;
+      return career!.events.on('career:stage-changed', checkpoint);
+    });
+    autosave.watch((onChange) => {
+      void onChange;
+      return career!.events.on('career:restructured', checkpoint);
+    });
+    autosave.start();
   });
   bundle.sceneManager.events.on('scene:load-error', ({ error }) => {
     console.error('[startGame] scene failed to load', error);
@@ -325,8 +414,22 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     }),
   );
 
+  let glitchStart: Promise<void> | null = null;
+  if (glitch) {
+    unbindGlitchAnalytics = bindGlitchAnalytics(analytics, glitch);
+    // Start this beside engine boot, then await it before choosing a save.
+    // That preserves a fast first render without racing cloud restoration.
+    glitchStart = glitch.start(net.auth.user?.email ?? null, () => machine.current === 'playing');
+  }
+
   try {
     await bundle.engine.start();
+    unbindMobileLifecycle = bindMobileLifecycle({
+      enabled: bundle.mobileOptimized,
+      loop: bundle.engine.loop,
+      input: bundle.input,
+      audio: bundle.audio,
+    });
   } catch (error) {
     ui.dispose();
     if (error instanceof WebGLUnavailableError) renderFatal(container, error.message);
@@ -334,24 +437,31 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     throw error;
   }
 
-  // Start Glitch after the engine is up so a slow network cannot delay the
-  // first frame. Nothing below blocks play.
-  if (glitch) {
-    unbindGlitchAnalytics = bindGlitchAnalytics(analytics, glitch);
-    glitch.session.events.on('glitch:denied', ({ reason }) => {
-      // Glitch declined access (trial expired, licence missing). Say so
-      // plainly; do not pretend the game is broken.
-      ui.hud.toast(`Glitch access: ${reason}`, 'warn');
-    });
-    void glitch.start(net.auth.user?.email ?? null, () => machine.current === 'playing');
-  }
+  await glitchStart;
 
   // Best-effort final delivery of events and the last heartbeat.
   const onHide = (): void => {
-    if (activeScene?.world) saves.writeLocal(activeScene.world.toSaveState());
+    autosave?.flushLocal();
     void glitch?.flush();
   };
   globalThis.addEventListener?.('pagehide', onHide);
+
+  // Decide what we are resuming before the player can press Work the farm.
+  // A save that cannot be read is surfaced as a choice, never overwritten:
+  // silently replacing a career is indistinguishable from deleting it.
+  const restored = await loadCareer(saves);
+  if (bundle.progressionReviewStage !== null) {
+    resumeState = createProgressionReviewCareer(bundle.progressionReviewStage);
+    ui.hud.toast('Progression review career loaded. Saving is disabled.', 'warn');
+  } else if (incidentReview) {
+    resumeState = incidentReview.state;
+    ui.hud.toast('Incident review career loaded. Saving is disabled.', 'warn');
+  } else if (restored.kind === 'resume') {
+    resumeState = restored.state;
+    if (restored.tier === 'cloud') saves.writeLocal(restored.state);
+  } else if (restored.kind === 'unreadable') {
+    console.warn('[startGame] persisted career could not be restored', restored.reason);
+  }
 
   await machine.begin('boot');
 
@@ -359,8 +469,12 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     stop(): void {
       unbindHud?.();
       unbindSceneAudio?.();
+      autosave?.dispose();
       unbindStateAudio();
-      stopPreparingAudio();
+      unbindMusicSettings();
+      unbindMobileLifecycle();
+      preparedAudio.dispose();
+      globalThis.removeEventListener?.('pagehide', onHide);
       ui.dispose();
       bundle.engine.dispose();
       assets.dispose();

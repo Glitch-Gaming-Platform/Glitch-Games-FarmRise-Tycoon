@@ -75,6 +75,45 @@ npm run build --workspace @farmrise/game
 Only the runtime title token may be compiled into the Distribution client. The hosting, distribution,
 and MCP tokens must remain outside every artifact.
 
+## Cloud-save resume contract
+
+The Glitch launch path is a resume path, not write-only backup. Startup follows the Configuration
+contract in this order:
+
+1. Create or reuse the Glitch install, using a Desktop-App `install_id` when supplied.
+2. Validate that install and require both `valid: true` and a real `user_id` before cloud access.
+3. List slot `0` with `include_payload=1` before the game decides which career to open.
+4. Decode the base64 payload, verify its lowercase SHA-256 checksum against the decoded bytes, then
+   migrate and validate the FarmRise document.
+5. Prefer that verified cloud career over account and local copies for a login-backed Glitch launch.
+   Cache the resumed document locally after it is accepted.
+
+The validated Glitch `user_id` is the authentication identity for a Glitch launch. Do not ask that
+player to create or enter a second FarmRise email/password account; the profile panel identifies the
+Glitch user and contains no credential form or sign-out control.
+
+The cloud career includes the complete career document: money, inventory and field stacks, plots,
+animals and losses, construction timers, owned parcels, contracts, incidents, RNG cursors, town and
+worker state, and whether onboarding was completed. A completed or skipped tutorial sets
+`onboardingCompleted` in the career before the next autosave; returning players therefore do not see
+it again. Saves written before that field existed default to completed, preserving the behavior of
+existing returning careers.
+
+The wall-clock autosave marks every elapsed 20-second interval for a full snapshot even when no
+button-driven event fired. This is necessary because animal losses, feed use, spoilage, incident
+progress, construction countdowns and the career clock all change autonomously. Irreversible choices
+continue to checkpoint immediately, and `pagehide` still writes synchronously to local storage.
+
+If payload decoding, checksum verification, JSON parsing or save migration fails, the client may use
+a readable local/account fallback but must block cloud writes for that session. It must never replace
+an unreadable cloud career with a new starter farm. Before the first write to a cloud slot, the client
+lists saves to adopt the current server `version` as `base_version`.
+
+A 409 is handled as background synchronization. Because the verified cloud career was loaded before
+play began, the currently running career is its continuation; the client resolves that captured
+write with `use_client`, adopts the returned version, and continues without a browser dialog or HUD
+notification. Save mechanics and transient sync failures are never exposed to the player.
+
 To exercise the combined hosting server locally:
 
 ```bash
@@ -116,14 +155,18 @@ Before uploading, `npm run verify:glitch-artifacts` must confirm that:
 
 After upload, test the actual Glitch Play page—not only `/` on a local server. Confirm the nested
 build URL returns `index.html`, both hashed JavaScript files return HTTP 200 from the same build
-folder, the main menu renders, and **Work the farm** reaches the first interactive farm screen.
+folder, the main menu renders, and **Work the farm** reaches the first interactive farm screen. Then
+make a visible career change, wait for cloud save, close the game, reopen it with the same login-backed
+install, and verify the exact balance, goods, losses, builds and tutorial-completion state resume.
 
 ## Webhosting deployment
 
 Glitch Webhosting is configured in server mode, so it cannot directly publish the static Vite
-folder. First upload the repository as a ready Node/container build. The remote build uses Linux,
-installs dependencies from `package-lock.json`, builds the shared package, game, and API, then runs
-the combined server on port 8787.
+folder. Build and validate `apps/game/dist` locally with the protected Vite variables first, then
+upload the repository as a ready Node/container build. The remote Linux build preserves that
+verified browser artifact, installs dependencies from `package-lock.json`, rebuilds the shared and
+server packages, and runs the combined server on port 8787. It intentionally does not rebuild the
+browser client without its protected build-time configuration.
 
 ```bash
 npx --yes --package glitch-cli-deploy glitch-deploy deploy . \
@@ -155,6 +198,8 @@ not a runnable server entry. Before upload, verify all of the following:
 - `node tools/hosting/server.mjs` starts successfully with `NODE_ENV=production`;
 - `/`, `/health`, `/readyz`, `/livez`, and `/api/v1/health` return successful responses;
 - the Linux Docker image starts through `npm run start:hosting` and exposes port 8787;
+- the Linux image contains the verified runtime title token but contains no Distribution, Hosting,
+  or MCP credential;
 - the main menu and first farm screen render without browser console errors.
 
 The hosting CLI waits for processing and promotes the release by default. Verify that the release
@@ -192,6 +237,55 @@ as deployed until Glitch fixes the domain/certificate and release-promotion stat
 The earlier Node build that used `package.json` as its entry is inactive, and its Hosting release was
 never active. No paid database, plan, or domain purchase was authorized during this deployment.
 
+### Redeployment — August 10, 2026
+
+Distribution version `0.1.2-20260810`, build `019fee8b-5aba-71df-a390-651e7abef5c9`, is ready and
+live on the Glitch Play page. The actual nested CDN URL returned HTTP 200 for `index.html` and both
+hashed JavaScript files. The public game displayed the main menu and reached the first interactive
+farm screen with no browser console errors.
+
+The fresh Webhosting Node build is `019fee92-bb6d-738a-bad8-f67434bef186`, and Hosting release
+`019fee97-36ce-73da-807e-8b913f0bf73e` uses `tools/hosting/server.mjs`. Both reached `ready`. The
+platform correctly refused to report the site as published because its Route 53 hosted zone was at
+the 50-of-50 record limit. The CLI and Hosting page returned the actionable support reference
+`HOST-DNS-01KZQ9EKKPECMBZVM74VNHFH3G` instead of the earlier generic server error. The quota increase
+request to 10,000 records remains `CASE_OPENED`, so the public Hosting hostname still fails TLS name
+verification and the ready release must be retried—not duplicated—after the quota is approved.
+
+The live Hosting page also loaded the existing site instead of falling back to site creation and
+showed the four-step Website, optional Database, optional Game needs, and Build setup. No database,
+plan, domain, or other paid add-on was purchased.
+
+### Redeployment — version 0.1.3 on August 10, 2026
+
+Distribution version `0.1.3-20260810`, build `019feeef-9cde-70a9-9e3b-0b2d9b06eb52`, is ready and
+live. The real nested CDN URL returned HTTP 200 for `index.html` and both hashed JavaScript files,
+and the public Glitch Play page reached the interactive farm screen without browser console errors.
+
+The corresponding Webhosting Node build is `019feef2-a718-73fe-8221-add8f5d2f981`, and Hosting
+release `019feef7-52db-7284-a73d-e888f2a3c23f` uses `tools/hosting/server.mjs`. Both reached
+`ready`, with no release build error. Publication remains queued because the Route 53 hosted zone is
+still at its 50-of-50 record limit; the site remains `draft`, the domain is `provisioning`, and the
+certificate is `Retrying`. The actionable support reference for this attempt is
+`HOST-DNS-01KZQFETQ16JKSRS6WBYMS3HT0`. Preserve this exact release for retry after AWS approves the
+open request to raise the zone to 10,000 records. HTTPS hostname verification does not currently
+pass, so the Webhosting address is not yet public.
+
+### Redeployment — August 11, 2026
+
+Distribution version `0.1.4-20260811`, build `019fefe6-72a4-7180-b33d-17871021fb82`, is ready and
+live. Its real nested CDN URL returned HTTP 200 for `index.html` and both hashed JavaScript files.
+The public Glitch Play page loaded that exact build and reached the interactive farm screen without
+browser console errors.
+
+The matching Webhosting Node build is `019fefeb-4878-720e-b735-57d89a4c66eb`, and Hosting release
+`019feff0-540a-7348-9a9b-6510afe0d6cf` uses `tools/hosting/server.mjs`. The remote Linux build and
+release both reached `ready` without a release error. Publication is still queued because the Route
+53 hosted zone remains at its 50-of-50 record limit. The site remains `draft`, the domain is
+`provisioning`, and certificate status is `Retrying`. The support reference for this attempt is
+`HOST-DNS-01KZQZ0TXJA6QDAYEQ2H8ANMGM`. Preserve this exact release for retry after AWS approves case
+`178639262100188`; until then, the public Webhosting hostname does not pass TLS name verification.
+
 ## Rollback
 
 Distribution and Hosting release state are separate. To restore a previous website release:
@@ -220,6 +314,9 @@ evidence.
   domain verification succeeds but the certificate remains `Failed`, the site remains `draft`, and
   promotion returns a generic server error, preserve the ready release and escalate the platform
   defect. Do not create duplicate releases or claim that the public hostname is deployed.
+- **DNS zone at capacity:** preserve the exact ready release and record the `HOST-DNS-*` support
+  reference. Do not retry in a loop or create another release while the Route 53 record quota is
+  full. Retry the existing release only after the quota increase is approved.
 - **Website is active but unusable:** check `/health`, the root `index.html`, hashed `/assets/*`
   requests, API responses, and browser console errors. Roll back the Hosting release if players are
   affected.

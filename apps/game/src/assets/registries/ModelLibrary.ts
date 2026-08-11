@@ -8,14 +8,15 @@
  * InstancedMesh, and instancing needs a geometry plus one shared material.
  *
  * There is exactly one material for the entire game. Every asset carries its
- * colour in a COLOR_0 vertex attribute, so a single MeshStandardMaterial with
- * `vertexColors` covers crops, buildings, characters and animals alike. That
- * is what keeps the draw call count proportional to the number of distinct
- * MESHES rather than the number of distinct colours.
+ * colour in COLOR_0 and surface-detail atlas coordinates in TEXCOORD_0, so a
+ * single MeshStandardMaterial covers crops, buildings, characters and animals
+ * while still providing shingles, siding, grain, bark and leaf veins.
  */
 import * as THREE from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { Disposable } from '@engine/core/types.js';
+import type { Season } from '@farmrise/shared';
+import { createSurfaceDetailTexture } from './surfaceDetailTexture.js';
 
 export const MODEL_FAMILIES = [
   'model:crops',
@@ -26,15 +27,38 @@ export const MODEL_FAMILIES = [
   'model:props',
 ] as const;
 
+export const SEASONAL_CROP_MODEL_FAMILIES: Readonly<Record<Season, string>> = Object.freeze({
+  spring: 'model:crops-spring',
+  summer: 'model:crops-summer',
+  autumn: 'model:crops-autumn',
+  winter: 'model:crops-winter',
+});
+
+export function cropModelFamilyForSeason(season: Season): string {
+  return SEASONAL_CROP_MODEL_FAMILIES[season];
+}
+
+/** Common art plus only the crop pack relevant to the loaded career date. */
+export function modelFamiliesForSeason(season: Season): readonly string[] {
+  return modelFamiliesForSeasons([season]);
+}
+
+export function modelFamiliesForSeasons(seasons: readonly Season[]): readonly string[] {
+  const seasonal = [...new Set(seasons.map(cropModelFamilyForSeason))];
+  return [MODEL_FAMILIES[0], ...seasonal, ...MODEL_FAMILIES.slice(1)];
+}
+
 export type ModelFamilyId = (typeof MODEL_FAMILIES)[number];
 
 export class ModelLibrary implements Disposable {
   readonly #geometries = new Map<string, THREE.BufferGeometry>();
   readonly #material: THREE.MeshStandardMaterial;
+  readonly #surfaceDetail = createSurfaceDetailTexture();
 
   constructor() {
     this.#material = new THREE.MeshStandardMaterial({
       vertexColors: true,
+      map: this.#surfaceDetail,
       roughness: 0.85,
       metalness: 0.0,
       // Foliage is single-sided geometry - a leaf is one quad strip, not a
@@ -101,5 +125,6 @@ export class ModelLibrary implements Disposable {
     for (const geometry of this.#geometries.values()) geometry.dispose();
     this.#geometries.clear();
     this.#material.dispose();
+    this.#surfaceDetail.dispose();
   }
 }

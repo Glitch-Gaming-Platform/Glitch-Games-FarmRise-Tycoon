@@ -5,7 +5,7 @@
 > **Warm hand-painted low-poly, red-ochre outback.** Rounded convex forms, no razor edges.
 > In the 3D world, ground, crop and structure are separated by **hue and value, never by texture
 > detail**. Crops read
-> as icons in four unmistakable growth stages from 20 metres. Chibi four-head characters with
+> as icons in four unmistakable growth stages from the 13.25 metre gameplay camera. Chibi four-head characters with
 > two-dot faces. Soft single-key light; contact shadows exist to ground objects, never to dramatise.
 > **Colour does the work.**
 
@@ -54,7 +54,7 @@ outline pass, no rim light and no per-pixel work.
 
 ## Camera
 
-**20 m out, 38° above horizontal, 42 mm equivalent.**
+**13.25 m out, 34° above horizontal, 42° vertical field of view, -42° azimuth.**
 
 The original implementation used 61° (`Math.PI * 0.34`). The first art review at that angle showed
 why it was wrong:
@@ -64,9 +64,12 @@ why it was wrong:
 - Flat ground dominated the frame, and the flattest object in the scene — the path — became the
   largest silhouette mass.
 
-38° restores the sense of walking around inside a three-dimensional farm, which matters because the
-player does exactly that. Changed in `FarmScene`; the review renderer uses the same value so what is
-judged is what ships.
+34° keeps the tile grid legible while preserving building fronts and vertical crop mass. The tighter
+13.25 m distance is also a hierarchy decision: the farmer, animals, tools and work actions occupy
+enough screen area to read without giving up farm-planning context. `cameraFraming.test.ts` keeps the
+engine and review-renderer constants, orbit convention and vertical-FOV conversion aligned, so what
+is judged is what ships. The decisive Blender scene uses the shared starter farm's real player, bed
+and shelter coordinates rather than a separately art-directed mock layout.
 
 ## Tone mapping
 
@@ -89,7 +92,7 @@ Three.js constant, not a hex literal in a view class.
 | Band | Role |
 | --- | --- |
 | `soil_*`, `ground_scrub*`, `sand_*`, `rock*` | Ground. Warm, lower chroma, lower value than any crop. |
-| `crop_*`, `wheat_*`, `corn_*`, `pumpkin_*` | Crops. High chroma greens and golds. |
+| `crop_*`, named crop fruit/root roles, `flower_*` | Crops. High chroma greens plus bright harvest fruit, roots, pods and flowers. |
 | `wall_*`, `roof_*`, `timber_*`, `metal_*`, `water_*` | Structures. Cool. |
 | `skin`, `hair_*`, `shirt_*`, `pants_*`, `straw_hat*` | Character. |
 | `chicken_*`, `fox_*` | Animals. |
@@ -136,14 +139,16 @@ Stating these plainly is what stops the style eroding one reasonable-sounding re
 
 - **No PBR realism.** Metalness is 0 everywhere; roughness is 0.85 everywhere. A stray specular
   highlight reads as a rendering bug.
-- **No world texture detail.** There are no UVs in the 3D world. Colour is per-vertex. The DOM
-  interface may use transparent Blender-rendered WebPs under ADR 0014; they are illustrations, not
-  sampled world materials.
+- **No bitmap colour textures.** World hue remains per-vertex. One generated greyscale detail atlas
+  supplies siding, shingles, grain, metal seams, glass divisions, bark and leaf veins through UVs
+  without adding material classes or a downloaded image. See ADR 0023. The DOM interface may use
+  transparent Blender-rendered WebPs under ADR 0014.
 - **No world outlines or post-processing.** Separation comes from hue and value, and it is
   measured. The player alone has a narrow pale inverted-hull rim plus a soft contact mark: a
   documented accessibility exception so the avatar stays findable on soil, road and crop beds.
 - **No per-blade grass, no real GI.** Scatter props instead.
-- **No detail below ~4 cm.** It does not survive 20 metres, and it costs triangles and download.
+- **No detail below ~4 cm.** It does not survive the gameplay camera reliably, and it costs
+  triangles and download.
 - **No razor edges.** Everything is bevelled; rock is the single deliberate exception.
 
 ## Interface extension

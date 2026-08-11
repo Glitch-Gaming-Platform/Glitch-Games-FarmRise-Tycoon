@@ -16,7 +16,7 @@ import { EventBus } from '@engine/core/EventBus.js';
 import { TileFlag } from '@engine/physics/TileGrid.js';
 import type { InputSystem } from '@engine/input/InputSystem.js';
 import type { RenderContext } from '@engine/core/types.js';
-import type { FarmWorld } from '../world/FarmWorld.js';
+import type { Career } from '../career/Career.js';
 import { build } from '../world/FarmCommands.js';
 import type { GameAction } from '../GameActions.js';
 
@@ -39,11 +39,9 @@ export class PlacementController {
   #tileX = 0;
   #tileZ = 0;
   #valid = false;
-  /** Debounces the click that opened the panel from placing immediately. */
-  #armedAt = 0;
 
   constructor(
-    private readonly world: FarmWorld,
+    private readonly career: Career,
     private readonly input: InputSystem<GameAction>,
     private readonly camera: THREE.Camera,
   ) {}
@@ -58,9 +56,8 @@ export class PlacementController {
     return { x: this.#tileX, z: this.#tileZ, valid: this.#valid };
   }
 
-  begin(kind: BuildingKind, nowMs: number): void {
+  begin(kind: BuildingKind): void {
     this.#kind = kind;
-    this.#armedAt = nowMs + 180;
     this.events.emit('placement:started', { kind });
   }
 
@@ -72,7 +69,7 @@ export class PlacementController {
   }
 
   /** Commits input on the fixed tick where the edge exists. */
-  fixedUpdate(nowMs: number): void {
+  fixedUpdate(_nowMs: number): void {
     const kind = this.#kind;
     if (!kind) return;
 
@@ -82,14 +79,14 @@ export class PlacementController {
     }
 
     const valid = this.#refreshPointer(kind);
-    if (nowMs < this.#armedAt || !this.input.wasPressed('interact')) return;
+    if (!this.input.wasPressed('interact')) return;
 
     if (!valid) {
       this.events.emit('placement:refused', { kind, reason: 'That spot is taken.' });
       return;
     }
 
-    const result = build(this.world, kind, this.#tileX, this.#tileZ);
+    const result = build(this.career, kind, this.#tileX, this.#tileZ);
     if (!result.ok) {
       this.events.emit('placement:refused', { kind, reason: result.reason });
       return;
@@ -114,15 +111,15 @@ export class PlacementController {
     this.#raycaster.setFromCamera(this.#pointer, this.camera);
     if (!this.#raycaster.ray.intersectPlane(this.#groundPlane, this.#hit)) return false;
 
-    const tile = this.world.grid.worldToTile(this.#hit.x, this.#hit.z);
+    const tile = this.career.world.grid.worldToTile(this.#hit.x, this.#hit.z);
     const definition = BUILDINGS[kind];
     const valid =
-      this.world.grid.canPlace(
+      this.career.world.grid.canPlace(
         tile.x,
         tile.z,
         definition.footprint.width,
         definition.footprint.depth,
-      ) && !this.world.grid.hasFlag(tile.x, tile.z, TileFlag.Soil);
+      ) && !this.career.world.grid.hasFlag(tile.x, tile.z, TileFlag.Soil);
 
     if (tile.x !== this.#tileX || tile.z !== this.#tileZ || valid !== this.#valid) {
       this.#tileX = tile.x;

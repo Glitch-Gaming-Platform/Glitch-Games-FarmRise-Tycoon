@@ -32,7 +32,9 @@ sys.path.insert(0, HERE)
 
 from palette import (  # noqa: E402
     GAMEPLAY_REVIEW_DISTANCE,
+    GAMEPLAY_REVIEW_FOV_DEGREES,
     GAMEPLAY_REVIEW_PITCH_DEGREES,
+    GAMEPLAY_REVIEW_YAW_DEGREES,
     PALETTE,
     TILE_SIZE,
     linear_rgba,
@@ -102,6 +104,15 @@ def _smoothstep(edge0: float, edge1: float, value: float) -> float:
     return t * t * (3 - 2 * t)
 
 
+def _distance_to_segment(x, y, start, end):
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    length_sq = dx * dx + dy * dy
+    if length_sq <= 0.0001:
+        return math.hypot(x - start[0], y - start[1])
+    t = min(1.0, max(0.0, ((x - start[0]) * dx + (y - start[1]) * dy) / length_sq))
+    return math.hypot(x - (start[0] + dx * t), y - (start[1] + dy * t))
+
+
 def _value_noise(x: float, z: float) -> float:
     x0, z0 = math.floor(x), math.floor(z)
     sx = _smoothstep(0, 1, x - x0)
@@ -117,8 +128,42 @@ def _fbm(x: float, z: float) -> float:
             + 0.12 * _value_noise(x / 1.7, z / 1.7))
 
 
+def _surface_normal_height(x: float, y: float) -> float:
+    return ((_fbm(x * 1.45 + 19.2, y * 1.45 - 41.7) - 0.5) * 0.075
+            + (_fbm(x * 3.2 - 73.0, y * 3.2 + 12.0) - 0.5) * 0.018)
+
+
+def _ground_sample(x, y, farmyard=None, pasture=None, worn_paths=()):
+    macro = _fbm(x, y)
+    grain = _fbm(x * 1.65 + 113.7, y * 1.65 - 87.2)
+    brush = (math.sin(x * 0.18 + y * 0.075
+                      + (_fbm(x * 0.31 - 27.0, y * 0.31 + 61.0) - 0.5) * 2.4)
+             * 0.5 + 0.5)
+    value = 0.72 + macro * 0.30 + (grain - 0.5) * 0.08 + (brush - 0.5) * 0.03
+    lush = _smoothstep(0.35, 0.69, _fbm(x * 0.37 + 71.3, y * 0.37 - 19.7))
+    ochre = _smoothstep(0.53, 0.83, _fbm(x * 0.23 - 31.4, y * 0.23 + 48.8))
+    farmyard_weight = 0.0
+    if farmyard:
+        distance = math.hypot(x - farmyard[0], y - farmyard[1])
+        farmyard_weight = 1 - _smoothstep(farmyard[2] * 0.38, farmyard[2], distance)
+    pasture_weight = 0.0
+    if pasture:
+        distance = math.hypot(x - pasture[0], y - pasture[1])
+        pasture_weight = 1 - _smoothstep(pasture[2] * 0.38, pasture[2], distance)
+    worn = 0.0
+    for start, end, width in worn_paths:
+        distance = _distance_to_segment(x, y, start, end)
+        worn = max(worn, 1 - _smoothstep(width * 0.55, width * 1.65, distance))
+    traffic = min(1.0, max(0.0, worn * 0.94 + farmyard_weight * 0.68))
+    local_pasture = min(1.0, max(0.0, max(lush, pasture_weight) * (1 - traffic)))
+    local_earth = min(1.0, max(0.0,
+        max(ochre * (1 - local_pasture), farmyard_weight * 0.72, worn)))
+    return value, grain, local_pasture, local_earth
+
+
 def add_ground(colour: str, size: float = 80.0, variation: bool = False,
-               playable: float = 32.0) -> bpy.types.Object:
+               playable: float = 32.0, farmyard=None, pasture=None,
+               worn_paths=()) -> bpy.types.Object:
     """
     The ground. With `variation`, this reproduces the runtime ground exactly:
     the same integer hash, the same three octaves, the same value and lushness
@@ -141,8 +186,8 @@ def add_ground(colour: str, size: float = 80.0, variation: bool = False,
         plane.data.materials.append(mat)
         return plane
 
-    segments = max(1, int(round(size / 2.0)))
-    bpy.ops.mesh.primitive_grid_add(x_subdivisions=segments, y_subdivisions=segments,
+    segments = max(1, int(round(size / 1.0)))
+    bpy.ops.mesh.primitive_grid_add(x_subdivisions=segments + 1, y_subdivisions=segments + 1,
                                     size=size, location=(0, 0, 0))
     plane = bpy.context.active_object
     plane["is_ground"] = True
@@ -158,18 +203,40 @@ def add_ground(colour: str, size: float = 80.0, variation: bool = False,
         if outside > 0:
             ramp = _smoothstep(0, relief_falloff, outside)
             vertex.co.z = (_fbm(x * 0.55, y * 0.55) - 0.5) * 2 * 0.85 * ramp
-        value = 0.76 + _fbm(x, y) * 0.42
-        lush = _smoothstep(0.43, 0.78, _fbm(x * 0.37 + 71.3, y * 0.37 - 19.7))
-        ochre = _smoothstep(0.53, 0.83, _fbm(x * 0.23 - 31.4, y * 0.23 + 48.8))
-        green_red = 1 - 0.43 * lush
-        green_green = 1 + 0.15 * lush
-        green_blue = 1 - 0.42 * lush
-        earth_red = 1 + 0.11 * ochre * (1 - lush)
-        earth_green = 1 - 0.24 * ochre * (1 - lush)
-        earth_blue = 1 - 0.32 * ochre * (1 - lush)
+        value, grain, local_pasture, local_earth = _ground_sample(
+            x, y, farmyard, pasture, worn_paths)
+        dry_fleck = _smoothstep(0.66, 0.86, grain) * (1 - local_pasture)
+        green_red = 1 - 0.38 * local_pasture
+        green_green = 1 + 0.14 * local_pasture
+        green_blue = 1 - 0.37 * local_pasture
+        earth_red = 1 + 0.17 * local_earth + dry_fleck * 0.035
+        earth_green = 1 - 0.31 * local_earth - dry_fleck * 0.028
+        earth_blue = 1 - 0.39 * local_earth - dry_fleck * 0.034
         layer.data[i].color = (value * green_red * earth_red,
                                value * green_green * earth_green,
                                value * green_blue * earth_blue, 1.0)
+
+    # Match the runtime's texture-without-textures normal treatment. Geometry
+    # remains flat inside the playable rectangle; only the light response is
+    # tilted by a tiny deterministic cosmetic height field.
+    epsilon = 0.32
+    custom_normals = []
+    for vertex in mesh.vertices:
+        x, y = vertex.co.x, vertex.co.y
+        dx_out = max(0.0, abs(x) - playable / 2)
+        dy_out = max(0.0, abs(y) - playable / 2)
+        if math.hypot(dx_out, dy_out) > 0:
+            custom_normals.append((0.0, 0.0, 0.0))
+            continue
+        dx = (_surface_normal_height(x + epsilon, y)
+              - _surface_normal_height(x - epsilon, y)) / (epsilon * 2)
+        dy = (_surface_normal_height(x, y + epsilon)
+              - _surface_normal_height(x, y - epsilon)) / (epsilon * 2)
+        length = math.sqrt(dx * dx + dy * dy + 1)
+        custom_normals.append((-dx / length, -dy / length, 1 / length))
+    for polygon in mesh.polygons:
+        polygon.use_smooth = True
+    mesh.normals_split_custom_set_from_vertices(custom_normals)
 
     mat = bpy.data.materials.new(f"M_GroundVaried_{colour}")
     mat.use_nodes = True
@@ -270,6 +337,10 @@ def add_player_outline(player: bpy.types.Object) -> bpy.types.Object:
 
 def add_camera(location, look_at, lens=42.0) -> bpy.types.Object:
     data = bpy.data.cameras.new("ReviewCam")
+    # Blender's AUTO sensor fit resolves horizontally for this 16:9 render.
+    # Make that contract explicit so vertical-FOV conversion stays stable.
+    data.sensor_fit = "HORIZONTAL"
+    data.sensor_width = 36.0
     data.lens = lens
     obj = bpy.data.objects.new("ReviewCam", data)
     bpy.context.scene.collection.objects.link(obj)
@@ -278,6 +349,11 @@ def add_camera(location, look_at, lens=42.0) -> bpy.types.Object:
     obj.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
     bpy.context.scene.camera = obj
     return obj
+
+
+def lens_for_vertical_fov(vertical_fov_degrees: float, aspect: float) -> float:
+    """Convert Three.js' vertical FOV to Blender's horizontal 36 mm sensor."""
+    return 36.0 / (2 * aspect * math.tan(math.radians(vertical_fov_degrees) / 2))
 
 
 def render_to(filename: str) -> str:
@@ -296,14 +372,18 @@ CONTACT_ROWS = [
     ["SM_crop_wheat_s1", "SM_crop_wheat_s2", "SM_crop_wheat_s3", "SM_crop_wheat_s4",
      "SM_crop_corn_s1", "SM_crop_corn_s2", "SM_crop_corn_s3", "SM_crop_corn_s4"],
     ["SM_crop_pumpkin_s1", "SM_crop_pumpkin_s2", "SM_crop_pumpkin_s3", "SM_crop_pumpkin_s4",
-     "SM_char_farmer", "SM_animal_chicken", "SM_animal_fox", "SM_prop_rock"],
+     "SM_char_farmer", "SM_animal_chicken", "SM_animal_cow", "SM_animal_fox"],
+    ["SM_crop_clover_s1", "SM_crop_clover_s2", "SM_crop_clover_s3", "SM_crop_clover_s4"],
     ["SM_building_fence", "SM_building_road", "SM_building_irrigation",
      "SM_prop_water_trough", "SM_building_coop", "SM_building_barn"],
-    ["SM_prop_grass_tuft", "SM_prop_bush", "SM_prop_wildflowers",
-     "SM_prop_scrub_patch", "SM_prop_rock_cluster", "SM_prop_dead_tree",
-     "SM_prop_eucalyptus"],
-    ["SM_prop_eucalyptus_tall", "SM_tool_watering_can", "SM_tool_sickle",
-     "SM_tool_trowel"],
+    ["SM_building_loading_pad", "SM_building_cold_store", "SM_building_worker_hut",
+     "SM_building_well", "SM_building_mill", "SM_building_creamery",
+     "SM_building_preserve_kitchen"],
+    ["SM_prop_grass_tuft", "SM_prop_grass_carpet", "SM_prop_dirt_clods",
+     "SM_prop_bush", "SM_prop_wildflowers", "SM_prop_scrub_patch",
+     "SM_prop_rock_cluster", "SM_prop_rock"],
+    ["SM_prop_eucalyptus_tall", "SM_prop_eucalyptus_wide",
+     "SM_tool_watering_can", "SM_tool_sickle", "SM_tool_trowel"],
 ]
 
 
@@ -328,8 +408,175 @@ def contact_sheet() -> str:
                        rotation_z=math.radians(-28), scale=scale)
 
     centre_y = -(len(CONTACT_ROWS) - 1) * row_gap / 2
-    add_camera((0, centre_y - 44.0, 24.0), (0, centre_y, 1.0), lens=60)
+    add_camera((0, centre_y - 52.0, 28.0), (0, centre_y, 1.0), lens=62)
     return render_to("contact_sheet.png")
+
+
+# ==========================================================================
+# Focus sheets - the three asset groups graded in the production audit
+# ==========================================================================
+
+BUILDING_ROWS = [
+    ["SM_building_barn", "SM_building_coop", "SM_building_irrigation", "SM_building_loading_pad"],
+    ["SM_building_cold_store", "SM_building_worker_hut", "SM_building_well", "SM_building_mill"],
+    ["SM_building_creamery", "SM_building_preserve_kitchen", "SM_building_fence", "SM_building_road"],
+]
+
+
+def _building_parts(name: str, x: float, y: float) -> None:
+    if name == "SM_building_mill":
+        link_asset("SM_building_mill_wheel", (x + 1.92, y, 1.04))
+    elif name == "SM_building_cold_store":
+        link_asset("SM_building_vent_fan", (x + 1.08, y - 1.95, 0.64))
+    elif name == "SM_building_creamery":
+        link_asset("SM_building_vent_fan", (x + 0.78, y - 1.91, 0.58))
+    elif name == "SM_building_well":
+        link_asset("SM_building_well_crank", (x + 0.74, y, 1.30))
+
+
+def buildings_focus() -> str:
+    clear()
+    setup_render(1800, 1300, samples=64)
+    world_colour("sand_path", 0.58)
+    add_sun()
+    add_ground("ground_scrub", 70, variation=True)
+    spacing, row_gap = 5.2, 5.2
+    for row_index, row in enumerate(BUILDING_ROWS):
+        y = -row_index * row_gap
+        offset = (len(row) - 1) * spacing / 2
+        for col, name in enumerate(row):
+            x = col * spacing - offset
+            link_asset(name, (x, y, 0))
+            _building_parts(name, x, y)
+    centre_y = -(len(BUILDING_ROWS) - 1) * row_gap / 2
+    add_camera((0, centre_y - 38.0, 23.0), (0, centre_y, 1.0), lens=50)
+    return render_to("buildings_focus.png")
+
+
+def buildings_detail_close() -> str:
+    """Close enough to judge shingles, siding, hardware and window construction."""
+    clear()
+    setup_render(1400, 1200, samples=96)
+    world_colour("sand_path", 0.58)
+    add_sun()
+    add_ground("ground_scrub", 24, variation=True)
+    link_asset("SM_building_barn", (0, 0, 0), rotation_z=math.radians(-5))
+    add_camera((0, -8.8, 3.4), (0, 0, 1.25), lens=68)
+    return render_to("buildings_detail_close.png")
+
+
+def cold_store_detail_close() -> str:
+    clear()
+    setup_render(1400, 1200, samples=96)
+    world_colour("sand_path", 0.58)
+    add_sun()
+    add_ground("ground_scrub", 24, variation=True)
+    link_asset("SM_building_cold_store", (0, 0, 0), rotation_z=math.radians(-4))
+    _building_parts("SM_building_cold_store", 0, 0)
+    add_camera((0, -8.3, 3.0), (0, 0, 1.12), lens=70)
+    return render_to("building_cold_store_detail.png")
+
+
+def worker_hut_detail_close() -> str:
+    clear()
+    setup_render(1400, 1200, samples=96)
+    world_colour("sand_path", 0.58)
+    add_sun()
+    add_ground("ground_scrub", 24, variation=True)
+    link_asset("SM_building_worker_hut", (0, 0, 0), rotation_z=math.radians(-5))
+    add_camera((0, -8.5, 3.2), (0, 0, 1.16), lens=70)
+    return render_to("building_worker_hut_detail.png")
+
+
+def crop_focus_sheet(filename: str, crops) -> str:
+    clear()
+    setup_render(1600, 1150, samples=64)
+    world_colour("sand_path", 0.58)
+    add_sun()
+    add_ground("ground_scrub", 55, variation=True)
+    spacing, row_gap = 3.4, 3.5
+    for row_index, crop in enumerate(crops):
+        y = -row_index * row_gap
+        for stage in (1, 2, 3, 4):
+            x = (stage - 2.5) * spacing
+            link_asset("SM_ground_plot", (x, y, 0))
+            link_asset(f"SM_crop_{crop}_s{stage}", (x, y, 0.10))
+    centre_y = -(len(crops) - 1) * row_gap / 2
+    add_camera((0, centre_y - 24.0, 15.0), (0, centre_y, 0.48), lens=58)
+    return render_to(filename)
+
+
+def crops_focus() -> str:
+    return crop_focus_sheet("crops_focus.png", ("wheat", "corn", "pumpkin", "clover"))
+
+
+def seasonal_crops_focus(season: str, crops) -> str:
+    return crop_focus_sheet(f"crops_{season}_focus.png", crops)
+
+
+def trees_focus() -> str:
+    clear()
+    setup_render(1600, 1000, samples=64)
+    world_colour("sand_path", 0.58)
+    add_sun()
+    add_ground("ground_scrub", 50, variation=True)
+    names = ["SM_prop_eucalyptus", "SM_prop_eucalyptus_tall",
+             "SM_prop_eucalyptus_wide", "SM_prop_dead_tree"]
+    for index, name in enumerate(names):
+        link_asset(name, ((index - 1.5) * 4.2, 0, 0),
+                   rotation_z=math.radians(-18 + index * 9))
+    add_camera((0, -24.0, 12.0), (0, 0, 1.25), lens=50)
+    return render_to("trees_focus.png")
+
+
+def terrain_focus() -> str:
+    """Ground, bed, road and dressing hierarchy at a terrain-review distance."""
+    clear()
+    setup_render(1600, 1000, samples=64)
+    world_colour("sand_path", 0.58)
+    add_sun()
+    add_ground(
+        "ground_scrub", 54, variation=True, playable=32.0,
+        farmyard=(-2.5, -1.0, 8.8), pasture=(7.0, 2.0, 8.4),
+        worn_paths=[((-9.0, 6.0), (-2.0, -1.0), 1.45),
+                    ((-2.0, -1.0), (7.0, 2.0), 1.25)],
+    )
+    for index, (x, y) in enumerate([
+        (-6.0, -3.0), (-3.8, -3.0), (-1.6, -3.0),
+        (-6.0, -0.8), (-3.8, -0.8), (-1.6, -0.8),
+    ]):
+        link_asset("SM_ground_plot", (x, y, 0), rotation_z=(index % 3 - 1) * 0.018)
+    for index, (x, y, rotation) in enumerate([
+        (2.2, -4.5, 0), (2.2, -2.55, 0), (2.2, -0.60, 0),
+        (3.9, 0.78, math.radians(90)), (5.85, 0.78, math.radians(90)),
+    ]):
+        link_asset("SM_building_road", (x, y, 0), rotation_z=rotation,
+                   scale=0.98 + (index % 2) * 0.025)
+    for index, (x, y) in enumerate([
+        (-9.0, 5.4), (-6.8, 5.9), (-4.7, 4.9), (-1.8, 5.7),
+        (1.1, 5.1), (4.4, 4.8), (7.0, 4.0), (8.6, 2.1),
+        (-9.4, 1.0), (-8.2, -4.8), (7.7, -4.2), (9.0, -1.2),
+    ]):
+        name = ["SM_prop_grass_tuft", "SM_prop_grass_carpet",
+                "SM_prop_dirt_clods", "SM_prop_scrub_patch",
+                "SM_prop_wildflowers", "SM_prop_bush"][index % 6]
+        link_asset(name, (x, y, 0), rotation_z=index * 0.57,
+                   scale=0.88 + (index % 5) * 0.08)
+    add_camera((2.5, -23.5, 15.0), (-0.5, 0.0, 0.15), lens=52)
+    return render_to("terrain_focus.png")
+
+
+def trees_detail_close() -> str:
+    """Close bark/branch/leaf review beside the dead-bark comparison."""
+    clear()
+    setup_render(1600, 1200, samples=96)
+    world_colour("sand_path", 0.58)
+    add_sun()
+    add_ground("ground_scrub", 28, variation=True)
+    link_asset("SM_prop_eucalyptus", (-1.55, 0, 0), rotation_z=math.radians(-14), scale=1.28)
+    link_asset("SM_prop_dead_tree", (1.70, 0.10, 0), rotation_z=math.radians(12), scale=1.35)
+    add_camera((0, -9.7, 4.8), (0, 0, 1.42), lens=68)
+    return render_to("trees_detail_close.png")
 
 
 # ==========================================================================
@@ -338,8 +585,13 @@ def contact_sheet() -> str:
 
 def gameplay_scene() -> None:
     """
-    A mock farm laid out like the real starter level: a 3x2 plot block with
-    every crop at a different stage, structures behind, actors in front.
+    The real starter-farm composition at canonical world coordinates, with
+    representative crop stages substituted onto its six beds for art review.
+
+    Coordinate source: packages/shared/src/domain/parcels.ts and
+    packages/shared/src/rules/newCareer.ts. Keeping this scene on the same
+    axes as TileGrid.tileToWorld() matters: a mirrored mock can appear balanced
+    while the shipping follow camera crops the shelter or the beds.
     """
     clear()
     setup_render(1600, 900, samples=64)
@@ -347,36 +599,35 @@ def gameplay_scene() -> None:
     add_sun()
     # 96 m of visible land around a 32 m playable grid - the same 3x extent the
     # engine builds, so the relief ramps in at the same place it does in game.
-    add_ground("ground_scrub", 96, variation=True, playable=32.0)
+    add_ground(
+        "ground_scrub", 96, variation=True, playable=32.0,
+        farmyard=(-1.0, -2.2, 8.8), pasture=(7.0, 1.0, 8.4),
+        worn_paths=[((-1.0, 3.0), (-1.0, -3.0), 1.45),
+                    ((-1.0, -3.0), (7.0, 1.0), 1.25)],
+    )
 
-    # Six plots on their own tilled beds, laid out on the 2 m tile grid so
-    # the review scene matches the level the engine actually builds.
+    # The shipped starter farm has six plots. Earlier versions put all twelve
+    # crop-stage meshes here, which turned the decisive gameplay pass into a
+    # beauty scene the real follow camera could never frame. The contact sheet
+    # owns exhaustive stage coverage; this pass owns the actual six-plot read.
     layout = [
-        ("SM_crop_wheat_s4", -3, 2), ("SM_crop_wheat_s2", -2, 2),
-        ("SM_crop_corn_s4", -1, 2), ("SM_crop_corn_s3", 0, 2),
-        ("SM_crop_pumpkin_s4", -3, 1), ("SM_crop_pumpkin_s2", -2, 1),
-        ("SM_crop_wheat_s3", -1, 1), ("SM_crop_pumpkin_s3", 0, 1),
-        ("SM_crop_corn_s2", -3, 0), ("SM_crop_wheat_s1", -2, 0),
-        ("SM_crop_pumpkin_s1", -1, 0), ("SM_crop_corn_s1", 0, 0),
+        ("SM_crop_wheat_s4", -5.0, -5.0),
+        ("SM_crop_corn_s2", -1.0, -5.0),
+        ("SM_crop_pumpkin_s4", 3.0, -5.0),
+        ("SM_crop_wheat_s1", -5.0, -1.0),
+        ("SM_crop_corn_s4", -1.0, -1.0),
+        ("SM_crop_pumpkin_s2", 3.0, -1.0),
     ]
-    for name, tx, ty in layout:
-        x, y = tx * TILE_SIZE, ty * TILE_SIZE
+    for name, x, y in layout:
         link_asset("SM_ground_plot", (x, y, 0.0))
         link_asset(name, (x, y, 0.10))
 
-    link_asset("SM_building_barn", (-5.3, 8.3, 0), rotation_z=math.radians(10))
-    link_asset("SM_building_coop", (5.0, 7.0, 0), rotation_z=math.radians(-14))
-    link_asset("SM_building_irrigation", (1.4, 7.1, 0), rotation_z=math.radians(-4))
-    link_asset("SM_prop_water_trough", (4.1, 5.3, 0), rotation_z=math.radians(-18))
-    for i in range(4):
-        link_asset("SM_building_fence", (2.7 + i * TILE_SIZE * 0.96, 4.0, 0))
-    for i in range(3):
-        link_asset("SM_building_fence", (7.5, 4.9 + i * TILE_SIZE * 0.96, 0),
-                   rotation_z=math.radians(90))
-    for i in range(5):
-        link_asset("SM_building_road", (0.7, -2.8 + i * TILE_SIZE * 0.98, 0))
-    link_asset("SM_prop_rock_cluster", (7.6, 1.0, 0), rotation_z=0.4)
-    link_asset("SM_prop_rock", (-8.0, 2.8, 0))
+    # The opening shelter is the coop mesh at STARTER_SHELTER (19, 16), which
+    # TileGrid maps to (7, 1). The trough uses StructureView's exact offset.
+    link_asset("SM_building_coop", (7.0, 1.0, 0))
+    link_asset("SM_prop_water_trough", (5.1, -0.44, 0), rotation_z=-0.28)
+    link_asset("SM_prop_rock_cluster", (11.0, 11.0, 0), rotation_z=0.4)
+    link_asset("SM_prop_rock", (-13.0, -13.0, 0))
     # Scatter dressing. Large flat areas of scrub read as empty rather than
     # as land, and these are the cheapest possible fix.
     for i, (gx, gy) in enumerate([
@@ -385,7 +636,9 @@ def gameplay_scene() -> None:
         (9.4, 5.5), (0.0, -6.5), (-7.0, 1.0), (4.5, 2.5), (-5.0, -1.5),
         (2.5, 2.8), (7.0, -4.5), (-8.4, 9.0),
     ]):
-        link_asset("SM_prop_grass_tuft", (gx, gy, 0), rotation_z=i * 0.7)
+        grass_name = "SM_prop_grass_carpet" if i % 3 == 0 else "SM_prop_grass_tuft"
+        link_asset(grass_name, (gx, gy, 0), rotation_z=i * 0.7,
+                   scale=0.92 + (i % 4) * 0.06)
     for i, (bx, by) in enumerate([(-9.5, -0.5), (9.0, 8.0), (-5.5, 12.0), (5.5, -5.5)]):
         link_asset("SM_prop_bush", (bx, by, 0), rotation_z=i * 1.1)
 
@@ -396,6 +649,9 @@ def gameplay_scene() -> None:
     ]):
         link_asset("SM_prop_scrub_patch", (px, py, 0.006),
                    rotation_z=i * 0.67, scale=scale)
+    for i, (dx, dy) in enumerate([(-6.8, 3.4), (-2.0, 6.8), (4.2, 7.4), (8.2, -0.8)]):
+        link_asset("SM_prop_dirt_clods", (dx, dy, 0.004),
+                   rotation_z=i * 0.91, scale=0.88 + i * 0.06)
     for i, (fx, fy) in enumerate([
         (-6.6, -2.5), (-3.7, -4.1), (3.0, -3.6), (6.8, 1.8),
         (-8.0, 7.6), (8.2, 7.2),
@@ -403,39 +659,44 @@ def gameplay_scene() -> None:
         link_asset("SM_prop_wildflowers", (fx, fy, 0), rotation_z=i * 0.81)
 
     # Tree crowns frame the playable farm without turning the centre into a
-    # forest. Their broad clustered masses are the visual richness seen in
-    # the Dinkum references, achieved without per-leaf geometry.
+    # forest. Separate lance leaves and visible twigs preserve negative space
+    # while still combining into a readable canopy at gameplay distance.
     for i, (tx, ty, scale) in enumerate([
         (-9.4, 4.2, 1.10), (-8.7, 8.7, 1.25), (-6.8, 11.8, 1.0),
         (6.7, 10.8, 1.10), (9.0, 6.6, 1.25), (9.4, 1.9, 0.95),
     ]):
-        tree_name = "SM_prop_eucalyptus_tall" if i % 2 else "SM_prop_eucalyptus"
+        tree_name = ["SM_prop_eucalyptus", "SM_prop_eucalyptus_tall",
+                     "SM_prop_eucalyptus_wide"][i % 3]
         link_asset(tree_name, (tx, ty, 0), rotation_z=i * 0.83,
                    scale=scale)
     link_asset("SM_prop_dead_tree", (-8.7, -0.5, 0), rotation_z=-0.5, scale=1.05)
 
-    player = link_asset("SM_char_farmer", (-0.6, -2.1, 0), rotation_z=math.radians(155))
+    player = link_asset("SM_char_farmer", (-1.0, 3.0, 0), rotation_z=math.radians(155))
     if player:
         add_player_outline(player)
-    link_asset("SM_animal_chicken", (4.8, 5.8, 0), rotation_z=math.radians(-60))
-    link_asset("SM_animal_chicken", (6.0, 6.1, 0), rotation_z=math.radians(20))
-    link_asset("SM_animal_chicken", (5.7, 4.9, 0), rotation_z=math.radians(130))
-    link_asset("SM_animal_fox", (7.4, 3.1, 0), rotation_z=math.radians(-130))
+    link_asset("SM_animal_chicken", (6.4, 1.8, 0), rotation_z=math.radians(-60))
+    link_asset("SM_animal_chicken", (7.8, 0.8, 0), rotation_z=math.radians(20))
+    link_asset("SM_animal_fox", (9.3, 3.4, 0), rotation_z=math.radians(-130))
 
-    # The real camera: 20 m out, ~61 degrees, matching FollowController.
-    # Read from the palette module so this can never drift from what the
-    # engine actually ships. 38 degrees, not 61: the first review was shot at
-    # 61 and read as near-top-down, foreshortening away all vertical crop
-    # mass and letting flat ground dominate the frame.
+    # Every component comes from the shared camera constants. Azimuth matters
+    # as much as pitch: a 45-degree runtime default cropped the shelter while
+    # this review used an undocumented 18-degree beauty composition.
     distance = GAMEPLAY_REVIEW_DISTANCE
     pitch = math.radians(GAMEPLAY_REVIEW_PITCH_DEGREES)
-    target = Vector((-1.6, 2.3, 1.0))
+    yaw = math.radians(GAMEPLAY_REVIEW_YAW_DEGREES)
+    # FollowController looks at the player, not at an art-directed point in the
+    # field. Keeping the review target on the farmer prevents a beauty-shot
+    # offset from hiding runtime edge crops and shelter occlusion.
+    target = Vector((-1.0, 3.0, 1.0))
     cam_pos = target + Vector((
-        math.sin(math.radians(18)) * math.cos(pitch) * distance,
-        -math.cos(math.radians(18)) * math.cos(pitch) * distance,
+        math.sin(yaw) * math.cos(pitch) * distance,
+        math.cos(yaw) * math.cos(pitch) * distance,
         math.sin(pitch) * distance,
     ))
-    add_camera(cam_pos, target, lens=42)
+    scene = bpy.context.scene
+    aspect = scene.render.resolution_x / scene.render.resolution_y
+    lens = lens_for_vertical_fov(GAMEPLAY_REVIEW_FOV_DEGREES, aspect)
+    add_camera(cam_pos, target, lens=lens)
 
 
 def gameplay_distance() -> str:
@@ -571,7 +832,7 @@ def character_portrait() -> str:
     """
     A close-up of the farmer.
 
-    Added because "how good is the face?" cannot be answered from the 20 m
+    Added because "how good is the face?" cannot be answered from the
     gameplay view, and it is the question most often asked about a character.
     It is explicitly NOT the view the art is optimised for - the gameplay pass
     remains the one that decides - but it is the honest way to show what the
@@ -594,6 +855,23 @@ def character_portrait() -> str:
     # than the top-down the game uses.
     add_camera((0.95, -1.85, 1.72), (0, 0, 1.42), lens=85)
     return render_to("character_portrait.png")
+
+
+def actors_focus() -> str:
+    """Player and every current animal at a close but scale-honest review distance."""
+    clear()
+    setup_render(1600, 900, samples=64)
+    world_colour("sky_haze", 0.48)
+    add_sun()
+    add_ground("ground_scrub", 45)
+
+    link_asset("SM_char_farmer", (-2.45, 0, 0), rotation_z=math.radians(12))
+    link_asset("SM_animal_chicken", (-0.75, 0, 0), rotation_z=math.radians(-18), scale=1.35)
+    link_asset("SM_animal_cow", (1.00, 0, 0), rotation_z=math.radians(-22))
+    link_asset("SM_animal_fox", (2.75, 0, 0), rotation_z=math.radians(18), scale=1.18)
+
+    add_camera((5.7, -10.8, 4.0), (0.1, 0, 0.72), lens=68)
+    return render_to("actors_focus.png")
 
 
 def main() -> dict:
@@ -624,10 +902,37 @@ def main() -> dict:
     assert_sources_unpainted("gameplay_distance")
     paths["contact_sheet"] = contact_sheet()
     assert_sources_unpainted("contact_sheet")
+    paths["buildings_focus"] = buildings_focus()
+    assert_sources_unpainted("buildings_focus")
+    paths["buildings_detail_close"] = buildings_detail_close()
+    assert_sources_unpainted("buildings_detail_close")
+    paths["cold_store_detail_close"] = cold_store_detail_close()
+    assert_sources_unpainted("cold_store_detail_close")
+    paths["worker_hut_detail_close"] = worker_hut_detail_close()
+    assert_sources_unpainted("worker_hut_detail_close")
+    paths["crops_focus"] = crops_focus()
+    assert_sources_unpainted("crops_focus")
+    for season, crops in {
+        "spring": ("radish", "pea", "strawberry"),
+        "summer": ("sunflower", "tomato", "avocado"),
+        "autumn": ("beetroot", "cranberry", "grape"),
+        "winter": ("carrot", "cabbage", "garlic"),
+    }.items():
+        key = f"crops_{season}_focus"
+        paths[key] = seasonal_crops_focus(season, crops)
+        assert_sources_unpainted(key)
+    paths["trees_focus"] = trees_focus()
+    assert_sources_unpainted("trees_focus")
+    paths["terrain_focus"] = terrain_focus()
+    assert_sources_unpainted("terrain_focus")
+    paths["trees_detail_close"] = trees_detail_close()
+    assert_sources_unpainted("trees_detail_close")
     paths["silhouette"] = silhouette()
     assert_sources_unpainted("silhouette")
     paths["character_portrait"] = character_portrait()
     assert_sources_unpainted("character_portrait")
+    paths["actors_focus"] = actors_focus()
+    assert_sources_unpainted("actors_focus")
     paths.update({f"accessibility_{name}": path
                   for name, path in accessibility_variants(gameplay_path).items()})
     paths["assets_captured"] = str(len(SOURCES))

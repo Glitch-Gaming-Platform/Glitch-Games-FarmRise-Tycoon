@@ -24,8 +24,15 @@
  */
 import * as THREE from 'three';
 
-/** Cell size of the mesh, in metres. Blotches are much larger than this. */
-const SEGMENT_METRES = 2;
+/**
+ * Cell size of the mesh, in metres.
+ *
+ * Two-metre vertices were enough for broad colour zones but made the whole
+ * playable estate interpolate as a handful of large soft polygons. One metre
+ * gives the land a hand-painted mid-frequency read and enough vertices for
+ * procedural normal variation while keeping the ground below 20k triangles.
+ */
+const SEGMENT_METRES = 1;
 
 /** Peak height of the relief at the far edge, in metres. */
 const EDGE_RELIEF = 0.85;
@@ -45,6 +52,10 @@ function hash2(ix: number, iz: number): number {
 function smoothstep(edge0: number, edge1: number, value: number): number {
   const t = Math.min(1, Math.max(0, (value - edge0) / (edge1 - edge0)));
   return t * t * (3 - 2 * t);
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
 }
 
 /** Value noise with smoothstep interpolation. Returns 0..1. */
@@ -78,6 +89,126 @@ export interface GroundGeometryOptions {
   readonly playableDepth: number;
   /** How much larger the visible plane is than the playable grid. */
   readonly extentScale: number;
+  /** Broad red-ochre activity zone around the working heart of the farm. */
+  readonly farmyard?: { readonly x: number; readonly z: number; readonly radius: number };
+  /** Muted green animal-yard mass, visually separating the shelter from crops. */
+  readonly pasture?: { readonly x: number; readonly z: number; readonly radius: number };
+  /** Soft worn-earth routes. They are visual desire lines, not speed-boosting roads. */
+  readonly wornPaths?: readonly {
+    readonly from: { readonly x: number; readonly z: number };
+    readonly to: { readonly x: number; readonly z: number };
+    readonly width: number;
+  }[];
+}
+
+export interface GroundSurfaceSample {
+  /** Light-and-shade multiplier applied before the palette-owned base colour. */
+  readonly value: number;
+  /** Broad natural vegetation potential before traffic suppresses it. */
+  readonly lush: number;
+  /** Natural exposed-clay potential. */
+  readonly ochre: number;
+  /** Authored activity-zone weight. */
+  readonly farmyard: number;
+  /** Authored animal-yard weight. */
+  readonly pasture: number;
+  /** Authored foot-traffic desire-line weight. */
+  readonly worn: number;
+  /** Final green-ground weight after traffic and farm use. */
+  readonly localPasture: number;
+  /** Final packed/exposed-earth weight. */
+  readonly localEarth: number;
+  /** Fine deterministic grain used for surface texture and subtle normals. */
+  readonly grain: number;
+}
+
+function distanceToSegment(
+  x: number,
+  z: number,
+  from: { readonly x: number; readonly z: number },
+  to: { readonly x: number; readonly z: number },
+): number {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const lengthSquared = dx * dx + dz * dz;
+  if (lengthSquared <= 0.0001) return Math.hypot(x - from.x, z - from.z);
+  const t = Math.min(1, Math.max(0, ((x - from.x) * dx + (z - from.z) * dz) / lengthSquared));
+  return Math.hypot(x - (from.x + dx * t), z - (from.z + dz * t));
+}
+
+/**
+ * Samples the art-directed ground fields without allocating.
+ *
+ * FarmView uses the same result for vertex colour, scatter density and contact
+ * feedback. Keeping those decisions on one field prevents the common terrain
+ * failure where grass grows through a worn track while the colour underneath
+ * claims that the same spot is packed dirt.
+ */
+export function sampleGroundSurface(
+  x: number,
+  z: number,
+  options: GroundGeometryOptions,
+): GroundSurfaceSample {
+  const macro = fbm(x, z);
+  const grain = fbm(x * 1.65 + 113.7, z * 1.65 - 87.2);
+  const brush =
+    Math.sin(x * 0.18 + z * 0.075 + (fbm(x * 0.31 - 27.0, z * 0.31 + 61.0) - 0.5) * 2.4) * 0.5 +
+    0.5;
+  // Broad value masses do the composition work; the two smaller terms add a
+  // dry hand-painted grain that survives the gameplay camera without turning
+  // into texture noise or shimmering on mobile.
+  const value = 0.72 + macro * 0.3 + (grain - 0.5) * 0.08 + (brush - 0.5) * 0.03;
+
+  const lush = smoothstep(0.35, 0.69, fbm(x * 0.37 + 71.3, z * 0.37 - 19.7));
+  const ochre = smoothstep(0.53, 0.83, fbm(x * 0.23 - 31.4, z * 0.23 + 48.8));
+  const farmyard = options.farmyard
+    ? 1 -
+      smoothstep(
+        options.farmyard.radius * 0.38,
+        options.farmyard.radius,
+        Math.hypot(x - options.farmyard.x, z - options.farmyard.z),
+      )
+    : 0;
+  const pasture = options.pasture
+    ? 1 -
+      smoothstep(
+        options.pasture.radius * 0.38,
+        options.pasture.radius,
+        Math.hypot(x - options.pasture.x, z - options.pasture.z),
+      )
+    : 0;
+  let worn = 0;
+  for (const path of options.wornPaths ?? []) {
+    const distance = distanceToSegment(x, z, path.from, path.to);
+    worn = Math.max(worn, 1 - smoothstep(path.width * 0.55, path.width * 1.65, distance));
+  }
+
+  // Traffic and cultivation suppress vegetation. The previous version simply
+  // maxed pasture over lushness, so tufts remained visually plausible on top
+  // of ground that had already been painted as a heavily worn route.
+  const traffic = clamp01(worn * 0.94 + farmyard * 0.68);
+  const localPasture = clamp01(Math.max(lush, pasture) * (1 - traffic));
+  const localEarth = clamp01(Math.max(ochre * (1 - localPasture), farmyard * 0.72, worn));
+
+  return {
+    value,
+    lush,
+    ochre,
+    farmyard,
+    pasture,
+    worn,
+    localPasture,
+    localEarth,
+    grain,
+  };
+}
+
+/** Cosmetic height field used only to tilt normals on the flat playable land. */
+function surfaceNormalHeight(x: number, z: number): number {
+  return (
+    (fbm(x * 1.45 + 19.2, z * 1.45 - 41.7) - 0.5) * 0.075 +
+    (fbm(x * 3.2 - 73.0, z * 3.2 + 12.0) - 0.5) * 0.018
+  );
 }
 
 /**
@@ -133,41 +264,48 @@ export function createGroundGeometry(options: GroundGeometryOptions): THREE.Buff
       position.setY(i, 0);
     }
 
-    // Value variation. A first attempt used 0.84..1.14 on the theory that
-    // subtlety was safer; rendered at the actual gameplay camera it was
-    // invisible, which is the same as not having done it. This range is what
-    // actually reads as "land" at 20 m.
-    const n = fbm(x, z);
-    const value = 0.76 + n * 0.42;
-
-    // A second, independent field decides where the ground is greener. Tying
-    // green to the same noise as value would make every light patch green and
-    // every dark patch bare, which reads as a repeating pattern.
-    //
-    // Greening the ground is safe for crop readability specifically because
-    // crops never stand on it - every crop sits on a tilled soil plot, and the
-    // soil/crop contrast pair is the one the palette check actually guards.
-    const lush = smoothstep(0.43, 0.78, fbm(x * 0.37 + 71.3, z * 0.37 - 19.7));
-    const ochre = smoothstep(0.53, 0.83, fbm(x * 0.23 - 31.4, z * 0.23 + 48.8));
+    const sample = sampleGroundSurface(x, z, options);
 
     // Gold scrub, muted olive pasture and red-ochre worn earth are the three
     // large colour masses in the supplied references. They remain broad and
     // softly blended: texture-sized noise would violate the style and shimmer
     // at the gameplay camera. The multipliers tint the palette-owned base
     // colour rather than introducing a second hard-coded ground palette.
-    const greenRed = 1 - 0.43 * lush;
-    const greenGreen = 1 + 0.15 * lush;
-    const greenBlue = 1 - 0.42 * lush;
-    const earthRed = 1 + 0.11 * ochre * (1 - lush);
-    const earthGreen = 1 - 0.24 * ochre * (1 - lush);
-    const earthBlue = 1 - 0.32 * ochre * (1 - lush);
-    colours[i * 3] = value * greenRed * earthRed;
-    colours[i * 3 + 1] = value * greenGreen * earthGreen;
-    colours[i * 3 + 2] = value * greenBlue * earthBlue;
+    const dryFleck = smoothstep(0.66, 0.86, sample.grain) * (1 - sample.localPasture);
+    const greenRed = 1 - 0.38 * sample.localPasture;
+    const greenGreen = 1 + 0.14 * sample.localPasture;
+    const greenBlue = 1 - 0.37 * sample.localPasture;
+    const earthRed = 1 + 0.17 * sample.localEarth + dryFleck * 0.035;
+    const earthGreen = 1 - 0.31 * sample.localEarth - dryFleck * 0.028;
+    const earthBlue = 1 - 0.39 * sample.localEarth - dryFleck * 0.034;
+    colours[i * 3] = sample.value * greenRed * earthRed;
+    colours[i * 3 + 1] = sample.value * greenGreen * earthGreen;
+    colours[i * 3 + 2] = sample.value * greenBlue * earthBlue;
   }
 
   position.needsUpdate = true;
   geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
   geometry.computeVertexNormals();
+
+  // The collision area remains mathematically flat, but a perfectly uniform
+  // up-vector makes every metre of it catch identical light. Tilting only the
+  // vertex normals supplies the soft micro-relief a texture normal map would
+  // normally provide, with no UVs, sampled textures or geometry/collision
+  // mismatch. The displacement is deliberately tiny and cannot affect the
+  // silhouette or placement readability.
+  const normal = geometry.getAttribute('normal') as THREE.BufferAttribute;
+  const epsilon = 0.32;
+  for (let i = 0; i < count; i += 1) {
+    const x = position.getX(i);
+    const z = position.getZ(i);
+    if (outsideDistance(x, z, playableWidth, playableDepth) > 0) continue;
+    const dx =
+      (surfaceNormalHeight(x + epsilon, z) - surfaceNormalHeight(x - epsilon, z)) / (epsilon * 2);
+    const dz =
+      (surfaceNormalHeight(x, z + epsilon) - surfaceNormalHeight(x, z - epsilon)) / (epsilon * 2);
+    const length = Math.hypot(dx, 1, dz);
+    normal.setXYZ(i, -dx / length, 1 / length, -dz / length);
+  }
+  normal.needsUpdate = true;
   return geometry;
 }

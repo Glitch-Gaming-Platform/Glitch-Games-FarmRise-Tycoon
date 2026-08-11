@@ -164,12 +164,20 @@ export function renderMusicLoop(sampleRate: number, seed = 0x5eed): Float32Array
 /** Kept as an alias for the fallback renderer and older imports. */
 export const MUSIC_ID = DEFAULT_MUSIC_ID;
 
+export interface ProceduralMusicOptions {
+  readonly id?: string;
+  readonly sampleRate?: number;
+  readonly seed?: number;
+}
+
 export function registerProceduralMusic(
   context: AudioContext,
   register: (id: string, buffer: AudioBuffer) => void,
+  options: ProceduralMusicOptions = {},
 ): void {
-  const samples = renderMusicLoop(context.sampleRate);
-  const buffer = context.createBuffer(1, samples.length, context.sampleRate);
+  const sampleRate = options.sampleRate ?? context.sampleRate;
+  const samples = renderMusicLoop(sampleRate, options.seed);
+  const buffer = context.createBuffer(1, samples.length, sampleRate);
   buffer.copyToChannel(samples, 0);
-  register(MUSIC_ID, buffer);
+  register(options.id ?? MUSIC_ID, buffer);
 }

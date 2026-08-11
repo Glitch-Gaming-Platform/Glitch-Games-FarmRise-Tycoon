@@ -41,32 +41,39 @@ art/source/farmrise_assets.blend ──art:ui-icons──▶ apps/game/public/as
 
 ## Current inventory (measured)
 
-34 world assets, **13,241 triangles**, one authored-world material, no world textures and no UVs.
+102 world assets, **37,712 triangles**, one authored-world material, vertex-colour hue and one
+runtime-generated 256 × 256 greyscale detail atlas selected through UVs. The 48 new crop meshes are
+split into one pack per season; common crops remain in the base pack.
 
 | Family | Assets | Raw GLB | gzip | Phase |
 | --- | ---: | ---: | ---: | --- |
-| crops | 12 | 424,668 | 128,926 | critical |
-| buildings | 5 | 236,316 | 38,774 | critical |
-| animals | 2 | 69,052 | 19,103 | critical |
-| characters | 1 | 130,680 | 34,808 | critical |
-| props | 13 | 146,336 | 33,813 | preload |
-| ground | 1 | 19,876 | 3,182 | critical |
-| **Total** | **34** | **1,026,928** | **258,606** | |
+| crops (year-round) | 16 | 594,980 | 192,488 | critical |
+| crops-spring | 12 | 469,812 | 140,810 | seasonal |
+| crops-summer | 12 | 467,408 | 134,364 | seasonal |
+| crops-autumn | 12 | 443,560 | 111,215 | seasonal |
+| crops-winter | 12 | 369,684 | 107,131 | seasonal |
+| buildings | 17 | 672,932 | 126,415 | critical |
+| animals | 3 | 138,816 | 41,042 | critical |
+| characters | 1 | 150,164 | 41,581 | critical |
+| props | 16 | 219,636 | 75,417 | preload |
+| ground | 1 | 28,248 | 8,296 | critical |
+| **Total catalog** | **102** | **3,555,240** | **978,759** | not loaded at once |
 
-The DOM interface also ships 19 transparent WebP illustrations rendered from these meshes:
-**about 81.6 KB total**, all lazy and guarded by a **100 KB** budget.
+The DOM interface also ships 44 transparent WebP illustrations rendered from these meshes:
+**166,366 bytes total**, all lazy and guarded by a **175 KB** budget.
 
-## World texture compression: not applicable
+## World detail atlas
 
-There are **no sampled textures in the 3D world**. All world colour is in `COLOR_0` vertex
-attributes against a single material. The DOM's transparent WebPs are ordinary browser images and
-do not require a KTX2/Basis transcoder.
+World hue remains in `COLOR_0`, but `TEXCOORD_0` now selects siding, shingle, grain, metal, glass,
+bark, leaf, stone and water patterns from one greyscale atlas. Blender generates and packs that
+atlas for review renders; `ModelLibrary` creates the matching `DataTexture` synchronously at runtime.
+No world texture file is downloaded and all meshes still share one material.
 
-KTX2/Basis Universal was evaluated and rejected — not on merit, but because there is nothing for it
-to compress. Adopting it would mean adding a transcoder (~250 KB) to decode zero textures.
+KTX2/Basis remains inapplicable to this generated texture because there is no network payload to
+compress. A transcoder would add download weight without reducing the generated GPU resource.
 
-**Revisit if** the project ever adopts hand-painted atlases (see improvement plan item 10). At that
-point KTX2 becomes the right answer for a web target and the measurement should be redone.
+**Revisit if** a hand-painted or baked bitmap world atlas is shipped as a file. At that point KTX2
+becomes the right comparison for a web target and the measurement must be redone.
 
 ## Mesh compression: measured, then rejected
 
@@ -76,30 +83,33 @@ comparison of raw payloads alone is misleading.
 
 | Family | raw + gzip | Draco + gzip | Meshopt + gzip |
 | --- | ---: | ---: | ---: |
-| crops | 128,926 | 89,177 | 112,529 |
-| buildings | 38,774 | 36,023 | 31,814 |
-| animals | 19,103 | 14,764 | 23,554 |
-| characters | 34,808 | 24,657 | 38,923 |
-| props | 33,813 | 29,332 | 38,719 |
-| ground | 3,182 | 3,160 | 2,881 |
-| **Total** | **258,606** | **197,113** | **248,420** |
+| crops | 192,488 | 168,775 | 155,889 |
+| crops-spring | 140,810 | 132,492 | 124,236 |
+| crops-summer | 134,364 | 129,144 | 136,429 |
+| crops-autumn | 111,215 | 111,546 | 105,932 |
+| crops-winter | 107,131 | 99,986 | 83,614 |
+| buildings | 126,415 | 148,067 | 115,541 |
+| animals | 41,042 | 40,065 | 47,397 |
+| characters | 41,581 | 39,029 | 47,044 |
+| props | 75,417 | 61,406 | 69,486 |
+| ground | 8,296 | 8,076 | 8,992 |
+| **Total catalog** | **978,759** | **938,586** | **894,560** |
 
 Add the decoder each option requires:
 
-| Option | Transport | Decoder | **First load** |
+| Option | Complete catalog transport | Decoder | **Catalog total** |
 | --- | ---: | ---: | ---: |
-| **Plain GLB + gzip** | 258,606 | 0 | **258,606** |
-| Meshopt + gzip | 248,420 | ~5,000 | **253,420** |
-| Draco + gzip | 197,113 | ~230,000 | **427,113** |
+| **Plain GLB + gzip** | 978,759 | 0 | **978,759** |
+| Meshopt + gzip | 894,560 | ~5,000 | **899,560** |
+| Draco + gzip | 938,586 | ~230,000 | **1,168,586** |
 
 ### Decision: ship plain GLB with gzip/brotli. No mesh compression.
 
-- **Draco is still worse than doing nothing.** Its decoder makes first load about 168 KB larger than
-  plain GLB.
-- **Meshopt now saves only about 5.2 KB (2%) after its decoder.** The authored set crossed the old
-  1 MB / 200 KB revisit threshold, was remeasured, and still does not justify a runtime dependency
-  and decode path. ADR 0015 records the revised decision.
-- Vertex-colour meshes with no UVs and no tangents still gzip well: raw GLB compresses about 4×.
+- **Draco is still worse than doing nothing.** The decoder remains larger than its catalog saving.
+- **Meshopt saves about 79.2 KB net across the whole catalog**, but seasonal pack results vary: the
+  summer pack grows after Meshopt while winter benefits substantially. Compression stays deferred
+  until cold-load profiling proves a loaded pack is the bottleneck.
+- Vertex-colour meshes with UVs and no tangents still gzip well enough for the current loading plan.
 
 ### Concrete triggers to revisit
 
@@ -107,16 +117,16 @@ Not "revisit later" — these are testable thresholds:
 
 | Adopt | When |
 | --- | --- |
-| **Meshopt** | Measured first-load saving reaches at least 25 KB, or cold-load profiling shows model transfer is a user-visible bottleneck. Current net saving is about 5.2 KB. |
+| **Meshopt** | After progression packs are split, a required pack still saves at least 25 KB net, or cold-load profiling shows model transfer is a user-visible bottleneck. |
 | **Draco** | Raw model payload > ~3.3 MB, where the saving finally exceeds the 230 KB decoder. |
-| **KTX2** | The first sampled 3D-world texture ships. |
+| **KTX2** | The first bitmap 3D-world texture file ships. |
 
 Re-run `npm run art:build`; `art/build_report.json` records raw and gzip bytes for every variant.
 
 ## LODs: not implemented, and deliberately so
 
-At 13,241 triangles for the entire authored asset set, LODs would be optimisation without evidence.
-The heaviest single asset is the 2,438-triangle farmer, still below its 2,600-triangle class budget.
+At 37,712 triangles across lazy packs, catalog total is no longer the runtime geometry count. The
+heaviest single asset is still the 2,310-triangle farmer; ready grapes are the heaviest crop at 894.
 
 **Revisit if** a profiling session shows geometry-bound frames on a target device. Three.js has no
 built-in LOD authoring, so this would mean either `THREE.LOD` with script-generated decimations or
@@ -152,41 +162,47 @@ Draw calls are proportional to distinct **meshes**, not to object count.
 | Content | Draw calls |
 | --- | --- |
 | Plot beds (any number) | 1 |
-| Crops | ≤ 12 (one per crop × stage in use) |
-| Scatter grass + bushes | 2 |
+| Crops | ≤ 22 active crop/stage draws (estate bed count); 64 buckets are preallocated and empty buckets draw nothing |
+| Terrain scatter (grass carpets, dirt clods, tufts, flowers, scrub, bushes) | 6 |
 | Chickens (any number) | 1 |
 | Buildings | 1 per placed building |
 | Ground, player, foxes | 1 each |
 
-Buildings are the only unbatched category, because each has a distinct mesh and there are few of
-them. If a player ever places fifty fences, that becomes the first thing to instance.
+Most buildings remain unbatched because each has a distinct mesh and there are few of them. Roads
+are the exception: completed tiles are instanced by connection shape and surface variant, so a long
+lane costs a small fixed set of draws instead of one per tile.
 
 ## Profiling: what has and has not been done
 
 **Measured:** triangle counts and raw/gzip/Draco/Meshopt bytes per family
-(`art/build_report.json`), bundle sizes from `vite build`, and a live starter view at 36 draw calls
-and 72,694 rendered triangles. The complete 88-test Playwright matrix passes in desktop Chromium,
-mobile Chromium, Firefox and WebKit.
+(`art/build_report.json`), bundle sizes from `vite build`, and a physical iPhone 12 mini starter
+view. Before the mobile profile the phone rendered a 750 × 1,328 backing canvas at 60 FPS, 31 draws
+and 71,208 triangles. The current progression build renders 562 × 996 at 60 FPS, 91 draws and
+222,856 triangles in the starter view; exercised states reached 100 draws and about 225k triangles.
+Backing pixels remain 43.8% below the old desktop-quality phone path. See [MOBILE.md](MOBILE.md) for
+the exact device, soak and gates.
 
-**Not measured:** GPU memory, cold-cache load time, or sustained frame time on a physical mid-range
-phone. The browser results are regression checks on one development machine, not a device-wide
-performance claim.
+**Not measured:** process/GPU memory, GPU time, thermal state, battery drain, a constrained Android
+device or physical landscape rotation. A 10-minute foreground iPhone soak is complete, but it had
+no process-memory, GPU-time, battery or thermal instrumentation. Browser automation is a regression
+check, not a device-wide performance claim.
 
-Before shipping, run: Chrome DevTools performance trace on a mid-range Android device, `renderer.info`
-draw-call and triangle counts at a full farm, and a cold-cache load-time measurement.
+Before broad release, run a Chrome DevTools performance trace on a constrained Android device,
+`renderer.info` draw-call and triangle counts at a full farm, cold/warm startup measurements, and a
+10–30 minute thermal/memory soak on both iOS and Android.
 
 ## Budgets
 
 | Metric | Budget | Current |
 | --- | ---: | ---: |
-| Triangles, whole asset set | 20,000 | 13,241 |
-| Triangles, single asset | see class budgets | 2,438 worst case |
+| Triangles, whole asset set | 40,000 | 37,712 |
+| Triangles, single asset | see class budgets | 2,310 worst case |
 | Materials | 1 | 1 |
-| Textures | 0 | 0 |
-| DOM interface illustrations | 100 KB | about 81.6 KB |
-| Model payload, gzipped | 250 KB | about 259 KB — slightly over; tracked for follow-up |
-| Client JS bundle, gzipped | 200 KB | about 235 KB (81 app + 154 Three.js) — over budget |
-| Client JS chunks, raw | 1 MB | about 876 KB |
+| Generated world detail atlases | 1 × 256 px | 1 × 256 px, no network file |
+| DOM interface illustrations | 175 KB | 166,366 bytes |
+| Model payload, gzipped | loaded-season target to profile | about 626 KB for spring common art; 979 KB complete catalog |
+| Client JS bundle, gzipped | 200 KB | about 285 KB (about 132 app + 154 Three.js) — over budget |
+| Client JS chunks, raw | 1 MB | about 1.05 MB — over budget |
 
 ## Regression checks
 
@@ -203,7 +219,7 @@ draw-call and triangle counts at a full farm, and a cold-cache load-time measure
 ## Troubleshooting
 
 | Draco chunks in `dist/` | Something re-imported `DRACOLoader` | It is not needed; see ADR 0010 and the note at the top of `modelLoader.ts` |
-| Review renders framed differently from the game | Camera constants drifted | `cameraFraming.test.ts` fails on this; fix `palette.py` or `sessionRules.ts` |
+| Review renders framed differently from the game | Camera constants, orbit sign, vertical-FOV conversion or starter-scene axes drifted | `cameraFraming.test.ts` catches constants/transform setup; keep `review_render.py` on the shared starter world coordinates |
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |

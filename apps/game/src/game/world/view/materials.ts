@@ -23,6 +23,7 @@ export interface FarmMaterials {
   readonly fence: THREE.Material;
   readonly shelter: THREE.Material;
   readonly rock: THREE.Material;
+  readonly animal: THREE.Material;
   readonly fox: THREE.Material;
   dispose(): void;
 }
@@ -51,10 +52,19 @@ export function createFarmMaterials(): FarmMaterials {
     cropDiseased: make(0x8a7b4a),
     barn: make(0x3f7a82),
     irrigation: make(0xa9b4ba),
-    road: make(0xb0a083),
+    // Runtime roads generate palette-correct COLOR data for adjacency-aware
+    // shoulders, wear and stones. White preserves those authored values rather
+    // than multiplying them by the old flat fallback tint.
+    road: new THREE.MeshStandardMaterial({
+      color: 0xffffff,
+      roughness: 0.92,
+      metalness: 0,
+      vertexColors: true,
+    }),
     fence: make(0x9c6b3f),
     shelter: make(0x2e5c63),
     rock: make(0x8a8378),
+    animal: make(0xb88450),
     fox: make(0xd0602a),
   };
 

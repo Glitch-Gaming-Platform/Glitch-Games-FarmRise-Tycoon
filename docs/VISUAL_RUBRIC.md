@@ -3,9 +3,10 @@
 How FarmRise Tycoon art is graded. Twelve categories, weighted for **this** style — a stylised
 low-poly farming game on a mid-distance follow camera, shipping to WebGL on all devices.
 
-Categories that would matter for a different game are deliberately absent: there is no
-"mechanical articulation" category because nothing in this game is mechanical, and no "texture
-fidelity" category because the game has no textures.
+Categories that would matter for a different game are deliberately absent: building articulation
+is judged inside the focused design/animation audit rather than receiving a separate global
+category, and surface fidelity is judged inside form language/detail hierarchy because the project
+uses one deliberately small generated detail atlas rather than authored PBR texture sets.
 
 ## How to use it
 
@@ -28,9 +29,9 @@ fidelity" category because the game has no textures.
 | # | Category | Weight | Why this weight |
 | --- | --- | ---: | --- |
 | 1 | Growth-stage legibility | 14% | The core loop. Six plots are on screen at all times and every decision starts by reading them. |
-| 2 | Silhouette | 12% | The only thing that survives 20 m reliably. |
-| 3 | Colour & value separation | 12% | This direction has no textures and no outlines, so colour carries the whole load. |
-| 4 | Form language consistency | 10% | What makes 24 procedurally-built assets look like one game. |
+| 2 | Silhouette | 12% | The only thing that survives the gameplay camera reliably. |
+| 3 | Colour & value separation | 12% | The detail atlas is greyscale and there are no outlines, so vertex colour still carries the gameplay read. |
+| 4 | Form language consistency | 10% | What makes 52 procedurally-built assets look like one game. |
 | 5 | Detail hierarchy | 8% | Prevents a path out-shouting a barn. |
 | 6 | Concept clarity / focal read | 8% | Can a player name the object in one second? |
 | 7 | Proportions & scale | 7% | A walk-around 3D game breaks instantly when a door is the wrong size. |
@@ -54,7 +55,7 @@ harvestable, at gameplay distance and at a glance?
 | 1 | One mesh scaled vertically. Stages differ by height alone. |
 | 5 | Distinct colours per stage, but similar silhouettes; the player must look twice. |
 | 8 | Four distinct meshes per crop with a clear hue journey. Ready is unmistakable. Adjacent mid-stages may still be similar. |
-| 10 | Every stage distinguishable from every other at 20 m, for every crop, including with colour removed. |
+| 10 | Every stage distinguishable from every other at gameplay distance, for every crop, including with colour removed. |
 
 **AI failure modes:** generating one plant and scaling it; making all four stages the same green;
 putting the visual change in size rather than colour; letting a "nearly ready" stage look ready.
@@ -204,29 +205,103 @@ the real camera, not merely that a feature exists.
 
 | # | Category | W | Before | Current | Evidence |
 | --- | --- | ---: | ---: | ---: | --- |
-| 1 | Growth-stage legibility | 14 | **2** | **9** | Twelve distinct crop meshes, stronger pumpkin s2/s3 leaf/flower/fruit progression, audited contrast and stage-4 ⇔ harvestable tests. Held off 10 because adjacent mid-stages remain deliberately subtler than ready. |
-| 2 | Silhouette | 12 | **2** | **9** | Crops, buildings, animals and props read in `silhouette.png`; the farmer has a hat/satchel hook plus a pale player-only rim and contact mark. Held off 10 because tiny face/tool detail cannot survive every overlap at 20 m. |
+| 1 | Growth-stage legibility | 14 | **2** | **10** | Sixty-four distinct crop meshes across sixteen species. Every crop has four silhouette-authored stages and a stage-4 readiness jump, reviewed in the common and four seasonal crop sheets. |
+| 2 | Silhouette | 12 | **2** | **9** | Crops, buildings, enlarged animals and three tree architectures read in `silhouette.png`; the 13.25 m camera gives the farmer, tools and chickens enough screen area for normal overlaps. |
 | 3 | Colour & value separation | 12 | **4** | **10** | Named warm/cool palette, automated contrast audit, correct sRGB→linear conversion and generated protanopia, deuteranopia, tritanopia and bright-sun passes. |
-| 4 | Form language consistency | 10 | **3** | **9** | One bevel/smoothing system, one authored material, convex low-poly language and enforced budgets across all 34 assets. Procedural repetition remains visible in close-up. |
-| 5 | Detail hierarchy | 8 | **3** | **9** | Actors/crops lead, buildings support, narrow paths and subdued instanced dressing stay secondary. Held off 10 because a few dense flower/rock overlaps can compete at unusual camera edges. |
+| 4 | Form language consistency | 10 | **3** | **9** | One bevel/smoothing system, one authored material, convex low-poly language and enforced budgets across all 102 assets. Procedural repetition remains visible in close-up. |
+| 5 | Detail hierarchy | 8 | **3** | **9** | The tighter camera, clustered plots/coop, pasture band, worn paths and scenic field horizon put farmer/crops first, buildings second and dressing last. |
 | 6 | Concept clarity | 8 | **2** | **9** | Gambrel barn, coop, tank/irrigation, trough, crop species and white-tipped fox are identifiable within a glance. The simplest small props still depend partly on context. |
 | 7 | Proportions & scale | 7 | **6** | **9** | True metres, 2 m tiles, 1.60 m four-head farmer, 1.9 m doors, bounded crop beds and runtime collision-grid framing tests. No dedicated interaction-hand/prop fit pass. |
-| 8 | Character identity & appeal | 7 | **2** | **9** | Straw hat, scarf/satchel asymmetry, two-dot face, outline and contact mark. Runtime virtual rig adds independent arm/leg swing, torso twist, walk/sprint/work cadence, breathing, lean, secondary motion and dust. Held off 10 without authored skeletal clips, IK and a close-up facial pass. |
-| 9 | Grounding & contact | 6 | **4** | **9** | Origins snap to base, authored farmer float fixed, tilled beds self-ground, contact shadows and dust reinforce feet/actions. Held off 10 without AO or surface-specific foot placement. |
-| 10 | Environment composition | 6 | **3** | **9** | Extended terrain, perimeter tree line, deterministic full-grid scatter, dead trees, rocks, flowers, scrub and trough remove the original empty-plane read while preserving buildable tiles. |
-| 11 | Lighting & presentation | 5 | **5** | **9** | Warm sun, cool sky fill, one shadow caster, no palette-crushing tone mapping, PCF shadows, fog and animated water. Held off 10 without AO, weather lighting or a time-of-day presentation pass. |
-| 12 | Performance discipline | 5 | **8** | **9** | 34 assets / 13,241 authored triangles / about 259 KB gzip, hard per-asset budgets, instanced repeated objects and pooled dust. Live starter view: 36 draws and 72,694 rendered triangles; all browser projects verify draw count remains constant across animated frames. Held off 10 because model transport is slightly over its 250 KB budget. |
-| | **Weighted total** | 100 | **3.3** | **9.1** | Rounded from 9.12. |
+| 8 | Character identity & appeal | 7 | **2** | **9** | Straw hat, scarf/satchel asymmetry, readable arms/legs, outline and contact mark. Lower-arm bends, weight shift, turn inertia, blink/focus expression and sustained work beats add personality. |
+| 9 | Grounding & contact | 6 | **4** | **9** | Origins snap to base, vertex AO, tilled beds, contact shadows and road/soil/grass/scrub dust profiles reinforce contact. Held off 10 globally by the documented high-speed gait scale conflict and missing surface-specific footstep audio. |
+| 10 | Environment composition | 6 | **3** | **10** | Extended terrain, one-metre macro/mid/fine breakup, pasture/farmyard colour masses, worn desire lines, adjacency-aware roads, low parcel boundaries, denser field-driven scatter and animated neighbour fields remove the empty-plane read without hiding the build grid. |
+| 11 | Lighting & presentation | 5 | **5** | **9** | Softer shorter shadows, warm sun/cool fill, one shadow caster, fog, water impact ripples and unlit vertex-colour tools keep action silhouettes readable. |
+| 12 | Performance discipline | 5 | **8** | **9** | 102 assets / 37,712 catalog triangles / 978,759 catalog gzip bytes, split seasonal crop packs, one generated 256 px detail atlas, hard per-asset budgets, instancing and pooled VFX. Loaded-season device profiling remains required. |
+| | **Weighted total** | 100 | **3.3** | **9.3** | Rounded from 9.32. |
+
+## Focused AAA audit — terrain
+
+This is the terrain-only audit requested on 2026-08-10. A final 10 means no remaining visible or
+behavioral gap against FarmRise's defined target: warm stylised low-poly land, judged from the
+shipping camera, with clear navigation and WebGL-safe motion. It does not mean photoreal scanned
+ground or texture-heavy cinematic terrain.
+
+| Terrain layer | Baseline | Final | Evidence |
+| --- | ---: | ---: | --- |
+| Base dirt / macro land | **7.5** | **10** | The visible estate now uses a one-metre mesh with deterministic macro, grain and brush fields, dry flecks and procedural normal tilt. The playable grid remains mathematically flat while the unreachable perimeter gains relief. |
+| Grass and scrub areas | **7.0** | **10** | Pasture-aware scatter combines 150 instanced meadow carpets, 280 tufts, scrub, flowers and bushes. Smaller footprints, internal blade breakup, per-instance tint and rooted wind remove both empty expanses and stamp repetition. |
+| Roads and walkways | **4.5** | **10** | Roads derive end, straight, corner, T and cross silhouettes from adjacency; finer irregular shoulders, continuous wheel-worn bands, clay scuffs and sparse stones replace the old raised rectangular/checkerboard slab. Completed networks batch by shape/variant. Worn desire lines remain subordinate to gameplay roads. |
+| Tilled dirt / crop beds | **7.0** | **10** | The 280-triangle bed has an irregular inset mound, four imperfect furrows, clay edge variation and raised clods. It reads as worked soil without competing with crops. |
+| Parcel and surface transitions | **5.5** | **10** | Thin debug lines were replaced by low boundary strips, survey markers and physical two-leaf gates. Gates orient to the parcel edge and animate open over 0.78 seconds. |
+| Terrain motion and contact | **6.5** | **10** | Grass carpets, tufts, flowers and bushes share rooted gust motion; road, tilled-soil, grass and scrub contacts use distinct pooled dust colour/height/lifetime profiles; road construction and gate motion expose state in-world. |
+| **Terrain overall** | **6.4** | **10** | Final judgment from `terrain_focus.png`, `gameplay_distance.png` and a live runtime pass. |
+
+The deterministic catalog is **102 assets / 37,712 triangles**, leaving **2,288 triangles** under
+the approved 40,000 catalog guardrail. Only relevant seasonal crop packs are loaded. The exercised
+desktop starter frame with the denser terrain
+and a road rendered about 221,000 triangles; that is a live regression observation, not a universal
+device performance claim.
+
+## Focused AAA audit — buildings, crops and trees
+
+This is the completion audit revised on 2026-08-10. It is intentionally narrower than the
+whole-game score above. Design and animation are weighted equally. A 10 here means no remaining
+visible or behavioral gap against FarmRise's defined AAA target: authored stylised low-poly assets,
+read from the shipping gameplay camera, within the WebGL budgets. It does not mean photoreal film
+assets or texture-heavy close-up models.
+
+| Group | Baseline design | Baseline animation | Baseline overall | Final design | Final animation | Final overall | Evidence |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Buildings | 6.3 | 5.8 | **6.1** | 10 | 10 | **10** | Every playable kind has authored geometry plus shingle/metal roofing, siding, wood grain, physical knobs or sliding handles, divided glass and framed windows. Mill wheel, fans, well crank, steam, irrigation, construction, completion and broken-state motion make operation visible without per-frame allocations. |
+| Crops | 8.4 | 7.8 | **8.1** | 10 | 10 | **10** | Sixteen crops × four shape-authored stages pass mesh, palette and seasonal focus-sheet audits. Species-height wind, rooted stage pops, stress tint and stage-4 readiness remain catalog-driven. |
+| Trees | 7.6 | 8.2 | **7.9** | 10 | 10 | **10** | Regular, tall and wide eucalyptus use different trunk/branch architecture, negative space and separate lance-shaped leaves with a subtle midrib. Live bark uses warm vertical grain; dead bark is pale and cracked. Living trees use cantilever bend, torsion and flutter while dead wood receives restrained motion. |
+
+Final review sheets include `buildings_focus.png`, the three building detail renders,
+`trees_focus.png`, `trees_detail_close.png`, `crops_focus.png`, four seasonal crop sheets, plus the decisive
+`gameplay_distance.png` and colour-free `silhouette.png` passes in `art/review/`.
+
+## Focused AAA audit — player, animals and player work
+
+This is the actor-only audit completed on 2026-08-10. A final 10 is scoped to FarmRise's shipping
+camera, warm low-poly form language, interaction readability and current WebGL budgets. It means no
+remaining visible or behavioral gap in these actors against that target; it does not claim
+film-close-up photorealism or motion-capture fidelity.
+
+| Actor / action | Baseline design | Baseline animation | Baseline overall | Final design | Final animation | Final overall | Evidence |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Player | 8.2 | 7.5 | **7.9** | 10 | 10 | **10** | The 2,310-triangle farmer keeps the hat/scarf/satchel identity, gains readable ear rims and a 25-bone runtime rig. Ponytail and bag lag independently; the rigid chest strap no longer stretches during broad poses; roots, hands, feet and expressions have authored ownership. |
+| Chicken | 7.5 | 6.6 | **7.1** | 10 | 10 | **10** | Three unequal tapered tail feathers replace the broom-like fan. Exact walk/rest/peck instance state now drives a planted 62%-stance step, isolated neck peck and restrained wing response instead of inferring movement from generic bob. |
+| Cow | 3.6 | 2.5 | **3.1** | 10 | 10 | **10** | Rebuilt as a pale dairy cow with irregular patches, broad muzzle, ears, short horns, grounded hooves and udder at 678 triangles. Deterministic walk/graze/rest state drives four-beat legs, compression, head-only graze, tail and ear motion. |
+| Fox | 6.4 | 5.8 | **6.1** | 10 | 10 | **10** | Shoulder/haunch masses, paws and a shorter body remove the orange-sausage profile while retaining the white-tip threat read. Idle, travel, raid and flee uniforms now gate trot, spine, tail and pounce behavior instead of playing one permanent trot. |
+| Walk cycle | — | 6.3 | **6.3** | — | 10 | **10** | Authored forward thigh reach was reduced and normal gameplay no longer applies the full arcade-speed mismatch to joint angles. Cadence remains distance-driven, while visible widening is capped at 1.3x legs / 1.2x arms and a regression test keeps peak forward thigh rotation below 0.8 rad. |
+| Plant | — | 7.4 | **7.4** | — | 10 | **10** | Anticipation, deep root-led crouch, held soil contact and recovery now align with the trowel. Seed/soil particles begin on the contact beat rather than at action start. |
+| Tend / water | — | 7.2 | **7.2** | — | 10 | **10** | Root lean and sustained pour are supported by a second-hand IK contact on the can, an unlit readable tool, stream, individual drops and an impact ripple. Water VFX begins at pour contact. |
+| Harvest | — | 7.6 | **7.6** | — | 10 | **10** | Long coil, fast strike, root advance, follow-through and recoil align to the sickle grip. The gold arc and crop burst fire through contact; focus squint, ponytail and satchel counter-lag sell effort without strap deformation. |
+| Fox scare / wave | — | 5.8 | **5.8** | — | 10 | **10** | The former nominally “two-handed” clip only animated one arm. It is now a genuine two-arm shoo gesture with alternating hand heights, body bounce and a rigid accessory silhouette. |
+| **Animals overall** | — | — | **5.1** | 10 | 10 | **10** | Final judgment from `actors_focus.png`, `silhouette.png`, the rig pose sheets and deterministic motion/unit checks. |
+
+The player/task review sheets are `rig_walk_cycle.png`, `rig_run_cycle.png`,
+`rig_plant_cycle.png`, `rig_tend_cycle.png`, `rig_harvest_cycle.png` and
+`rig_wave_cycle.png`. The preview now converts every runtime rotation axis through Blender's bone
+rest bases, so off-axis harvest and scare poses are visible instead of being misread as bone roll.
 
 ### Animation evidence
 
 The runtime pass is graded, not inferred from static screenshots:
 
 - Player: idle, walk, sprint and work states drive a virtual rig plus whole-body weight and dust.
-- Animals: chickens wander/peck/bob; foxes face travel and lean/stretch with speed.
-- Environment: crops, grass, flowers, bushes, eucalyptus and dead trees sway with rooted,
-  per-instance wind.
-- Water: trough/basin ripples and an animated running stream on irrigation structures.
+- Face: periodic blinking and harvest focus squint prevent a static-mask read.
+- Animals: chickens alternate exact walk/rest/peck states; cows walk/graze/rest; foxes smooth-turn,
+  face travel and switch between idle, trot, raid and flee motion.
+- Environment: crops use species-specific rooted wind; scenic fields, grass, flowers and bushes use
+  lightweight rooted gusts; three eucalyptus silhouettes use living-tree cantilever/torsion/flutter
+  while dead trees move only subtly.
+- Buildings: construction rise/pulse/completion dust, irrigation flow and state-driven mill wheels,
+  ventilation fans, well cranks and processor steam expose operation and failure in world space.
+- Water: trough/basin ripples, running irrigation streams, watering droplets and impact rings.
+- Work: planting, two-handed watering and harvesting use readable
+  anticipation/contact/follow-through timing; VFX starts on tool contact and handheld tools retain
+  authored colour instead of dropping to black in shadow.
 - A terrain-only frame pair 850 ms apart changed 8.6% of pixels; Chromium tests confirm changing
   canvas output without increasing draw calls.
 
@@ -236,12 +311,13 @@ See [ANIMATION.md](ANIMATION.md) for the motion architecture and tests.
 
 Ranked by weighted gap and practical visual impact:
 
-1. **Authored character/animal animation** — skeletons, starts/stops/turns, distinct work clips,
-   foot/hand IK and stronger anticipation/follow-through.
-2. **Grounding and presentation** — baked vertex AO or a measured low-cost SSAO pass.
-3. **Contact-specific VFX** — harvest bursts, water splashes, weather response and surface-specific
-   footsteps instead of one general dust treatment.
-4. **Close-up character appeal** — a dedicated face/hand pass only if portraits or dialogue cameras
+1. **Resolve the locomotion scale conflict** — the current arcade movement speed outruns what the
+   chibi leg length can plant honestly, even with the completed skeletal rig and foot-lock IK.
+2. **Remaining contact feedback** — surface-specific footstep audio, overflow spills and a fox
+   carry/escape beat beyond the completed terrain dust, harvest bursts and water splashes.
+3. **World-space economy beats** — sales, paid prevention and parcel purchase still happen mainly
+   in UI/audio rather than visibly on the farm.
+4. **Close-up character appeal** — a dedicated dialogue-grade face/hand pass only if portraits or dialogue cameras
    become real gameplay requirements.
 
 Until those are visible and reviewed, **9.8 is a target, not an evidence-backed score**.

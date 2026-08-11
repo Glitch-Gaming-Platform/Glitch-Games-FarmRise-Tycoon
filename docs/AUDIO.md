@@ -24,12 +24,18 @@ tools/audio/generateAudio.mjs       AudioSystem unlocks AudioContext
 - `assets/audio/` owns stable ids, generation briefs and procedural fallbacks.
 - `assets/manifests/audio.manifest.ts` owns URLs, measured bytes, load phases and clip metadata.
 - `bootstrap/bindAudio.ts` is the deliberate meeting point between game events and sounds.
+- `bootstrap/MusicPlayer.ts` owns the selected song, per-song enablement, counted repeats, lazy
+  loading and decoded-buffer release.
 - Real clips are optional. The procedural buffers register first and remain available if a fetch or
   decode fails, so audio can degrade in quality without breaking play.
-- Only `music.sunrise_rows` is prefetched and decoded. The other four tracks are lazy assets; loading
-  them at boot would add about 15.6 MB of network traffic and roughly 374.7 MB of decoded stereo
-  PCM. The four-minute default alone decodes to about 92.2 MB, so alternatives must remain lazy and
-  a future music selector must release the previous decoded buffer before loading another.
+- On desktop, only `music.sunrise_rows` is prefetched and decoded. The other four tracks are lazy
+  assets; loading them at boot would add about 15.6 MB of network traffic and roughly 374.7 MB of
+  decoded stereo PCM. The four-minute default alone decodes to about 92.2 MB, so alternatives must
+  remain lazy. The music selector releases the previous decoded buffer before loading another.
+- The capability-gated mobile profile does not fetch or decode the default MP3. It renders the same
+  stable ids as distinct 26-second mono procedural variants at at most 22,050 Hz, roughly 2.35 MB
+  for the one active song. Sound effects still decode from their generated files and retain
+  procedural fallback.
 
 ## Action audit
 
@@ -53,7 +59,7 @@ changes stay quiet.
 | Harvest | `farm.harvest` | Wired. Snap, leaf rustle and basket knock communicate completion. |
 | Walk / sprint | `farm.footstep` | Wired by distance travelled, not frame count. Sprinting is louder; pitch jitter prevents fatigue. |
 | Crop growth tick / crop becomes ready | None | Intentionally silent. Several plots can update together and would create notification spam. |
-| Place a building | `farm.build_place` | Wired end to end. The reinvest panel selects, the pointer positions, and a click commits. |
+| Place a building | `farm.build_place` | Wired end to end. The reinvest panel selects, the pointer positions, and a click or touch tap commits. |
 | Open build menu (`B`) | `ui.open` / `ui.click` | Wired. The reinvest panel opens on `B` and closes on `B`, `Esc` or its own button. |
 | Construction completes | `farm.build_complete` | Wired. Three hammer strikes plus a modest achievement chime. |
 | Buy an animal | `animal.chicken` | Wired end to end via the reinvest panel. |
@@ -112,6 +118,14 @@ a distinct long-form ElevenLabs composition between **4:00.017 and 4:08.432**, e
 | `music.rain_on_tin` | Rain on Tin | Lazy alternative | Nylon guitar, accordion and fiddle; reflective shelter without rain Foley. |
 | `music.golden_harvest` | Golden Harvest | Lazy alternative | Dulcimer/banjo, guitar and cello pizzicato; satisfied harvest warmth. |
 | `music.quiet_outback` | Quiet Outback | Lazy alternative | Sparse guitar, viola and light flute; peaceful evening. |
+
+The settings panel lets the player select the current song and disable individual songs they do not
+want in the rotation. At least one song remains enabled. A selected song plays through five complete,
+seamless repeats, then `MusicPlayer` advances to the next enabled song. Manual selection or disabling
+the active song switches immediately. Alternate encoded files remain lazy; only the active decoded
+buffer is retained, and the next enabled file may be fetched ahead of the switch without decoding it.
+Every session starts with `music.sunrise_rows` by default. If Sunrise Rows is disabled, startup uses
+the first enabled alternative instead.
 
 Each requested source is an exact whole-bar length at the prompted tempo. The pipeline overlaps the
 last four bars with the first four bars using an equal-power circular crossfade, then rotates the
@@ -182,6 +196,7 @@ After regeneration:
 | --- | ---: | --- |
 | 23 sound effects | 343,020 bytes encoded | Prefetched; decoded after gesture; procedural fallback available. |
 | Default music loop | 3,841,581 bytes encoded | Prefetched and decoded once; about 92.2 MB decoded PCM. |
+| Mobile default music | 0 encoded bytes fetched | Procedural mono loop, at most 22,050 Hz; roughly 2.35 MB decoded PCM. |
 | Four alternate loops | 15,615,156 bytes encoded | Lazy; load one at a time and release the previous decoded buffer. |
 | All delivered audio | 19,799,757 bytes encoded | Only 4,184,601 bytes are on the default audio preload path. |
 

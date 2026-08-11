@@ -16,10 +16,13 @@ import { PauseMenu, type PauseMenuCallbacks } from './menus/PauseMenu.js';
 import { SettingsPanel, type SettingsCallbacks } from './settings/SettingsPanel.js';
 import { MarketPanel, type MarketPanelCallbacks } from './panels/MarketPanel.js';
 import { BuildPanel, type BuildPanelCallbacks } from './panels/BuildPanel.js';
+import { CareerPanel, type CareerPanelCallbacks } from './panels/CareerPanel.js';
+import { TownPanel, type TownPanelCallbacks } from './panels/TownPanel.js';
 import { CoachMark } from './onboarding/CoachMark.js';
 import { OutcomeScreen, type OutcomeCallbacks } from './outcome/OutcomeScreen.js';
 import { AccountPanel, type AccountCallbacks } from './account/AccountPanel.js';
 import { el } from './core/dom.js';
+import { TouchControls, type TouchControlCallbacks } from './hud/TouchControls.js';
 
 export type ScreenName = 'none' | 'menu' | 'loading' | 'pause' | 'settings' | 'outcome';
 
@@ -30,14 +33,18 @@ export interface UiRootOptions {
   readonly settings: SettingsCallbacks;
   readonly market: MarketPanelCallbacks;
   readonly build: BuildPanelCallbacks;
+  readonly career: CareerPanelCallbacks;
+  readonly town: TownPanelCallbacks;
   readonly outcome: OutcomeCallbacks;
   readonly account: AccountCallbacks;
   readonly shortcuts: MenuShortcutCallbacks;
+  readonly touchControls?: TouchControlCallbacks;
 }
 
 export class UiRoot {
-  readonly hud = new Hud();
+  readonly hud: Hud;
   readonly loading: LoadingScreen;
+  readonly settings: SettingsPanel;
   /**
    * Panels are NOT screens. A screen is exclusive and replaces gameplay; a
    * panel floats over a farm that is still growing. Conflating the two would
@@ -46,21 +53,27 @@ export class UiRoot {
    */
   readonly market: MarketPanel;
   readonly build: BuildPanel;
+  readonly career: CareerPanel;
+  readonly town: TownPanel;
   readonly coach = new CoachMark();
   readonly account: AccountPanel;
   readonly shortcuts: MenuShortcutDock;
+  readonly touchControls: TouchControls | null;
   readonly outcome: OutcomeScreen;
   readonly #placing: HTMLElement;
   readonly #screens = new Map<ScreenName, Screen>();
   readonly #layer: HTMLElement;
   #current: ScreenName = 'none';
-  #shortcutPanel: 'none' | 'market' | 'build' = 'none';
+  #shortcutPanel: 'none' | 'market' | 'build' | 'career' | 'town' = 'none';
   #shortcutsAvailable = false;
+  #placingActive = false;
   /** Where "Back" from settings returns to. */
   #settingsReturnTo: ScreenName = 'menu';
 
   constructor(options: UiRootOptions) {
     injectStyles();
+    this.touchControls = options.touchControls ? new TouchControls(options.touchControls) : null;
+    this.hud = new Hud({ touch: this.touchControls !== null });
     this.#layer = document.createElement('div');
     this.#layer.dataset['engineInputIgnore'] = 'true';
     this.#layer.style.position = 'absolute';
@@ -71,8 +84,11 @@ export class UiRoot {
     options.container.appendChild(this.#layer);
 
     this.loading = new LoadingScreen();
+    this.settings = new SettingsPanel(options.settings);
     this.market = new MarketPanel(options.market);
     this.build = new BuildPanel(options.build);
+    this.career = new CareerPanel(options.career);
+    this.town = new TownPanel(options.town);
     this.outcome = new OutcomeScreen(options.outcome);
     this.account = new AccountPanel(options.account);
     this.shortcuts = new MenuShortcutDock(options.shortcuts);
@@ -81,18 +97,20 @@ export class UiRoot {
     this.#register('menu', new MainMenu(options.menu));
     this.#register('loading', this.loading);
     this.#register('pause', new PauseMenu(options.pause));
-    this.#register('settings', new SettingsPanel(options.settings));
+    this.#register('settings', this.settings);
 
     this.#register('outcome', this.outcome);
     this.#layer.append(
       this.hud.root,
       this.market.root,
       this.build.root,
+      this.career.root,
+      this.town.root,
       this.account.root,
       this.shortcuts.root,
-      this.coach.root,
-      this.#placing,
     );
+    if (this.touchControls) this.#layer.append(this.touchControls.root);
+    this.#layer.append(this.coach.root, this.#placing);
     this.show('none');
   }
 
@@ -115,6 +133,8 @@ export class UiRoot {
     if (!inGame) {
       this.market.setVisible(false);
       this.build.setVisible(false);
+      this.career.setVisible(false);
+      this.town.setVisible(false);
       this.coach.hide();
       this.setPlacing(null);
     }
@@ -127,7 +147,7 @@ export class UiRoot {
     this.#syncShortcuts();
   }
 
-  setMenuShortcutPanel(panel: 'none' | 'market' | 'build'): void {
+  setMenuShortcutPanel(panel: 'none' | 'market' | 'build' | 'career' | 'town'): void {
     this.#shortcutPanel = panel;
     this.#syncShortcuts();
   }
@@ -143,15 +163,18 @@ export class UiRoot {
 
   /** The build-placement banner. Null hides it. */
   setPlacing(text: string | null, blocked = false): void {
+    this.#placingActive = text !== null;
     this.#placing.hidden = text === null;
     if (text !== null) this.#placing.textContent = text;
     this.#placing.classList.toggle('fr-placing--blocked', blocked);
+    this.#syncShortcuts();
   }
 
   dispose(): void {
     for (const screen of this.#screens.values()) screen.dispose?.();
     this.#screens.clear();
     this.hud.dispose();
+    this.touchControls?.dispose();
     this.#layer.remove();
   }
 
@@ -161,8 +184,11 @@ export class UiRoot {
   }
 
   #syncShortcuts(): void {
-    this.shortcuts.setVisible(
-      this.#shortcutsAvailable && this.#current === 'none' && this.#shortcutPanel === 'none',
+    const gameplay =
+      this.#shortcutsAvailable && this.#current === 'none' && this.#shortcutPanel === 'none';
+    this.shortcuts.setVisible(gameplay && !this.#placingActive);
+    this.touchControls?.setMode(
+      !gameplay ? 'hidden' : this.#placingActive ? 'placement' : 'gameplay',
     );
   }
 }

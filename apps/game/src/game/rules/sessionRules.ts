@@ -18,21 +18,24 @@ import { secondsToTicks, type Ticks } from '@farmrise/shared';
  * Gameplay camera framing.
  *
  * These numbers are ART DIRECTION, not preference - see
- * docs/decisions/0011-camera-and-tone-mapping.md. They are duplicated in
+ * docs/decisions/0017-gameplay-camera-composition.md. They are duplicated in
  * tools/blender/palette.py so the Blender review renders judge the same
  * framing the engine ships, and apps/game/tests/unit/cameraFraming.test.ts
  * fails if the two copies ever drift apart.
  */
 export const GAMEPLAY_CAMERA = {
   /** Metres from the player. */
-  distance: 20,
-  /** Degrees above the horizon. 61 read as near-top-down and was wrong. */
-  pitchDegrees: 38,
+  distance: 13.25,
+  /** Degrees above the horizon. Close enough to read actors, high enough to plan. */
+  pitchDegrees: 34,
   /** Vertical field of view, degrees. */
-  fovDegrees: 48,
+  fovDegrees: 42,
+  /** Azimuth from the farm's forward axis, degrees. Frames plots and shelter together. */
+  yawDegrees: -42,
 } as const;
 
 export const GAMEPLAY_CAMERA_PITCH_RADIANS = (GAMEPLAY_CAMERA.pitchDegrees * Math.PI) / 180;
+export const GAMEPLAY_CAMERA_YAW_RADIANS = (GAMEPLAY_CAMERA.yawDegrees * Math.PI) / 180;
 
 /** How often the client pushes a save to the server while playing. */
 export const AUTOSAVE_INTERVAL_TICKS: Ticks = secondsToTicks(30);

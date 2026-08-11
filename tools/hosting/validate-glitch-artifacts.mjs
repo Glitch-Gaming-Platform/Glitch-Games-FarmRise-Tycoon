@@ -42,6 +42,14 @@ const dockerfile = await readFile(path.join(root, 'Dockerfile.glitch'), 'utf8');
 if (!dockerfile.includes('CMD ["npm", "run", "start:hosting"]')) {
   throw new Error('Dockerfile.glitch must start the verified Webhosting server entry.');
 }
+if (!dockerfile.includes('test -f apps/game/dist/index.html')) {
+  throw new Error('Dockerfile.glitch must require the verified browser artifact before packaging.');
+}
+if (dockerfile.includes('npm run build --workspace @farmrise/game')) {
+  throw new Error(
+    'Dockerfile.glitch must not rebuild the browser artifact without its protected build-time configuration.',
+  );
+}
 
 const assetFiles = await readdir(path.join(gameDist, 'assets'), { recursive: true });
 const shippedCode = (
@@ -64,4 +72,5 @@ console.warn('Glitch artifacts verified:');
 console.warn('- Distribution entry: apps/game/dist/index.html');
 console.warn('- Distribution asset URLs: relative and present');
 console.warn('- Webhosting entry: tools/hosting/server.mjs');
+console.warn('- Webhosting image: preserves the verified browser artifact');
 console.warn('- Deployment-only credential prefixes: absent');

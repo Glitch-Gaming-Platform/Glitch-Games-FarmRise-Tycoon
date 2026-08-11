@@ -13,7 +13,9 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN npm ci
 
 COPY . .
-RUN npm run build:hosting
+RUN test -f apps/game/dist/index.html \
+  && npm run build --workspace @farmrise/shared \
+  && npm run build --workspace @farmrise/server
 
 FROM node:24-bookworm-slim AS runtime
 

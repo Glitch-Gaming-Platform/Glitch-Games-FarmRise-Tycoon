@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import {
-  applyCharacterMotion,
   createChickenMotionMaterial,
+  createCowMotionMaterial,
   createFoxMotionMaterial,
   createWaterMaterial,
   createWindMaterial,
@@ -31,44 +31,61 @@ describe('procedural animation materials', () => {
       speed: 1.4,
       baseHeight: 0.04,
       fullHeight: 0.42,
+      tipFlutter: 0.6,
+      torsion: 0.02,
+      lateralRatio: 0.25,
     });
     const shader = compile(wind.material);
 
     expect(shader.vertexShader).toContain('smoothstep(uWindBase, uWindTop, position.y)');
     expect(shader.vertexShader).toContain('instanceMatrix[3].x');
+    expect(shader.vertexShader).toContain('farmStemFlutter');
+    expect(shader.vertexShader).toContain('farmWindTorsion');
+    expect(shader.vertexShader).toContain('* uWindStrength * 0.25 * farmWindWeight');
     wind.setTime(3.25);
     expect(shader.uniforms['uWindTime']?.value).toBe(3.25);
     wind.dispose();
   });
 
-  it('injects independent limb and secondary character motion', () => {
-    const material = new THREE.MeshStandardMaterial();
-    const motion = applyCharacterMotion(material, 'test-farmer');
-    const shader = compile(material);
+  it('emits valid float literals when optional wind coefficients are zero', () => {
+    const wind = createWindMaterial(new THREE.MeshStandardMaterial(), {
+      key: 'zero-coefficients',
+      strength: 0.05,
+      speed: 1.4,
+      baseHeight: 0.04,
+      fullHeight: 0.42,
+      torsion: 0,
+    });
+    const shader = compile(wind.material);
 
-    expect(shader.vertexShader).toContain('// Legs rotate independently');
-    expect(shader.vertexShader).toContain('// The shin counters the thigh');
-    expect(shader.vertexShader).toContain('// Feet clear the ground');
-    expect(shader.vertexShader).toContain('// Arms counter-swing');
-    expect(shader.vertexShader).toContain('// Torso twist, hat/hair lag');
-    expect(shader.vertexShader).toContain('float farmPlantArc');
-    expect(shader.vertexShader).toContain('float farmTendArc');
-    expect(shader.vertexShader).toContain('float farmHarvestArc');
-    motion.setMotion(2, 1.6, 3, 0.6);
-    expect(shader.uniforms['uMotionTime']?.value).toBe(2);
-    expect(shader.uniforms['uLocomotion']?.value).toBe(1.6);
-    expect(shader.uniforms['uWorkAction']?.value).toBe(3);
-    expect(shader.uniforms['uWorkProgress']?.value).toBe(0.6);
-    motion.dispose();
+    expect(shader.vertexShader).toContain('farmWindWeight * 0.0');
+    expect(shader.vertexShader).not.toContain('farmWindWeight * 0;');
+    wind.dispose();
   });
 
-  it('articulates chicken and fox limbs instead of only bobbing whole meshes', () => {
+  it('articulates species-specific animal motion instead of only bobbing whole meshes', () => {
     const base = new THREE.MeshStandardMaterial();
     const chicken = createChickenMotionMaterial(base);
+    const cow = createCowMotionMaterial(base);
     const fox = createFoxMotionMaterial(base);
     const chickenShader = compile(chicken.material);
+    const cowShader = compile(cow.material);
     const foxShader = compile(fox.material);
 
+    // The gait helper is the thing that distinguishes an authored cycle from an
+    // oscillation, so its presence - and the absence of a bare sine driving the
+    // legs - is what the test actually guards.
+    expect(chickenShader.vertexShader).toContain('void farmGait(');
+    expect(cowShader.vertexShader).toContain('void farmGait(');
+    expect(foxShader.vertexShader).toContain('void farmGait(');
+    expect(chickenShader.vertexShader).toContain('attribute float farmMotion');
+    expect(chickenShader.vertexShader).toContain('farmGait(farmAnimalPhase');
+    expect(chickenShader.vertexShader).toContain('farmHeadThrust');
+    expect(chickenShader.vertexShader).toContain('farmPeckAngle');
+    expect(cowShader.vertexShader).toContain('farmCowQuarter');
+    expect(cowShader.vertexShader).toContain('farmCowGrazeAngle');
+    expect(cowShader.vertexShader).toContain('float farmCowTail');
+    expect(foxShader.vertexShader).toContain('farmFoxDiagonal');
     expect(chickenShader.vertexShader).toContain('float farmChickenLeg');
     expect(chickenShader.vertexShader).toContain('float farmChickenWing');
     expect(chickenShader.vertexShader).toContain('float farmChickenTail');
@@ -76,10 +93,18 @@ describe('procedural animation materials', () => {
     expect(foxShader.vertexShader).toContain('float farmFoxTail');
     expect(foxShader.vertexShader).toContain('float farmFoxHead');
     chicken.setTime(2.5);
+    cow.setTime(3.0);
     fox.setTime(3.5);
+    fox.setMotion(1, 0.4, 1, 3.1, 0.7);
     expect(chickenShader.uniforms['uAnimalTime']?.value).toBe(2.5);
+    expect(cowShader.uniforms['uAnimalTime']?.value).toBe(3.0);
     expect(foxShader.uniforms['uAnimalTime']?.value).toBe(3.5);
+    expect(foxShader.uniforms['uFoxMotion']?.value).toBe(1);
+    expect(foxShader.uniforms['uFoxRaid']?.value).toBe(0.4);
+    expect(foxShader.uniforms['uFoxFlee']?.value).toBe(1);
+    expect(foxShader.uniforms['uFoxPace']?.value).toBe(3.1);
     chicken.dispose();
+    cow.dispose();
     fox.dispose();
     base.dispose();
   });
