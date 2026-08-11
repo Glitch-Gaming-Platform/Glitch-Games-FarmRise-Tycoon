@@ -371,6 +371,9 @@ export class FarmView {
         64,
       );
       this.#chickens.castShadow = true;
+      // Their instance transforms move every frame. Static bounds can lag one
+      // update behind and make a healthy flock seem to disappear temporarily.
+      this.#chickens.frustumCulled = false;
       this.#chickens.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.object.add(this.#chickens);
     }
@@ -425,6 +428,7 @@ export class FarmView {
         16,
       );
       this.#cows.castShadow = true;
+      this.#cows.frustumCulled = false;
       this.#cows.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       this.object.add(this.#cows);
     }

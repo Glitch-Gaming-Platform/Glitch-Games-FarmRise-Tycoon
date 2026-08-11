@@ -6,6 +6,7 @@ import {
   MILESTONES,
   PARCELS_BY_ID,
   SPECIALIZATIONS,
+  STARTER_ANIMAL_PRODUCT_DROP,
   cents,
   newCareer,
   requireCrop,
@@ -310,6 +311,27 @@ describe('validateSaveTransition', () => {
       carried: { ...site.carried, items: { wheat: 9 } },
     }));
     expect(validateSaveTransition(base, overloaded, overloaded.tick).reason).toMatch(/overloaded/i);
+  });
+
+  it('keeps the animal-product collection tile clear on saved farms', () => {
+    const base = fresh();
+    const covered = updateSite(later(base), (site) => ({
+      ...site,
+      buildings: [
+        ...site.buildings,
+        {
+          id: 'building-over-products',
+          kind: 'road',
+          tileX: STARTER_ANIMAL_PRODUCT_DROP.tileX,
+          tileZ: STARTER_ANIMAL_PRODUCT_DROP.tileZ,
+          rotation: 0,
+          remainingBuildTicks: 1,
+          broken: false,
+        },
+      ],
+    }));
+
+    expect(validateSaveTransition(base, covered, covered.tick).reason).toMatch(/protected tile/i);
   });
 });
 

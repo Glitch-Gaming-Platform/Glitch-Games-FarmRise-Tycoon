@@ -13,6 +13,8 @@ import {
   BUILDINGS,
   CARRIERS,
   formatCents,
+  formatTicks,
+  getItem,
   type AnimalSpecies,
   type BuildingKind,
   type CarrierKind,
@@ -136,15 +138,21 @@ export class BuildPanel {
     for (const option of snapshot.animals) {
       const definition = ANIMALS[option.species];
       const hasShelter = snapshot.shelterFree >= option.shelterRequired;
+      const animalName = option.species === 'chicken' ? 'hen' : 'cow';
+      const feedName = getItem(definition.feedItemId)?.displayName ?? definition.feedItemId;
+      const productName =
+        getItem(definition.producesItemId)?.displayName ?? definition.producesItemId;
       this.#list.append(
         this.#row({
           testId: `build-animal-${option.species}`,
           icon: option.species === 'chicken' ? 'chicken' : 'cow',
           title: definition.displayName,
           meta:
-            `${formatCents(definition.purchaseCost)}  ·  ${definition.feedPerCycle} ` +
-            `${definition.feedItemId} per cycle → ${definition.producePerCycle} ` +
-            `${definition.producesItemId}  ·  ${snapshot.shelterFree} shelter space free`,
+            `${formatCents(definition.purchaseCost)}  ·  Each ${animalName} needs ` +
+            `${definition.feedPerCycle} stored ${feedName} every ${formatTicks(definition.cycleTicks)} ` +
+            `to make ${definition.producePerCycle} ${productName}. Collect the ${productName} ` +
+            `by the shelter, then sell them at Market. ` +
+            `${snapshot.shelterFree} shelter space free`,
           action: option.affordable && hasShelter ? 'Buy' : 'Unavailable',
           enabled: option.affordable && hasShelter,
           onClick: () => this.callbacks.onBuyAnimal(option.species),

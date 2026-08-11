@@ -7,8 +7,10 @@
  * tested on its own, and this file pays the small cost of joining them.
  */
 import {
+  ANIMALS,
   SEASON_DEFINITIONS,
   formatCents,
+  formatItemQuantity,
   getCrop,
   getIncident,
   getItem,
@@ -67,7 +69,7 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
     const milestone = career.milestone();
     hud.render({
       balance: career.balance,
-      storageUsed: storageUsed(world.inventory),
+      storageUsed: storageUsed(world.storedInventory),
       storageCapacity: world.storageCapacity,
       selectedCrop: getCrop(interaction.selectedCropId)?.displayName ?? interaction.selectedCropId,
       readyPlots: world.readyPlotIds().length,
@@ -101,10 +103,51 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
     world.events.on('world:storage-full', ({ itemId }) =>
       hud.toast(`Storage is full - ${itemId} is going to waste. Build a barn.`, 'warn'),
     ),
+    world.events.on('world:goods-spoiled', ({ items, emptied, inTheOpen }) => {
+      if (!emptied || !inTheOpen) return;
+      const lost = Object.entries(items)
+        .filter(([, quantity]) => quantity > 0)
+        .map(([itemId, quantity]) => formatItemQuantity(itemId, quantity))
+        .join(', ');
+      hud.toast(`Field pile gone: ${lost || 'produce'} spoiled in the field.`, 'warn');
+      render();
+    }),
     world.events.on('world:building-completed', ({ kind }) => hud.toast(`${kind} finished`)),
     world.events.on('world:produce', ({ itemId, quantity }) =>
       hud.toast(`${quantity} ${getItem(itemId)?.displayName ?? itemId} ready by the shelter`),
     ),
+    world.events.on('world:stack-collected', ({ items }) => {
+      for (const [itemId, quantity] of Object.entries(items)) {
+        const item = getItem(itemId);
+        if (quantity <= 0 || item?.category !== 'animal_product') continue;
+        hud.toast(`Picked up ${formatItemQuantity(itemId, quantity)}. Open Market to sell them.`);
+      }
+      render();
+    }),
+    world.events.on('world:animal-purchased', ({ species, count }) => {
+      const definition = ANIMALS[species];
+      const name = animalName(species, count);
+      const feed = getItem(definition.feedItemId)?.displayName ?? definition.feedItemId;
+      const product = getItem(definition.producesItemId)?.displayName ?? definition.producesItemId;
+      hud.toast(
+        `${count} ${name} added. Store ${definition.feedPerCycle * count} ${feed} each cycle to produce ${product}.`,
+      );
+      render();
+    }),
+    world.events.on('world:animal-hungry', ({ species, feedItemId, needed, available }) => {
+      const animals = species === 'chicken' ? 'Hens' : 'Cows';
+      const product = getItem(ANIMALS[species].producesItemId)?.displayName ?? 'produce';
+      const feed = getItem(feedItemId)?.displayName ?? feedItemId;
+      hud.toast(
+        `${animals} need ${needed} ${feed} to make ${product}; only ${available} is stored.`,
+        'warn',
+      );
+    }),
+    world.events.on('world:animal-lost', ({ species, count, remaining }) => {
+      const name = animalName(species, count);
+      hud.toast(`A fox took ${count} ${name}. ${remaining} remain.`, 'error');
+      render();
+    }),
     world.events.on('world:parcel-acquired', ({ displayName }) => {
       hud.toast(`${displayName} is yours. The gate is open.`);
       render();
@@ -181,6 +224,20 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
       hud.toast(
         `Sold ${quantity} ${itemId} for ${formatCents(payout)}${viaContract ? ' on contract' : ''}`,
       );
+      for (const definition of Object.values(ANIMALS)) {
+        if (definition.feedItemId !== itemId) continue;
+        const count = world.livestock.countOf(definition.id);
+        const available = world.stores.storedTotalOf(itemId);
+        const needed = count * definition.feedPerCycle;
+        if (count > 0 && available < needed) {
+          const product =
+            getItem(definition.producesItemId)?.displayName ?? definition.producesItemId;
+          hud.toast(
+            `${count} ${animalName(definition.id, count)} need ${needed} ${getItem(itemId)?.displayName ?? itemId} stored before they can produce ${product}.`,
+            'warn',
+          );
+        }
+      }
       render();
     }),
     session.events.on('session:hauled', ({ stored, refused }) => {
@@ -209,4 +266,9 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
     clearInterval(interval);
     for (const unsubscribe of unsubscribes) unsubscribe();
   };
+}
+
+function animalName(species: keyof typeof ANIMALS, count: number): string {
+  if (species === 'chicken') return count === 1 ? 'hen' : 'hens';
+  return count === 1 ? 'cow' : 'cows';
 }

@@ -29,6 +29,8 @@ export const YARD_STORE_ID = 'store-yard';
 
 /** Where the shelter stands, in estate tile coordinates. */
 export const STARTER_SHELTER = Object.freeze({ tileX: 19, tileZ: 16 });
+/** Reserved, walkable collection point for eggs and milk beside the shelter. */
+export const STARTER_ANIMAL_PRODUCT_DROP = Object.freeze({ tileX: 20, tileZ: 17 });
 /** Where the player spawns. */
 export const STARTER_SPAWN = Object.freeze({ tileX: 15, tileZ: 17 });
 

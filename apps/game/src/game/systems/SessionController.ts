@@ -101,7 +101,7 @@ export class SessionController {
     });
     this.#onboardingCropBoost = new OnboardingCropBoost(career);
     this.#startingBuildingCount = career.world.buildings.length;
-    this.placement = new PlacementController(career, input, camera);
+    this.placement = new PlacementController(career, input, camera, player);
     this.board = new ContractBoard(career);
     this.board.refresh();
 
@@ -343,7 +343,7 @@ export class SessionController {
     if (
       this.onboarding.active &&
       onboardingContext.reinvestments > 0 &&
-      onboardingContext.eggsCollected > 0 &&
+      onboardingContext.eggsHandled &&
       (this.onboarding.currentBeat?.id === 'reinvest' || this.onboarding.currentBeat?.id === 'eggs')
     ) {
       this.incidents.ensureOnboardingWarning();
@@ -395,6 +395,7 @@ export class SessionController {
     let planted = 0;
     let eggsReady = 0;
     let eggsCollected = world.carry.items['eggs'] ?? 0;
+    let eggsHandled = eggsCollected > 0;
     for (const plot of world.plots.values()) {
       if (plot.cropId) planted += 1;
       tendCount += plot.tendCount;
@@ -402,7 +403,14 @@ export class SessionController {
     for (const store of world.stores.stores) {
       const eggs = store.items['eggs'] ?? 0;
       if (store.id.startsWith('stack-')) eggsReady += eggs;
-      else eggsCollected += eggs;
+      else {
+        eggsCollected += eggs;
+        if (eggs > 0) eggsHandled = true;
+      }
+      // Old saves can contain an emptied egg stack after the player collected
+      // or sold the clutch before this lesson existed. Credit that real action
+      // instead of asking for an impossible second clutch with no feed left.
+      if (Object.hasOwn(store.items, 'eggs') && eggs <= 0) eggsHandled = true;
     }
     return {
       nowMs: this.#now() - this.#startedAt,
@@ -412,11 +420,12 @@ export class SessionController {
       tendCount,
       cropsHarvested: stats.cropsHarvested,
       goodsHauled: stats.goodsHauled,
-      salesMade: this.#salesMade,
+      salesMade: this.#salesMade + (stats.itemsSold > 0 ? 1 : 0),
       reinvestments:
         this.#reinvestments + Math.max(0, world.buildings.length - this.#startingBuildingCount),
       eggsReady,
       eggsCollected,
+      eggsHandled: eggsHandled || eggsCollected > 0,
       warningActive: this.incidents.active.some(
         (instance) => this.career.tick < instance.impactTick && !isMitigated(instance as never),
       ),

@@ -150,6 +150,18 @@ Rules:
 
 ## 5. Commands that must run after changes
 
+### Runtime preflight
+
+Use the Node 24 version pinned by `.nvmrc` for installs, tests, development servers, native module
+rebuilds and builds. Run `node --version` before npm commands. The Glitch Docker image also uses
+Node 24, so local verification must match it.
+
+Do not use Node 20 or the installed Node 22.13 runtime for this checkout. Opening a
+`better-sqlite3` database under the latter caused a native segmentation fault that Vitest reported
+only as `[vitest-pool]: Worker exited unexpectedly` in the migrator tests. If that message appears,
+check the runtime first and use the database smoke test documented in the root `AGENTS.md` before
+changing application code.
+
 ```bash
 npm run verify
 ```

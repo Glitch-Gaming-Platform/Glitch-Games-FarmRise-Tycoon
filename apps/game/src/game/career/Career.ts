@@ -331,7 +331,11 @@ export class Career {
    * Interest and premiums are charged from the same accumulator pattern as
    * upkeep, so a fraction of a cent is never rounded into the player's favour.
    */
-  advance(dtTicks: number, protectedFieldItems: readonly string[] = []): void {
+  advance(
+    dtTicks: number,
+    protectedFieldItems: readonly string[] = [],
+    animalProductionEnabled = true,
+  ): void {
     const before = this.#state.tick;
     this.#state.tick += dtTicks;
 
@@ -340,6 +344,7 @@ export class Career {
       specialization: this.specialization,
       workBoard: this.#workBoard,
       protectedFieldItems,
+      animalProductionEnabled,
     });
     if (report.processedUnits > 0) this.bump('goodsProcessed', report.processedUnits);
 

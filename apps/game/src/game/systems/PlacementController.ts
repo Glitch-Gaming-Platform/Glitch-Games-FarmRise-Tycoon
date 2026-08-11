@@ -13,12 +13,13 @@
 import * as THREE from 'three';
 import { BUILDINGS, type BuildingKind } from '@farmrise/shared';
 import { EventBus } from '@engine/core/EventBus.js';
-import { TileFlag } from '@engine/physics/TileGrid.js';
+import type { TileGrid } from '@engine/physics/TileGrid.js';
 import type { InputSystem } from '@engine/input/InputSystem.js';
 import type { RenderContext } from '@engine/core/types.js';
 import type { Career } from '../career/Career.js';
-import { build } from '../world/FarmCommands.js';
+import { build, buildingSiteProblem } from '../world/FarmCommands.js';
 import type { GameAction } from '../GameActions.js';
+import type { Player } from '../player/Player.js';
 
 export interface PlacementEvents extends Record<string, unknown> {
   'placement:started': { kind: BuildingKind };
@@ -44,6 +45,7 @@ export class PlacementController {
     private readonly career: Career,
     private readonly input: InputSystem<GameAction>,
     private readonly camera: THREE.Camera,
+    private readonly player: Player,
   ) {}
 
   get active(): boolean {
@@ -114,12 +116,15 @@ export class PlacementController {
     const tile = this.career.world.grid.worldToTile(this.#hit.x, this.#hit.z);
     const definition = BUILDINGS[kind];
     const valid =
-      this.career.world.grid.canPlace(
+      buildingSiteProblem(this.career, kind, tile.x, tile.z) === null &&
+      !footprintOverlapsPlayer(
+        this.career.world.grid,
         tile.x,
         tile.z,
         definition.footprint.width,
         definition.footprint.depth,
-      ) && !this.career.world.grid.hasFlag(tile.x, tile.z, TileFlag.Soil);
+        this.player,
+      );
 
     if (tile.x !== this.#tileX || tile.z !== this.#tileZ || valid !== this.#valid) {
       this.#tileX = tile.x;
@@ -129,4 +134,24 @@ export class PlacementController {
     }
     return valid;
   }
+}
+
+/** Refuses a footprint touching the farmer, with a small exit-space margin. */
+export function footprintOverlapsPlayer(
+  grid: TileGrid,
+  tileX: number,
+  tileZ: number,
+  width: number,
+  depth: number,
+  player: Pick<Player, 'position' | 'radius'>,
+): boolean {
+  const origin = grid.tileToWorld(tileX, tileZ);
+  const minX = origin.x - grid.tileSize / 2;
+  const minZ = origin.z - grid.tileSize / 2;
+  const maxX = minX + width * grid.tileSize;
+  const maxZ = minZ + depth * grid.tileSize;
+  const closestX = Math.max(minX, Math.min(maxX, player.position.x));
+  const closestZ = Math.max(minZ, Math.min(maxZ, player.position.z));
+  const clearance = player.radius + 0.35;
+  return Math.hypot(player.position.x - closestX, player.position.z - closestZ) < clearance;
 }

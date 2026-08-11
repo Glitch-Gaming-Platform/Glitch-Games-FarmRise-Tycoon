@@ -86,8 +86,35 @@ export const ITEMS = buildItemRegistry();
 
 export const ITEM_IDS = Object.keys(ITEMS) as readonly string[];
 
+const UNCOUNTABLE_ITEM_IDS = new Set([
+  'wheat',
+  'corn',
+  'clover',
+  'milk',
+  'flour',
+  'cheese',
+  'preserves',
+  'garlic',
+]);
+
 export function getItem(id: string): ItemDefinition | undefined {
   return ITEMS[id];
+}
+
+/** Player-facing item name with simple count-aware English inflection. */
+export function itemNameForQuantity(itemId: string, quantity: number): string {
+  const name = getItem(itemId)?.displayName ?? itemId;
+  if (quantity === 1) return itemId === 'eggs' ? 'Egg' : name;
+  if (UNCOUNTABLE_ITEM_IDS.has(itemId)) return name;
+  if (name.endsWith('s')) return name;
+  if (/[^aeiou]y$/i.test(name)) return `${name.slice(0, -1)}ies`;
+  if (/(s|sh|ch|x|z)$/i.test(name)) return `${name}es`;
+  if (itemId === 'tomato') return `${name}es`;
+  return `${name}s`;
+}
+
+export function formatItemQuantity(itemId: string, quantity: number): string {
+  return `${quantity} ${itemNameForQuantity(itemId, quantity)}`;
 }
 
 export function spotPriceFor(itemId: string): Cents {

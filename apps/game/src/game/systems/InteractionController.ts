@@ -16,6 +16,7 @@ import {
   FIELD_SPOILAGE_MULTIPLIER,
   STORED_SPOILAGE_MULTIPLIER,
   THIRSTY_WATER,
+  formatItemQuantity,
   formatTicks,
   fractionKeptPerDay,
   isThirsty,
@@ -28,7 +29,6 @@ import {
   type Season,
   getCrop,
   getIncident,
-  getItem,
   plantableCrops,
   plotStage,
   type Result,
@@ -155,20 +155,17 @@ export class InteractionController {
   /**
    * Finds the one thing the context key should act on.
    *
-   * An incident the player can still answer wins, because it is the only
-   * target that expires. A real transfer wins next: carrying goods to a yard
-   * store must not be masked by an adjacent empty bed, and a field stack must
-   * be collectible before that same bed offers to be planted again.
+   * A physical transfer wins first: a basket labelled Pick up with E must
+   * actually collect when E is pressed, even if a fox warning is also active
+   * at the shelter. The incident wins after transfers because it expires. A
+   * plot or generic repair comes last.
    */
   #resolveTarget(): ContextTarget | null {
-    const incident = this.#incidentTarget();
-    if (incident) return incident;
-
     const world = this.career.world;
     const tile = world.grid.worldToTile(this.player.position.x, this.player.position.z);
-    const store = world.stores.nearest(tile.x, tile.z, 2);
-    if (store) {
-      if (!world.carry.isEmpty) {
+    if (!world.carry.isEmpty) {
+      const store = world.stores.nearestStored(tile.x, tile.z, 2);
+      if (store) {
         return {
           verb: 'deposit',
           id: store.id,
@@ -176,20 +173,26 @@ export class InteractionController {
           meters: this.#storeMeters(store),
         };
       }
-      const stacked = Object.values(store.items).some((quantity) => quantity > 0);
-      if (stacked && store.id.startsWith('stack-')) {
+    } else {
+      // A collectible pile wins over the nearby yard. Previously the yard at
+      // the shelter masked the egg basket one tile away, making E appear to do
+      // nothing unless the player stood on exactly the right pixel.
+      const store = world.stores.nearestStack(tile.x, tile.z, 2);
+      if (store) {
         const item = Object.entries(store.items).find(([, quantity]) => quantity > 0);
         const itemId = item?.[0] ?? '';
         const quantity = item?.[1] ?? 0;
-        const displayName = getItem(itemId)?.displayName ?? itemId;
         return {
           verb: 'collect',
           id: store.id,
-          label: quantity > 0 ? `Pick up ${quantity} ${displayName}` : 'Pick up',
+          label: quantity > 0 ? `Pick up ${formatItemQuantity(itemId, quantity)}` : 'Pick up',
           meters: this.#storeMeters(store),
         };
       }
     }
+
+    const incident = this.#incidentTarget();
+    if (incident) return incident;
 
     const plotId = this.playerController.plotInReach();
     if (plotId) {
@@ -237,12 +240,38 @@ export class InteractionController {
    * a second to move a bar would rebuild DOM the player cannot perceive.
    */
   proximityMeters(): readonly ProximityMeter[] {
-    return this.#resolveTarget()?.meters ?? [];
+    const world = this.career.world;
+    const meters: ProximityMeter[] = [];
+
+    // Status belongs to the object under the player, not to whichever action
+    // currently wins. Carrying goods or answering an incident may replace the
+    // E prompt, but it must not make a growing crop's water/timer bars vanish.
+    const plotId = this.playerController.plotInReach();
+    const plot = plotId ? world.getPlot(plotId) : undefined;
+    if (plotId && plot && plotStage(plot) !== 'empty') {
+      meters.push(...plotMeters(plotId, plot, this.career.season));
+    }
+
+    const tile = world.grid.worldToTile(this.player.position.x, this.player.position.z);
+    const stack = world.stores.nearestStack(tile.x, tile.z, 2);
+    const store =
+      stack ??
+      (plot && plotStage(plot) !== 'empty'
+        ? undefined
+        : world.stores.nearestStored(tile.x, tile.z, 2));
+    if (store) meters.push(...this.#storeMeters(store));
+
+    return meters;
   }
 
   /** Freshness of the pile the player is standing at, if it can spoil at all. */
   #storeMeters(store: StoreState): readonly ProximityMeter[] {
     if (totalUnits(store.items) <= 0) return [];
+
+    const item = Object.entries(store.items).find(([, quantity]) => quantity > 0);
+    const itemId = item?.[0] ?? '';
+    const quantity = item?.[1] ?? 0;
+    const contents = formatItemQuantity(itemId, quantity);
 
     const inTheOpen = store.buildingId === null && store.id.startsWith('stack-');
     const multiplier = inTheOpen ? FIELD_SPOILAGE_MULTIPLIER : STORED_SPOILAGE_MULTIPLIER;
@@ -258,9 +287,9 @@ export class InteractionController {
         {
           kind: 'freshness',
           target: { kind: 'store', id: store.id },
-          label: 'Keeping',
+          label: `${contents} freshness`,
           value: 1,
-          detail: store.preserving ? 'Cold store — nothing spoils' : 'Keeps indefinitely',
+          detail: store.preserving ? 'Cold store — no spoilage' : 'Does not spoil',
           urgent: false,
         },
       ];
@@ -270,9 +299,9 @@ export class InteractionController {
       {
         kind: 'freshness',
         target: { kind: 'store', id: store.id },
-        label: 'Keeping',
+        label: `${contents} freshness`,
         value: fractionKeptPerDay(store.items, multiplier),
-        detail: `Loses one in ${formatTicks(ticks)}${inTheOpen ? ' — out in the open' : ''}`,
+        detail: `1 spoils in ${formatTicks(ticks)}${inTheOpen ? ' — left in field' : ''}`,
         urgent: ticks <= SOON_TICKS,
       },
     ];

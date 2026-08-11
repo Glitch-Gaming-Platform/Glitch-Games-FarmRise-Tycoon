@@ -44,17 +44,25 @@ no prompts, no goal, and no way to sell anything or spend money. Measured from t
 | 5 | `haul` | "Carry it home — Carry the crop to the shelter. When Put down appears, press E to store it." | Any goods deposited into storage | storage |
 | 6 | `sell` | "Turn crops into money — Press M or click Market, then choose Sell all beside the crop you stored." | Any sale made | — |
 | 7 | `reinvest` | "Spend it on the farm — Press B or click Build, then buy a hen or place a building on open ground." | Any building placed or hen bought | objective |
-| 8 | `eggs` | "Collect the eggs — The hens lay eggs by the shelter. Walk over and press E when Pick up Eggs appears." | Eggs picked up from the shelter stack | — |
+| 8 | `eggs` | "Collect the eggs — Hens need stored corn to lay eggs. Walk to the basket and press E when Pick up Eggs appears." | Eggs picked up from the shelter stack | — |
 | 9 | `setback` | "Something is coming — Pay to prevent it, or take the hit." | Warning resolves | warning |
 | 10 | `goal` | "The field next door — Keep growing and selling. At $75, press B or click Build to buy the neighbouring parcel." | Immediately; it is a hand-off | objective |
 
-`eggs` waits for the starter hens to leave a visible basket in front of the shelter. The starter
-store carries enough corn for the original hens plus the hen suggested by the reinvestment lesson,
-and the first clutch begins about 10 seconds from completion. A camera-facing **Pick up Eggs · E /
-Work** badge sits over the basket, and those tutorial eggs cannot spoil away while onboarding is
-active. Once the player collects eggs, the session schedules a real minor fox warning and shows
-`setback`. The beat resolves against that live incident; it is never resurrected after onboarding
-has completed or been skipped. See ADR 0013.
+`eggs` pauses animal production until that lesson is current, then lets the starter hens finish the
+clutch already near completion. The starter store carries enough corn for the original hens plus the
+hen suggested by the reinvestment lesson. Feed must be in collected storage: corn left in a field
+pile or carried in the player's hands is not available to the hens. A camera-facing **Pick up Eggs ·
+E / Work** badge sits over a reserved, walkable basket tile beside the shelter; buildings and crop
+beds cannot cover it. The basket is not market inventory until the player physically collects it.
+After collection, eggs appear immediately in Market whether they are still being carried or have
+been deposited. Tutorial eggs cannot spoil away while onboarding is active.
+
+The same rule applies to later livestock. Cows consume stored clover and leave collectible milk;
+each livestock row states its feed amount, production time and output before purchase. A hunger
+warning names the missing feed and the product that has stopped. Once the player collects the first
+eggs, the session schedules a real minor fox warning and shows `setback`. The beat resolves against
+that live incident; it is never resurrected after onboarding has completed or been skipped. See ADR
+0013.
 
 ### Touch copy
 

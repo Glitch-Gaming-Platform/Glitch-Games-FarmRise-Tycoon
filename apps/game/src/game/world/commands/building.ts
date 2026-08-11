@@ -46,16 +46,8 @@ export function build(
   if (career.balance < cost) {
     return ruleViolation(`Not enough money to build a ${definition.displayName.toLowerCase()}.`);
   }
-  if (!world.grid.canPlace(tileX, tileZ, definition.footprint.width, definition.footprint.depth)) {
-    return ruleViolation('Something is already there.');
-  }
-  if (!world.parcels.ownsTile(tileX, tileZ)) {
-    return ruleViolation('You do not own that land.');
-  }
-  // Soil is finite and the beds on it are the whole game. Refuse to pave them.
-  if (world.grid.hasFlag(tileX, tileZ, TileFlag.Soil)) {
-    return ruleViolation('You cannot build on a crop bed.');
-  }
+  const siteProblem = buildingSiteProblem(career, kind, tileX, tileZ);
+  if (siteProblem) return ruleViolation(siteProblem);
 
   career.adjustBalance(cents(-cost), 'construction');
   const id = world.structures.nextId();
@@ -70,6 +62,32 @@ export function build(
   });
   career.bump('buildingsBuilt');
   return ok({ id });
+}
+
+/** Shared by the placement preview and the command so green always means valid. */
+export function buildingSiteProblem(
+  career: Career,
+  kind: BuildingKind,
+  tileX: number,
+  tileZ: number,
+): string | null {
+  const definition = BUILDINGS[kind];
+  if (!definition) return `Unknown building "${kind}".`;
+  const { width, depth } = definition.footprint;
+  const world = career.world;
+  if (!world.grid.canPlace(tileX, tileZ, width, depth)) return 'Something is already there.';
+
+  for (let dz = 0; dz < depth; dz += 1) {
+    for (let dx = 0; dx < width; dx += 1) {
+      const x = tileX + dx;
+      const z = tileZ + dz;
+      if (!world.parcels.ownsTile(x, z)) return 'You do not own that land.';
+      // Soil is finite and the beds on it are the whole game. Refuse to pave
+      // any part of one, not only the footprint's top-left tile.
+      if (world.grid.hasFlag(x, z, TileFlag.Soil)) return 'You cannot build on a crop bed.';
+    }
+  }
+  return null;
 }
 
 export function buyAnimal(career: Career, species: string, count = 1): Result<void> {

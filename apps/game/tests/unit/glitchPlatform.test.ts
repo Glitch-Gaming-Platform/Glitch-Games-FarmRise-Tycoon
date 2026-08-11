@@ -519,4 +519,11 @@ describe('analytics bridge', () => {
       expect(steps.has(stage)).toBe(true);
     }
   });
+
+  it('maps livestock purchases, collection, hunger and loss as distinct behaviours', () => {
+    expect(GLITCH_EVENT_MAP.animal_purchased?.step).toBe('reinvest');
+    expect(GLITCH_EVENT_MAP.animal_product_collected?.step).toBe('farm');
+    expect(GLITCH_EVENT_MAP.animal_hungry?.step).toBe('friction');
+    expect(GLITCH_EVENT_MAP.animal_lost?.step).toBe('setback');
+  });
 });

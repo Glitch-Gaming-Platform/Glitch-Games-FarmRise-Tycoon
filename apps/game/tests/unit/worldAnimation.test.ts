@@ -19,6 +19,7 @@ describe('world animation state', () => {
     expect(groundGoodsActionLabel('eggs', 1)).toBe('Pick up 1 Egg · E / Work');
     expect(groundGoodsActionLabel('eggs', 3)).toBe('Pick up 3 Eggs · E / Work');
     expect(groundGoodsActionLabel('milk', 12)).toBe('Pick up 12 Milk · E / Work');
+    expect(groundGoodsActionLabel('pea', 5)).toBe('Pick up 5 Peas · E / Work');
   });
 
   it('anchors water and spoilage gauges above their world objects', () => {
@@ -41,9 +42,9 @@ describe('world animation state', () => {
     const stackAnchor = proximityMeterAnchor(world, {
       kind: 'freshness',
       target: { kind: 'store', id: stack.id },
-      label: 'Keeping',
+      label: '4 Wheat freshness',
       value: 0.8,
-      detail: 'Loses one in 1m',
+      detail: '1 spoils in 1m — left in field',
       urgent: false,
     });
     expect(stackAnchor).toEqual({ x: stackAt.x, y: 1.15, z: stackAt.z });

@@ -9,8 +9,10 @@
  */
 import type { Unsubscribe } from '@engine/core/types.js';
 import type { AnalyticsClient } from '@analytics/AnalyticsClient.js';
+import { ANIMALS, getItem, type BuildingKind } from '@farmrise/shared';
 import type { FarmScene } from '@game/scenes/FarmScene.js';
 import type { SessionController } from '@game/systems/SessionController.js';
+import { buildCostFor } from '@game/world/FarmCommands.js';
 
 export function bindAnalytics(
   scene: FarmScene,
@@ -83,7 +85,11 @@ export function bindAnalytics(
       analytics.track('storage_overflowed', { itemId, spilled }),
     ),
     world.events.on('world:building-placed', ({ kind }) =>
-      analytics.track('building_placed', { kind, cost: 0, balance: career.balance }),
+      analytics.track('building_placed', {
+        kind,
+        cost: buildCostFor(career, kind as BuildingKind),
+        balance: career.balance,
+      }),
     ),
     world.events.on('world:building-completed', ({ kind }) =>
       analytics.track('building_completed', { kind }),
@@ -97,6 +103,30 @@ export function bindAnalytics(
     ),
     session.events.on('session:hauled', ({ stored, refused }) =>
       analytics.track('goods_hauled', { stored, refused, carrier: world.carry.carrier }),
+    ),
+    world.events.on('world:stack-collected', ({ items }) => {
+      for (const [itemId, quantity] of Object.entries(items)) {
+        if (quantity <= 0 || getItem(itemId)?.category !== 'animal_product') continue;
+        analytics.track('animal_product_collected', {
+          itemId,
+          quantity,
+          carrier: world.carry.carrier,
+        });
+      }
+    }),
+    world.events.on('world:animal-purchased', ({ species, count }) =>
+      analytics.track('animal_purchased', {
+        species,
+        count,
+        cost: ANIMALS[species].purchaseCost * count,
+        balance: career.balance,
+      }),
+    ),
+    world.events.on('world:animal-hungry', ({ species, feedItemId, needed, available }) =>
+      analytics.track('animal_hungry', { species, feedItemId, needed, available }),
+    ),
+    world.events.on('world:animal-lost', ({ species, count, remaining }) =>
+      analytics.track('animal_lost', { species, count, remaining }),
     ),
 
     session.events.on('session:sold', ({ itemId, quantity, payout, viaContract }) => {

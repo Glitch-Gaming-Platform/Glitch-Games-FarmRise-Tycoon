@@ -10,6 +10,7 @@
  * than a label.
  */
 import {
+  blendQuality,
   cents,
   getBuyer,
   meetsQualityBar,
@@ -27,18 +28,68 @@ import {
   unitPriceFor,
   type BuyerId,
   type Cents,
+  type Inventory,
   type Result,
 } from '@farmrise/shared';
 import type { Career } from '../../career/Career.js';
 
 /** What the farm would be paid, per unit, for goods it is holding right now. */
 export function spotQuote(career: Career, itemId: string): Cents {
-  const quality = career.world.stores.qualityOf(itemId);
+  const quality = sellableQuality(career, itemId);
   return cents(
     spotPriceFor(itemId) *
       qualityPriceMultiplier(quality) *
       projectDeliveryBonus(career.town.completedProjectIds),
   );
+}
+
+/** Market stock: collected storage plus what the player is carrying. */
+export function sellableInventory(career: Career): Inventory {
+  const inventory = { ...career.world.storedInventory };
+  for (const [itemId, quantity] of Object.entries(career.world.carry.items)) {
+    inventory[itemId] = (inventory[itemId] ?? 0) + quantity;
+  }
+  return inventory;
+}
+
+export function sellableQuantity(career: Career, itemId: string): number {
+  return career.world.stores.storedTotalOf(itemId) + (career.world.carry.items[itemId] ?? 0);
+}
+
+function sellableQuality(career: Career, itemId: string): number {
+  const carried = career.world.carry.items[itemId] ?? 0;
+  const stored = career.world.stores.storedTotalOf(itemId);
+  const total = carried + stored;
+  if (total <= 0) return 1;
+  return (
+    (carried * (career.world.carry.quality[itemId] ?? 1) +
+      stored * career.world.stores.storedQualityOf(itemId)) /
+    total
+  );
+}
+
+function withdrawSellable(
+  career: Career,
+  itemId: string,
+  quantity: number,
+): Result<{ quality: number }> {
+  const fromCarry = Math.min(quantity, career.world.carry.items[itemId] ?? 0);
+  let quality = 1;
+  let taken = 0;
+  if (fromCarry > 0) {
+    const result = career.world.carry.put(itemId, fromCarry);
+    if (!result.ok) return result;
+    quality = result.value.quality;
+    taken = fromCarry;
+  }
+
+  const remaining = quantity - fromCarry;
+  if (remaining > 0) {
+    const result = career.world.stores.withdrawStoredAnywhere(itemId, remaining);
+    if (!result.ok) return result;
+    quality = blendQuality(taken, quality, remaining, result.value.quality);
+  }
+  return ok({ quality });
 }
 
 export function sellSpot(
@@ -49,10 +100,10 @@ export function sellSpot(
   if (!Number.isInteger(quantity) || quantity <= 0) {
     return ruleViolation('Quantity must be a positive whole number.');
   }
-  const held = career.world.stores.totalOf(itemId);
+  const held = sellableQuantity(career, itemId);
   if (held < quantity) return ruleViolation(`Need ${quantity} ${itemId}, holding ${held}.`);
 
-  const taken = career.world.stores.withdrawAnywhere(itemId, quantity);
+  const taken = withdrawSellable(career, itemId, quantity);
   if (!taken.ok) return taken;
 
   const unit = cents(
@@ -139,10 +190,10 @@ export function deliverContract(
 
   const outstanding = contract.quantity - contract.delivered;
   const wanted = Math.min(Math.max(1, Math.floor(quantity)), outstanding);
-  const held = career.world.stores.totalOf(contract.itemId);
+  const held = sellableQuantity(career, contract.itemId);
   if (held < wanted) return ruleViolation(`Need ${wanted} ${contract.itemId}, holding ${held}.`);
 
-  const quality = career.world.stores.qualityOf(contract.itemId);
+  const quality = sellableQuality(career, contract.itemId);
   if (quality < contract.minimumQuality) {
     return ruleViolation('This batch is not up to the grade they asked for.');
   }
@@ -150,7 +201,7 @@ export function deliverContract(
     return ruleViolation('That buyer will not take produce of this grade.');
   }
 
-  const taken = career.world.stores.withdrawAnywhere(contract.itemId, wanted);
+  const taken = withdrawSellable(career, contract.itemId, wanted);
   if (!taken.ok) return taken;
 
   const payout = cents(

@@ -24,6 +24,7 @@ import {
   RESTRUCTURE_DAILY_RATE,
   RESTRUCTURE_PRINCIPAL,
   SPECIALIZATIONS,
+  STARTER_ANIMAL_PRODUCT_DROP,
   STARTER_BLOCKED_TILES,
   STARTER_SHELTER,
   YARD_STORE_ID,
@@ -464,6 +465,7 @@ function validateBuildings(
   const blocked = new Set([
     ...STARTER_BLOCKED_TILES.map((tile) => tileKey(tile.tileX, tile.tileZ)),
     tileKey(STARTER_SHELTER.tileX, STARTER_SHELTER.tileZ),
+    tileKey(STARTER_ANIMAL_PRODUCT_DROP.tileX, STARTER_ANIMAL_PRODUCT_DROP.tileZ),
   ]);
 
   for (const building of next.buildings) {

@@ -99,25 +99,14 @@ async function reachEggStack(page: Page) {
   const prompt = page.getByTestId('hud-prompt');
   if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
 
-  // On a heavily throttled software renderer, the tutorial can reach this
-  // beat before the short starter clutch has elapsed. Wait for the
-  // first clutch to become a real field stack before searching for it.
-  await expect
-    .poll(
-      async () => {
-        const text = (await page.getByTestId('hud-storage').textContent()) ?? '0/60';
-        return Number(text.match(/(\d+)\//)?.[1] ?? 0);
-      },
-      { timeout: 90_000 },
-    )
-    .toBeGreaterThan(3);
-
-  // The player finishes hauling beside the shelter. Walk a short search loop
-  // around its collision footprint until the real egg-stack prompt appears.
-  for (const direction of ['s', 'd', 'w', 'a', 's', 'd'] as const) {
+  // The player finishes hauling beside the shelter. Production only starts on
+  // this beat, so keep searching the small collection area while the starter
+  // clutch finishes instead of treating the uncollected basket as storage.
+  for (let attempt = 0; attempt < 180; attempt += 1) {
+    const direction = (['s', 'd', 'w', 'a'] as const)[attempt % 4]!;
     await page.keyboard.down(direction);
     try {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
+      for (let step = 0; step < 5; step += 1) {
         await page.waitForTimeout(100);
         if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
       }
@@ -199,6 +188,7 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
 
   await page.keyboard.press('m');
   await expect(page.getByTestId('market-panel')).toBeVisible();
+  await expect(page.getByTestId('market-sell-all-eggs')).toHaveCount(0);
   await expect(page.getByTestId('market-sell-all-wheat')).toBeVisible();
   await page.getByTestId('market-sell-all-wheat').click();
   await expect
@@ -216,12 +206,16 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   await page.getByRole('button', { name: 'Open build' }).click();
   await expect(page.getByTestId('build-panel')).toBeVisible();
   await page.getByTestId('build-animal-chicken').click();
+  await expect(page.getByTestId('build-panel')).toContainText(/stored Corn.*Eggs.*Market/i);
   await page.getByTestId('build-close').click();
   await expect(page.getByTestId('hud-objective')).toBeVisible();
 
   await expect(page.getByTestId('coach-mark')).toContainText(/Collect the eggs/i);
   await reachEggStack(page);
   await page.keyboard.press('e');
+  await page.keyboard.press('m');
+  await expect(page.getByTestId('market-sell-all-eggs')).toBeVisible();
+  await page.getByTestId('market-close').click();
   await expect(page.getByTestId('coach-mark')).toContainText(/Something is coming/i);
   await expect(page.getByTestId('hud-warning')).toBeVisible();
 

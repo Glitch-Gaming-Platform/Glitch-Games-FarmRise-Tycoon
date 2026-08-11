@@ -14,6 +14,7 @@
  */
 import {
   ESTATE_GRID,
+  STARTER_ANIMAL_PRODUCT_DROP,
   STARTER_BLOCKED_TILES,
   STARTER_LEVEL_ID,
   STARTER_REGION_ID,
@@ -31,6 +32,10 @@ export const STARTER_FARM: LevelDefinition = {
   blockedTiles: STARTER_BLOCKED_TILES.map((tile) => ({ tileX: tile.tileX, tileZ: tile.tileZ })),
   startingBuildings: [],
   shelter: { tileX: STARTER_SHELTER.tileX, tileZ: STARTER_SHELTER.tileZ },
+  animalProductDrop: {
+    tileX: STARTER_ANIMAL_PRODUCT_DROP.tileX,
+    tileZ: STARTER_ANIMAL_PRODUCT_DROP.tileZ,
+  },
   // The lane to town leaves the homestead's south-west corner, which is what
   // makes the South Works parcel - the one that sits on that road - worth more
   // than its size suggests.

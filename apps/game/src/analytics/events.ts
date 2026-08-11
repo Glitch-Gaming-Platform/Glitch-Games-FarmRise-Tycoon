@@ -86,6 +86,14 @@ export type AnalyticsEvent =
       payload: { parcels: number; parcelId: string; elapsedMs: number };
     }
   | { name: 'goods_hauled'; payload: { stored: number; refused: number; carrier: string } }
+  | {
+      name: 'animal_purchased';
+      payload: { species: string; count: number; cost: number; balance: number };
+    }
+  | {
+      name: 'animal_product_collected';
+      payload: { itemId: string; quantity: number; carrier: string };
+    }
   | { name: 'cycle_completed'; payload: { cycle: number; elapsedMs: number; balance: number } }
 
   // --- career progression -----------------------------------------------
@@ -101,6 +109,11 @@ export type AnalyticsEvent =
   | { name: 'farm_event_prevented'; payload: { kind: string; cost: number } }
   | { name: 'farm_event_impacted'; payload: { kind: string; mitigated: boolean } }
   | { name: 'fox_scared_off'; payload: { remaining: number } }
+  | {
+      name: 'animal_hungry';
+      payload: { species: string; feedItemId: string; needed: number; available: number };
+    }
+  | { name: 'animal_lost'; payload: { species: string; count: number; remaining: number } }
 
   // --- friction --------------------------------------------------------
   | { name: 'action_refused'; payload: { action: string; reason: string } }

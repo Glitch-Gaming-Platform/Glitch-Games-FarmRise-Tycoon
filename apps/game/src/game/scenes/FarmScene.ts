@@ -298,7 +298,12 @@ export class FarmScene implements GameScene {
     // plants a seed.
     if (worldInputEnabled) this.#interaction?.fixedUpdate(context);
     this.#session?.fixedUpdate(context);
-    career.advance(1, this.#session?.onboarding.active ? ['eggs'] : []);
+    const onboarding = this.#session?.onboarding;
+    career.advance(
+      1,
+      onboarding?.active ? ['eggs'] : [],
+      !onboarding?.active || onboarding.currentBeat?.id === 'eggs',
+    );
     this.#incidents?.fixedUpdate(1);
     this.#careerDirector?.fixedUpdate();
     // Refresh after player/world movement so foxes see current actor positions.

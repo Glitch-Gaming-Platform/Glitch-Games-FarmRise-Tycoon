@@ -21,7 +21,8 @@ save migration, asset pipeline, UI and transition-validating backend are kept as
 ## Quick start
 
 ```bash
-node --version          # requires >= 22.12
+nvm use                 # selects Node 24.18.1 from .nvmrc
+node --version          # must report Node 24
 npm install             # npm workspaces; do not substitute another package manager
 
 npm run build --workspace @farmrise/shared   # the other packages import its build output
@@ -32,6 +33,10 @@ npm run dev             # Vite on :5173, Next.js on :3000 (Vite proxies /api)
 ```
 
 Open <http://localhost:5173>. Press **Work the farm**.
+
+Node 24 is also the Glitch container runtime. Do not verify this checkout with Node 20 or the local
+Node 22.13 installation: `better-sqlite3` can terminate the process natively and appear only as a
+Vitest worker crash. See `AGENTS.md` for the smoke check and recovery guidance.
 
 | Key | Action |
 | --- | --- |

@@ -40,7 +40,7 @@ export function depositCarried(
 
   const store = targetStoreId
     ? storeInRange(world.stores.get(targetStoreId), tileX, tileZ, 2)
-    : world.stores.nearest(tileX, tileZ, 2);
+    : world.stores.nearestStored(tileX, tileZ, 2);
   if (!store) return ruleViolation('There is nowhere to put this here.');
 
   const load = world.carry.drain();
@@ -73,23 +73,26 @@ export function collectStack(
   const world = career.world;
   const store = targetStoreId
     ? storeInRange(world.stores.get(targetStoreId), tileX, tileZ, 2)
-    : world.stores.nearest(tileX, tileZ, 2);
+    : world.stores.nearestStack(tileX, tileZ, 2);
   if (!store || store.buildingId !== null || !store.id.startsWith('stack-')) {
     return ruleViolation('There is nothing to pick up here.');
   }
 
   let taken = 0;
+  const items: Record<string, number> = {};
   for (const [itemId, quantity] of Object.entries(store.items)) {
     if (quantity <= 0) continue;
     const outcome = world.carry.pickUp(itemId, quantity, store.quality[itemId] ?? 1);
     if (outcome.taken > 0) {
       world.stores.withdraw(store.id, itemId, outcome.taken);
       taken += outcome.taken;
+      items[itemId] = (items[itemId] ?? 0) + outcome.taken;
     }
   }
 
   if (taken === 0) return ruleViolation('Your hands are full.');
-  return ok({ taken });
+  world.events.emit('world:stack-collected', { items, total: taken });
+  return ok({ taken, items });
 }
 
 function storeInRange<T extends { tileX: number; tileZ: number }>(

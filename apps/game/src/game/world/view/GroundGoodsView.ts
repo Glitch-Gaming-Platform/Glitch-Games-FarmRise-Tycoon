@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { getItem } from '@farmrise/shared';
+import { formatItemQuantity, getItem } from '@farmrise/shared';
 import type { FarmWorld } from '../FarmWorld.js';
 
 const MAX_STACKS = 32;
@@ -13,10 +13,7 @@ interface ProductActionEntry {
 }
 
 export function groundGoodsActionLabel(itemId: string, quantity: number): string {
-  const item = getItem(itemId);
-  const name = item?.displayName ?? itemId;
-  const singular = quantity === 1 && name.endsWith('s') ? name.slice(0, -1) : name;
-  return `Pick up ${quantity} ${singular} · E / Work`;
+  return `Pick up ${formatItemQuantity(itemId, quantity)} · E / Work`;
 }
 
 /** Visible crates and produce baskets for goods waiting to be picked up. */

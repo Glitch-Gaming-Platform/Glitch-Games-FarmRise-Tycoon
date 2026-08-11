@@ -16,6 +16,7 @@ import {
   ok,
   removeItemsFromStores,
   ruleViolation,
+  totalUnits,
   YARD_STORE_ID,
   type Inventory,
   type Result,
@@ -37,7 +38,7 @@ export interface StoreState {
 export interface StoreModelEvents extends Record<string, unknown> {
   'store:changed': { storeId: string };
   'store:full': { storeId: string; itemId: string; spilled: number };
-  'store:spoiled': { storeId: string; lost: number };
+  'store:spoiled': { storeId: string; lost: number; items: Inventory; emptied: boolean };
 }
 
 export class StoreModel {
@@ -63,9 +64,36 @@ export class StoreModel {
 
   /** The nearest store within range of a tile, preferring a preserving one. */
   nearest(tileX: number, tileZ: number, maxTiles = 2): StoreState | undefined {
+    return this.#nearest(tileX, tileZ, maxTiles, () => true);
+  }
+
+  /** Nearest physical pile, preferred over an adjacent yard during pickup. */
+  nearestStack(tileX: number, tileZ: number, maxTiles = 2): StoreState | undefined {
+    return this.#nearest(
+      tileX,
+      tileZ,
+      maxTiles,
+      (store) =>
+        store.id.startsWith('stack-') &&
+        Object.values(store.items).some((quantity) => quantity > 0),
+    );
+  }
+
+  /** Nearest yard/building store; field piles are not valid deposit targets. */
+  nearestStored(tileX: number, tileZ: number, maxTiles = 2): StoreState | undefined {
+    return this.#nearest(tileX, tileZ, maxTiles, (store) => !store.id.startsWith('stack-'));
+  }
+
+  #nearest(
+    tileX: number,
+    tileZ: number,
+    maxTiles: number,
+    include: (store: StoreState) => boolean,
+  ): StoreState | undefined {
     let best: StoreState | undefined;
     let bestScore = Number.POSITIVE_INFINITY;
     for (const store of this.#stores.values()) {
+      if (!include(store)) continue;
       const distance = Math.abs(store.tileX - tileX) + Math.abs(store.tileZ - tileZ);
       if (distance > maxTiles) continue;
       const score = distance - (store.preserving ? 0.5 : 0);
@@ -86,8 +114,33 @@ export class StoreModel {
 
   /** Combined contents, for the market screen and milestone counting. */
   combined(): Inventory {
+    return this.#combined(() => true);
+  }
+
+  /** Goods that have actually been collected into the yard or a building. */
+  storedCombined(): Inventory {
+    return this.#combined((store) => !store.id.startsWith('stack-'));
+  }
+
+  /** Total stored units, excluding piles still waiting in the field. */
+  storedTotalOf(itemId: string): number {
+    let total = 0;
+    for (const store of this.#stores.values()) {
+      if (store.id.startsWith('stack-')) continue;
+      total += store.items[itemId] ?? 0;
+    }
+    return total;
+  }
+
+  /** Mean quality across collected storage only. */
+  storedQualityOf(itemId: string): number {
+    return this.#qualityOf(itemId, (store) => !store.id.startsWith('stack-'));
+  }
+
+  #combined(include: (store: StoreState) => boolean): Inventory {
     const combined: Record<string, number> = {};
     for (const store of this.#stores.values()) {
+      if (!include(store)) continue;
       for (const [itemId, quantity] of Object.entries(store.items)) {
         combined[itemId] = (combined[itemId] ?? 0) + quantity;
       }
@@ -107,9 +160,14 @@ export class StoreModel {
 
   /** Mean quality of an item across every store holding it. */
   qualityOf(itemId: string): number {
+    return this.#qualityOf(itemId, () => true);
+  }
+
+  #qualityOf(itemId: string, include: (store: StoreState) => boolean): number {
     let quantity = 0;
     let weighted = 0;
     for (const store of this.#stores.values()) {
+      if (!include(store)) continue;
       const held = store.items[itemId] ?? 0;
       if (held <= 0) continue;
       quantity += held;
@@ -176,7 +234,20 @@ export class StoreModel {
    * least fresh store first, so the good stuff is what survives to a contract.
    */
   withdrawAnywhere(itemId: string, quantity: number): Result<{ quality: number }> {
-    const before = this.stores;
+    return this.#withdrawFrom(itemId, quantity, () => true);
+  }
+
+  /** Takes collected goods only; field piles must be picked up before sale. */
+  withdrawStoredAnywhere(itemId: string, quantity: number): Result<{ quality: number }> {
+    return this.#withdrawFrom(itemId, quantity, (store) => !store.id.startsWith('stack-'));
+  }
+
+  #withdrawFrom(
+    itemId: string,
+    quantity: number,
+    include: (store: StoreState) => boolean,
+  ): Result<{ quality: number }> {
+    const before = this.stores.filter(include);
     const result = removeItemsFromStores(before, itemId, quantity);
     if (!result.ok) return result;
 
@@ -221,9 +292,19 @@ export class StoreModel {
       );
       store.spoilageRemainder = { ...outcome.remainder };
       if (outcome.lost > 0) {
+        const lostItems: Record<string, number> = {};
+        for (const [itemId, before] of Object.entries(decayItems)) {
+          const itemLost = before - (outcome.items[itemId] ?? 0);
+          if (itemLost > 0) lostItems[itemId] = itemLost;
+        }
         store.items = { ...store.items, ...outcome.items };
         lost += outcome.lost;
-        this.events.emit('store:spoiled', { storeId: store.id, lost: outcome.lost });
+        this.events.emit('store:spoiled', {
+          storeId: store.id,
+          lost: outcome.lost,
+          items: lostItems,
+          emptied: totalUnits(store.items) <= 0,
+        });
         this.events.emit('store:changed', { storeId: store.id });
       }
       for (const itemId of Object.keys(store.items)) {

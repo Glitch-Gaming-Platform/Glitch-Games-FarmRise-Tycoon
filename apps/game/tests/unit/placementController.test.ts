@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { EMPTY_POINTER } from '@engine/input/PointerState.js';
 import type { InputSystem } from '@engine/input/InputSystem.js';
 import type { GameAction } from '@game/GameActions.js';
+import { Player } from '@game/player/Player.js';
 import { PlacementController } from '@game/systems/PlacementController.js';
 import { fundedCareer } from '../helpers/career.js';
 
@@ -20,7 +21,7 @@ describe('PlacementController', () => {
       pointer: { ...EMPTY_POINTER, ndcX: 0, ndcY: 0 },
       wasPressed: (action: GameAction) => action === 'interact',
     } as unknown as InputSystem<GameAction>;
-    const placement = new PlacementController(career, input, camera);
+    const placement = new PlacementController(career, input, camera, new Player(20, 20));
     const startingBuildings = world.buildings.length;
 
     placement.begin('road');
@@ -29,5 +30,29 @@ describe('PlacementController', () => {
     expect(placement.active).toBe(false);
     expect(world.buildings).toHaveLength(startingBuildings + 1);
     expect(world.buildings.at(-1)?.kind).toBe('road');
+  });
+
+  it('refuses a footprint that would trap the player inside the new structure', () => {
+    const career = fundedCareer();
+    const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 100);
+    camera.position.set(0, 10, 10);
+    camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld(true);
+    const input = {
+      pointer: { ...EMPTY_POINTER, ndcX: 0, ndcY: 0 },
+      wasPressed: (action: GameAction) => action === 'interact',
+    } as unknown as InputSystem<GameAction>;
+    const placement = new PlacementController(career, input, camera, new Player(0, 0));
+    const refused: string[] = [];
+    placement.events.on('placement:refused', ({ reason }) => refused.push(reason));
+    const startingBuildings = career.world.buildings.length;
+
+    placement.begin('barn');
+    placement.fixedUpdate(0);
+
+    expect(career.world.buildings).toHaveLength(startingBuildings);
+    expect(placement.active).toBe(true);
+    expect(refused).toEqual(['That spot is taken.']);
   });
 });

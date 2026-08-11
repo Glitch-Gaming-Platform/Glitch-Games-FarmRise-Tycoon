@@ -21,6 +21,7 @@ const base: OnboardingContext = {
   reinvestments: 0,
   eggsReady: 0,
   eggsCollected: 0,
+  eggsHandled: false,
   warningActive: false,
   eventsResolved: 0,
   marketOpen: false,
@@ -111,10 +112,10 @@ describe('a first-time player', () => {
     director.update(ctx({ cropsHarvested: 1, goodsHauled: 1 }));
     director.update(ctx({ goodsHauled: 1, salesMade: 1 }));
     director.update(ctx({ salesMade: 1, reinvestments: 1 }));
-    director.update(ctx({ salesMade: 1, reinvestments: 1, eggsCollected: 8 }));
+    director.update(ctx({ salesMade: 1, reinvestments: 1, eggsCollected: 8, eggsHandled: true }));
     // The goal beat is a hand-off: it is shown, then completes on the next
     // tick, which is what carries the player into the free-running loop.
-    director.update(ctx({ salesMade: 1, reinvestments: 1, eggsCollected: 8 }));
+    director.update(ctx({ salesMade: 1, reinvestments: 1, eggsCollected: 8, eggsHandled: true }));
 
     // 'setback' is absent in this headless director test because SessionController
     // owns the guaranteed first warning. The egg action remains required.
@@ -230,8 +231,8 @@ describe('the setback beat', () => {
     director.update(ctx({ goodsHauled: 1 }));
     director.update(ctx({ salesMade: 1 }));
     director.update(ctx({ reinvestments: 1 }));
-    director.update(ctx({ reinvestments: 1, eggsCollected: 8 }));
-    director.update(ctx({ reinvestments: 1, eggsCollected: 8 }));
+    director.update(ctx({ reinvestments: 1, eggsCollected: 8, eggsHandled: true }));
+    director.update(ctx({ reinvestments: 1, eggsCollected: 8, eggsHandled: true }));
 
     // The director never resurrects a lesson after completion. In the real
     // session a guaranteed fresh warning is inserted before this point.
@@ -253,8 +254,8 @@ describe('the setback beat', () => {
     director.update(ctx({ goodsHauled: 1 }));
     director.update(ctx({ salesMade: 1 }));
     director.update(ctx({ reinvestments: 1 }));
-    director.update(ctx({ reinvestments: 1, eggsCollected: 8 }));
-    director.update(ctx({ reinvestments: 1, eggsCollected: 8 }));
+    director.update(ctx({ reinvestments: 1, eggsCollected: 8, eggsHandled: true }));
+    director.update(ctx({ reinvestments: 1, eggsCollected: 8, eggsHandled: true }));
     expect(seen).not.toContain('setback');
     expect(director.finished).toBe(true);
 
@@ -275,7 +276,9 @@ describe('the setback beat', () => {
     director.update(ctx({ goodsHauled: 1 }));
     director.update(ctx({ salesMade: 1 }));
     director.update(ctx({ reinvestments: 1 }));
-    director.update(ctx({ reinvestments: 1, eggsCollected: 8, warningActive: true }));
+    director.update(
+      ctx({ reinvestments: 1, eggsCollected: 8, eggsHandled: true, warningActive: true }),
+    );
 
     expect(director.currentBeat?.id).toBe('setback');
     director.skip(ctx({ nowMs: 90_000, warningActive: true }));
@@ -303,9 +306,9 @@ describe('the egg collection beat', () => {
     director.update(ctx({ nowMs: 90_000, eggsReady: 8 }));
     expect(director.currentBeat?.id).toBe('eggs');
 
-    director.update(ctx({ nowMs: 95_000, eggsCollected: 8 }));
+    director.update(ctx({ nowMs: 95_000, eggsCollected: 8, eggsHandled: true }));
     expect(director.currentBeat?.id).toBe('goal');
-    director.update(ctx({ nowMs: 96_000, eggsCollected: 8 }));
+    director.update(ctx({ nowMs: 96_000, eggsCollected: 8, eggsHandled: true }));
     expect(director.currentBeat).toBeNull();
   });
 });

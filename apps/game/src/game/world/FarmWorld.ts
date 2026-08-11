@@ -46,6 +46,8 @@ export interface SiteTickContext {
   readonly workBoard?: WorkBoard;
   /** Items temporarily protected from field spoilage by a guided lesson. */
   readonly protectedFieldItems?: readonly string[];
+  /** Pauses the starter clutch until onboarding is ready to teach collection. */
+  readonly animalProductionEnabled?: boolean;
 }
 
 /** What one tick of a site cost and produced. The career applies the money. */
@@ -66,7 +68,22 @@ export interface FarmWorldEvents extends Record<string, unknown> {
   'world:building-placed': { kind: string; tileX: number; tileZ: number };
   'world:building-completed': { kind: string; tileX: number; tileZ: number };
   'world:animal-purchased': { species: AnimalSpecies; count: number };
+  'world:animal-hungry': {
+    species: AnimalSpecies;
+    feedItemId: string;
+    needed: number;
+    available: number;
+  };
+  'world:animal-lost': { species: AnimalSpecies; count: number; remaining: number };
   'world:produce': { itemId: string; quantity: number };
+  'world:stack-collected': { items: Inventory; total: number };
+  'world:goods-spoiled': {
+    storeId: string;
+    items: Inventory;
+    lost: number;
+    emptied: boolean;
+    inTheOpen: boolean;
+  };
   'world:storage-full': { itemId: string; spilled: number };
   'world:parcel-acquired': { parcelId: string; displayName: string };
   'world:carry-changed': { units: number; capacity: number };
@@ -145,6 +162,11 @@ export class FarmWorld {
     return this.stores.combined();
   }
 
+  /** Goods safely collected into a yard/building rather than left in a field pile. */
+  get storedInventory(): Inventory {
+    return this.stores.storedCombined();
+  }
+
   get storageCapacity(): number {
     return this.stores.totalCapacity();
   }
@@ -208,19 +230,31 @@ export class FarmWorld {
       }
     }
 
-    const produce = this.livestock.advance(dtTicks, {
-      available: (itemId) => this.stores.totalOf(itemId),
-      consume: (itemId, quantity) => {
-        this.stores.withdrawAnywhere(itemId, quantity);
-      },
-    });
+    const produce =
+      context.animalProductionEnabled === false
+        ? []
+        : this.livestock.advance(dtTicks, {
+            // Feed has to be carried home first. A crop still lying in a field
+            // pile is not magically available to the animals at the shelter.
+            available: (itemId) => this.stores.storedTotalOf(itemId),
+            consume: (itemId, quantity) => {
+              this.stores.withdrawStoredAnywhere(itemId, quantity);
+            },
+          });
     for (const entry of produce) {
       producedUnits += entry.quantity;
-      // Animal products are a physical pickup, not an invisible transfer into
-      // the yard inventory. The tile in front of the shelter remains
-      // walkable, and putting the stack one tile away also prevents the yard
-      // store from winning the nearest-store tie when the player collects it.
-      this.dropAt(entry.tileX, entry.tileZ + 1, entry.itemId, entry.quantity, 1);
+      // This tile is reserved but walkable, so a crop or newly placed building
+      // cannot hide the basket and the yard store cannot mask its interaction.
+      this.dropAt(
+        this.level.animalProductDrop.tileX,
+        this.level.animalProductDrop.tileZ,
+        entry.itemId,
+        entry.quantity,
+        1,
+      );
+      // Emitting after the stack exists keeps an already-open market/HUD from
+      // refreshing one operation too early and missing the new product.
+      this.events.emit('world:produce', { itemId: entry.itemId, quantity: entry.quantity });
     }
 
     const spoiledUnits = this.stores.advance(
@@ -434,12 +468,25 @@ export class FarmWorld {
     this.livestock.events.on('animal:purchased', (payload) =>
       this.events.emit('world:animal-purchased', payload),
     );
-    this.livestock.events.on('animal:produced', (payload) =>
-      this.events.emit('world:produce', payload),
+    this.livestock.events.on('animal:hungry', (payload) =>
+      this.events.emit('world:animal-hungry', payload),
+    );
+    this.livestock.events.on('animal:lost', (payload) =>
+      this.events.emit('world:animal-lost', {
+        ...payload,
+        remaining: this.livestock.countOf(payload.species),
+      }),
     );
     this.stores.events.on('store:full', (payload) =>
       this.events.emit('world:storage-full', { itemId: payload.itemId, spilled: payload.spilled }),
     );
+    this.stores.events.on('store:spoiled', (payload) => {
+      const store = this.stores.get(payload.storeId);
+      this.events.emit('world:goods-spoiled', {
+        ...payload,
+        inTheOpen: Boolean(store?.id.startsWith('stack-') && store.buildingId === null),
+      });
+    });
     this.carry.events.on('carry:changed', (payload) =>
       this.events.emit('world:carry-changed', payload),
     );
@@ -451,6 +498,14 @@ export class FarmWorld {
       this.grid.setFlag(tile.tileX, tile.tileZ, TileFlag.Occupied, true);
     }
     this.grid.setFlag(this.level.shelter.tileX, this.level.shelter.tileZ, TileFlag.Occupied, true);
+    // Reserve the product collection point from construction without blocking
+    // the player from walking onto it.
+    this.grid.setFlag(
+      this.level.animalProductDrop.tileX,
+      this.level.animalProductDrop.tileZ,
+      TileFlag.Occupied,
+      true,
+    );
     addShelterCollision(this.grid, this.level.shelter.tileX, this.level.shelter.tileZ);
   }
 

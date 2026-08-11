@@ -41,7 +41,12 @@ import type { Unsubscribe } from '@engine/core/types.js';
 import type { AudioSystem } from '@engine/audio/AudioSystem.js';
 import { SOUND } from '@assets/audio/soundIds.js';
 import { inventoryRows } from '@game/items/InventoryView.js';
-import { buildCostFor, spotQuote } from '@game/world/FarmCommands.js';
+import {
+  buildCostFor,
+  sellableInventory,
+  sellableQuantity,
+  spotQuote,
+} from '@game/world/FarmCommands.js';
 import type { FarmScene } from '@game/scenes/FarmScene.js';
 import type { SessionController } from '@game/systems/SessionController.js';
 import type { UiRoot } from '@ui/UiRoot.js';
@@ -78,7 +83,7 @@ export function bindSession(
       const accepted = career.contracts
         .filter((contract) => contract.status === 'open')
         .map((contract) => {
-          const held = world.stores.totalOf(contract.itemId);
+          const held = sellableQuantity(career, contract.itemId);
           const outstanding = contract.quantity - contract.delivered;
           const spotValue = cents((getItem(contract.itemId)?.spotUnitPrice ?? 0) * outstanding);
           const payout = cents(contract.unitPrice * outstanding);
@@ -98,7 +103,7 @@ export function bindSession(
         });
 
       const offers = session.contracts.map((entry) => {
-        const held = world.stores.totalOf(entry.offer.itemId);
+        const held = sellableQuantity(career, entry.offer.itemId);
         const payout = cents(entry.offer.unitPrice * entry.offer.quantity);
         return {
           action: 'accept' as const,
@@ -117,8 +122,8 @@ export function bindSession(
 
       ui.market.update({
         balance: career.balance,
-        rows: inventoryRows(world.inventory, (itemId) => spotQuote(career, itemId)),
-        storageUsed: storageUsed(world.inventory),
+        rows: inventoryRows(sellableInventory(career), (itemId) => spotQuote(career, itemId)),
+        storageUsed: storageUsed(world.storedInventory),
         storageCapacity: world.storageCapacity,
         contractsUnlocked: career.unlocks.includes('contracts'),
         contracts: career.unlocks.includes('contracts') ? [...accepted, ...offers] : [],

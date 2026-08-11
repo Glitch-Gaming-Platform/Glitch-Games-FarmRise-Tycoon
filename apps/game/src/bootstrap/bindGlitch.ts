@@ -144,6 +144,12 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     action: 'goods_sold',
     actionLabel: 'Sold goods',
   },
+  animal_product_collected: {
+    step: 'farm',
+    stepLabel: 'Working the Farm',
+    action: 'animal_product_collected',
+    actionLabel: 'Collected animal produce',
+  },
 
   building_placed: {
     step: 'reinvest',
@@ -162,6 +168,12 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     stepLabel: 'Reinvesting',
     action: 'land_purchased',
     actionLabel: 'Bought the neighbouring parcel',
+  },
+  animal_purchased: {
+    step: 'reinvest',
+    stepLabel: 'Reinvesting',
+    action: 'animal_purchased',
+    actionLabel: 'Bought livestock',
   },
 
   farm_event_warned: {
@@ -188,12 +200,24 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     action: 'fox_scared_off',
     actionLabel: 'Scared off a fox',
   },
+  animal_lost: {
+    step: 'setback',
+    stepLabel: 'Weather and Threats',
+    action: 'animal_lost',
+    actionLabel: 'Lost livestock',
+  },
 
   action_refused: {
     step: 'friction',
     stepLabel: 'Friction',
     action: 'action_refused',
     actionLabel: 'Action refused',
+  },
+  animal_hungry: {
+    step: 'friction',
+    stepLabel: 'Friction',
+    action: 'animal_hungry',
+    actionLabel: 'Livestock lacked feed',
   },
   idle_detected: {
     step: 'friction',

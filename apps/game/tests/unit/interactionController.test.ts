@@ -161,6 +161,98 @@ describe('InteractionController prompts', () => {
     expect(shelterLabels).toEqual(['Drive the animals in']);
   });
 
+  it('lets the egg basket win over a simultaneous fox response at the shelter', () => {
+    const career = makeCareer();
+    const world = career.world;
+    const drop = world.level.animalProductDrop;
+    world.dropAt(drop.tileX, drop.tileZ, 'eggs', 8, 1);
+    career.setIncidents([
+      {
+        id: 'fox-with-eggs',
+        definitionId: 'incident-fox-raid',
+        siteId: world.id,
+        severity: 'minor',
+        warnedTick: 0,
+        impactTick: 600,
+        endsTick: 1_200,
+        targetIds: ['animals-hens'],
+        responseKind: null,
+        responseProgress: 0,
+        resolved: false,
+        appliedMultiplier: null,
+      },
+    ]);
+    const at = world.grid.tileToWorld(drop.tileX, drop.tileZ);
+    const player = new Player(at.x, at.z);
+    const input = {
+      wasPressed: (action: GameAction) => action === 'interact',
+      isDown: () => false,
+      axis: () => 0,
+    } as unknown as InputSystem<GameAction>;
+    const incidents = new IncidentDirector(career);
+    const interaction = new InteractionController(
+      career,
+      player,
+      new PlayerController(player, world, world.physics, input),
+      incidents,
+      input,
+    );
+    const labels: Array<string | null> = [];
+    interaction.events.on('interaction:prompt', ({ label }) => labels.push(label));
+
+    interaction.fixedUpdate(STEP);
+
+    expect(labels).toEqual(['Pick up 8 Eggs']);
+    expect(world.carry.items.eggs).toBe(8);
+    expect(incidents.mostUrgent?.responseProgress).toBe(0);
+  });
+
+  it('lets a harvested crop pile win over a simultaneous drought response', () => {
+    const career = makeCareer();
+    const world = career.world;
+    const placement = world.fields.placements[0]!;
+    world.dropAt(placement.tileX, placement.tileZ, 'pea', 5, 1);
+    career.setIncidents([
+      {
+        id: 'drought-with-peas',
+        definitionId: 'incident-drought',
+        siteId: world.id,
+        severity: 'minor',
+        warnedTick: 0,
+        impactTick: 600,
+        endsTick: 1_200,
+        targetIds: [placement.id],
+        responseKind: null,
+        responseProgress: 0,
+        resolved: false,
+        appliedMultiplier: null,
+      },
+    ]);
+    const at = world.grid.tileToWorld(placement.tileX, placement.tileZ);
+    const player = new Player(at.x, at.z);
+    const input = {
+      wasPressed: (action: GameAction) => action === 'interact',
+      isDown: () => false,
+      axis: () => 0,
+    } as unknown as InputSystem<GameAction>;
+    const incidents = new IncidentDirector(career);
+    const interaction = new InteractionController(
+      career,
+      player,
+      new PlayerController(player, world, world.physics, input),
+      incidents,
+      input,
+    );
+    const labels: Array<string | null> = [];
+    interaction.events.on('interaction:prompt', ({ label }) => labels.push(label));
+
+    interaction.fixedUpdate(STEP);
+
+    expect(labels).toEqual(['Pick up 5 Peas']);
+    expect(world.carry.items.pea).toBe(5);
+    expect(incidents.mostUrgent?.responseProgress).toBe(0);
+  });
+
   it('shelters animals when the response completes and removes the stale prompt', () => {
     const career = makeCareer();
     const world = career.world;
@@ -336,7 +428,7 @@ describe('proximity meters', () => {
 
   it('shows a freshness meter for a pile left in the field', () => {
     const { career, world, placement, player, interaction } = setUp();
-    world.dropAt(placement.tileX, placement.tileZ, 'wheat', 20, 1);
+    world.dropAt(placement.tileX, placement.tileZ, 'pea', 5, 1);
     const at = world.grid.tileToWorld(placement.tileX, placement.tileZ);
     player.position.x = at.x;
     player.position.z = at.z;
@@ -345,7 +437,73 @@ describe('proximity meters', () => {
     expect(freshness).toBeDefined();
     expect(freshness?.target.kind).toBe('store');
     expect(freshness?.value).toBeLessThan(1);
-    expect(freshness?.detail).toMatch(/out in the open/i);
+    expect(freshness?.label).toBe('5 Peas freshness');
+    expect(freshness?.detail).toMatch(/1 spoils in .*left in field/i);
     void career;
+  });
+
+  it('keeps crop status visible while a nearby store owns the E action', () => {
+    const { career, world, placement, interaction } = setUp();
+    plant(career, placement.id, 'corn');
+    world.stores.add({
+      id: 'store-near-plot',
+      buildingId: null,
+      tileX: placement.tileX + 1,
+      tileZ: placement.tileZ,
+      capacity: 60,
+      preserving: false,
+      items: {},
+      quality: {},
+      spoilageRemainder: {},
+    });
+    world.carry.pickUp('wheat', 1);
+
+    const meters = interaction.proximityMeters();
+
+    expect(meters.map((meter) => meter.kind)).toEqual(['water', 'growth']);
+  });
+
+  it('keeps crop status visible while an incident response owns the E action', () => {
+    const career = makeCareer();
+    const world = career.world;
+    const placement = world.fields.placements[0]!;
+    plant(career, placement.id, 'corn');
+    career.setIncidents([
+      {
+        id: 'drought-over-crop',
+        definitionId: 'incident-drought',
+        siteId: world.id,
+        severity: 'minor',
+        warnedTick: 0,
+        impactTick: 600,
+        endsTick: 1_200,
+        targetIds: [placement.id],
+        responseKind: null,
+        responseProgress: 0,
+        resolved: false,
+        appliedMultiplier: null,
+      },
+    ]);
+    const at = world.grid.tileToWorld(placement.tileX, placement.tileZ);
+    const player = new Player(at.x, at.z);
+    const input = {
+      wasPressed: () => false,
+      isDown: () => false,
+      axis: () => 0,
+    } as unknown as InputSystem<GameAction>;
+    const interaction = new InteractionController(
+      career,
+      player,
+      new PlayerController(player, world, world.physics, input),
+      new IncidentDirector(career),
+      input,
+    );
+    const labels: Array<string | null> = [];
+    interaction.events.on('interaction:prompt', ({ label }) => labels.push(label));
+
+    interaction.fixedUpdate(STEP);
+
+    expect(labels).toEqual(['Water the marked beds']);
+    expect(interaction.proximityMeters().map((meter) => meter.kind)).toEqual(['water', 'growth']);
   });
 });

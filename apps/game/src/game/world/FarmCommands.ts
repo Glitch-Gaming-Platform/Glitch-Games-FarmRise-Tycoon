@@ -24,6 +24,7 @@ export {
 export {
   build,
   buildCostFor,
+  buildingSiteProblem,
   buyAnimal,
   buyLand,
   shelterCapacity,
@@ -32,6 +33,8 @@ export {
 export {
   sellSpot,
   spotQuote,
+  sellableInventory,
+  sellableQuantity,
   acceptContract,
   deliverContract,
   failContract,

@@ -18,6 +18,8 @@ import {
   hireWorker,
   plant,
   queueProcessing,
+  sellableInventory,
+  sellSpot,
   tend,
 } from '@game/world/FarmCommands.js';
 import {
@@ -110,6 +112,12 @@ describe('construction and collision', () => {
   it('refuses beds and unowned parcels, while roads remain walkable', () => {
     const bed = career.world.fields.placements[0]!;
     expect(build(career, 'barn', bed.tileX, bed.tileZ).ok).toBe(false);
+    // The anchor is open, but the barn's second tile would cover plot 1.
+    expect(build(career, 'barn', bed.tileX - 1, bed.tileZ).ok).toBe(false);
+    const productDrop = career.world.level.animalProductDrop;
+    expect(build(career, 'road', productDrop.tileX, productDrop.tileZ).ok).toBe(false);
+    const productDropWorld = career.world.grid.tileToWorld(productDrop.tileX, productDrop.tileZ);
+    expect(career.world.physics.isBlockedWorld(productDropWorld.x, productDropWorld.z)).toBe(false);
     expect(build(career, 'road', 4, 4).ok).toBe(false);
     expect(build(career, 'road', 10, 12).ok).toBe(true);
     const road = career.world.grid.tileToWorld(10, 12);
@@ -144,6 +152,19 @@ describe('livestock and persistence', () => {
     expect(stack.items.eggs).toBeLessThan(4);
   });
 
+  it('reports when the last goods in a field pile spoil away', () => {
+    const placement = career.world.fields.placements[0]!;
+    career.world.dropAt(placement.tileX, placement.tileZ, 'pea', 1, 1);
+    const spoiled: Array<{ items: Readonly<Record<string, number>>; emptied: boolean }> = [];
+    career.world.events.on('world:goods-spoiled', ({ items, emptied }) =>
+      spoiled.push({ items, emptied }),
+    );
+
+    career.advance(GAME_DAY_TICKS * 3);
+
+    expect(spoiled).toContainEqual({ items: { pea: 1 }, emptied: true });
+  });
+
   it('enforces shelter capacity and produces only when feed exists', () => {
     expect(buyAnimal(career, 'chicken', 99).ok).toBe(false);
     expect(career.world.stores.withdraw('store-yard', 'corn', 2).ok).toBe(true);
@@ -159,6 +180,60 @@ describe('livestock and persistence', () => {
     expect(career.world.stores.get('store-yard')?.items.eggs ?? 0).toBe(0);
     expect(collectStack(career, eggStack!.tileX, eggStack!.tileZ).ok).toBe(true);
     expect(career.world.carry.items.eggs ?? 0).toBeGreaterThan(0);
+  });
+
+  it('requires feed to be stored at the shelter rather than left in a field pile', () => {
+    expect(career.world.stores.withdraw('store-yard', 'corn', 3).ok).toBe(true);
+    career.world.dropAt(13, 13, 'corn', 3, 1);
+    const hungry: Array<{ needed: number; available: number }> = [];
+    career.world.events.on('world:animal-hungry', ({ needed, available }) =>
+      hungry.push({ needed, available }),
+    );
+
+    career.advance(ANIMALS.chicken.cycleTicks + 1);
+
+    expect(career.world.stores.get('stack-13-13')?.items.corn).toBe(3);
+    expect(career.world.inventory.eggs ?? 0).toBe(0);
+    expect(hungry.at(-1)).toEqual({ needed: 2, available: 0 });
+  });
+
+  it('pauses the starter clutch until the egg lesson enables animal production', () => {
+    const hens = career.world.livestock.groups.find((group) => group.species === 'chicken')!;
+    const before = hens.cycleTicks;
+
+    career.advance(600, ['eggs'], false);
+    expect(hens.cycleTicks).toBe(before);
+    expect(career.world.inventory.eggs ?? 0).toBe(0);
+
+    career.advance(600, ['eggs'], true);
+    expect(career.world.inventory.eggs).toBe(8);
+  });
+
+  it('makes collected animal products sellable but excludes baskets still on the ground', () => {
+    const hens = career.world.livestock.groups.find((group) => group.species === 'chicken')!;
+    const remaining = ANIMALS.chicken.cycleTicks - hens.cycleTicks;
+    career.advance(remaining - 1);
+    career.advance(1);
+    const eggStack = career.world.stores.stores.find(
+      (store) => store.id.startsWith('stack-') && (store.items.eggs ?? 0) > 0,
+    )!;
+    expect(sellableInventory(career).eggs ?? 0).toBe(0);
+
+    const collected = collectStack(career, eggStack.tileX, eggStack.tileZ);
+    expect(collected.ok).toBe(true);
+    expect(sellableInventory(career).eggs).toBe(8);
+    expect(sellSpot(career, 'eggs', 8).ok).toBe(true);
+    expect(career.world.carry.items.eggs).toBe(0);
+  });
+
+  it('charges for purchased animals and adds them to the existing herd', () => {
+    const beforeBalance = career.balance;
+    const beforeHens = career.world.livestock.countOf('chicken');
+
+    expect(buyAnimal(career, 'chicken', 1).ok).toBe(true);
+
+    expect(career.balance).toBe(beforeBalance - ANIMALS.chicken.purchaseCost);
+    expect(career.world.livestock.countOf('chicken')).toBe(beforeHens + 1);
   });
 
   it('turns clover into collectible milk on a normal dairy-cow cycle', () => {
@@ -190,6 +265,8 @@ describe('livestock and persistence', () => {
     expect(milkStack).toBeDefined();
     expect(collectStack(career, milkStack!.tileX, milkStack!.tileZ).ok).toBe(true);
     expect(career.world.carry.items.milk ?? 0).toBeGreaterThan(0);
+    expect(sellableInventory(career).milk).toBeGreaterThan(0);
+    expect(sellSpot(career, 'milk', 1).ok).toBe(true);
   });
 
   it('round-trips the complete career, including localized stores and construction', () => {

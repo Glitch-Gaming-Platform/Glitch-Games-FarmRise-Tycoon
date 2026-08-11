@@ -36,6 +36,8 @@ describe('progression management panels', () => {
     panel.root.querySelector<HTMLButtonElement>('[data-testid="build-carrier-wagon"]')!.click();
     expect(onBuyAnimal).toHaveBeenCalledWith('cow');
     expect(onBuyCarrier).toHaveBeenCalledWith('wagon');
+    expect(panel.root.textContent).toMatch(/stored Corn.*Eggs.*sell them at Market/i);
+    expect(panel.root.textContent).toMatch(/stored Clover.*Milk.*sell them at Market/i);
   });
 
   it('routes milestone, processor, worker and town actions through their panels', () => {

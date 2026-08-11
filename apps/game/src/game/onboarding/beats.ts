@@ -32,6 +32,7 @@ export interface OnboardingContext {
   readonly reinvestments: number;
   readonly eggsReady: number;
   readonly eggsCollected: number;
+  readonly eggsHandled: boolean;
   readonly warningActive: boolean;
   readonly eventsResolved: number;
   readonly marketOpen: boolean;
@@ -185,14 +186,14 @@ export const BEATS: readonly Beat[] = [
   {
     id: 'eggs',
     title: 'Collect the eggs',
-    body: 'The hens lay eggs by the shelter. Walk over and press E when Pick up Eggs appears.',
+    body: 'Hens need stored corn to lay eggs. Walk to the basket and press E when Pick up Eggs appears.',
     key: 'E',
     touch: {
-      body: 'The hens lay eggs by the shelter. Walk over and tap Work when Pick up Eggs appears.',
+      body: 'Hens need stored corn to lay eggs. Walk to the basket and tap Work when Pick up Eggs appears.',
       key: 'WORK',
       hintBody: 'Look just in front of the shelter, then tap Work beside the egg basket.',
     },
-    isDone: (c) => c.eggsCollected > 0,
+    isDone: (c) => c.eggsHandled,
     hint: {
       afterMs: 14_000,
       body: 'Look just in front of the shelter, then press E beside the egg basket.',

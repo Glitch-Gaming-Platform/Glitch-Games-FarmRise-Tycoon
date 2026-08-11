@@ -28,6 +28,8 @@ export interface LevelDefinition {
   }[];
   /** Tile the animal shelter occupies. Animals are penned here. */
   readonly shelter: { readonly tileX: number; readonly tileZ: number };
+  /** Reserved walkable tile where animal products wait for collection. */
+  readonly animalProductDrop: { readonly tileX: number; readonly tileZ: number };
   /** Where deliveries leave the farm for town. The wagon and buyers meet here. */
   readonly townGate: { readonly tileX: number; readonly tileZ: number };
 }

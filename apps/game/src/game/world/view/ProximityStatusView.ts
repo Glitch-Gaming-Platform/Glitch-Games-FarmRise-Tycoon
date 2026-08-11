@@ -121,7 +121,7 @@ export class ProximityStatusView {
     });
     const sprite = new THREE.Sprite(material);
     sprite.name = 'ProximityStatusBar';
-    sprite.scale.set(2.9, 0.72, 1);
+    sprite.scale.set(3.15, 0.82, 1);
     sprite.renderOrder = 21;
     sprite.frustumCulled = false;
     return { sprite, texture, canvas, key: '' };
@@ -142,17 +142,17 @@ function drawMeter(canvas: HTMLCanvasElement, meter: ProximityMeter): void {
   context.fill();
 
   context.fillStyle = '#2a2420';
-  context.font = '700 27px system-ui, sans-serif';
+  context.font = '700 25px system-ui, sans-serif';
   context.textAlign = 'left';
   context.textBaseline = 'middle';
-  context.fillText(meter.label, 34, 42, 112);
-  context.font = '600 23px system-ui, sans-serif';
-  context.fillText(meter.detail, 150, 42, 326);
+  context.fillText(meter.label, 34, 34, 444);
+  context.font = '600 20px system-ui, sans-serif';
+  context.fillText(meter.detail, 34, 62, 444);
 
-  roundedRect(context, 34, 74, 444, 22, 11);
+  roundedRect(context, 34, 85, 444, 18, 9);
   context.fillStyle = '#c8aa72';
   context.fill();
-  roundedRect(context, 34, 74, Math.max(8, 444 * progress), 22, 11);
+  roundedRect(context, 34, 85, Math.max(8, 444 * progress), 18, 9);
   context.fillStyle = meter.urgent
     ? '#e5ad2f'
     : meter.kind === 'water'

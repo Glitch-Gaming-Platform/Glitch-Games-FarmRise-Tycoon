@@ -29,7 +29,12 @@ export interface AnimalProduce {
 export interface AnimalModelEvents extends Record<string, unknown> {
   'animal:purchased': { species: AnimalSpecies; count: number };
   'animal:produced': { itemId: string; quantity: number };
-  'animal:hungry': { species: AnimalSpecies; feedItemId: string };
+  'animal:hungry': {
+    species: AnimalSpecies;
+    feedItemId: string;
+    needed: number;
+    available: number;
+  };
   'animal:lost': { species: AnimalSpecies; count: number };
 }
 
@@ -122,10 +127,13 @@ export class AnimalModel {
       group.cycleTicks -= definition.cycleTicks;
 
       const needed = definition.feedPerCycle * group.count;
-      if (feed.available(definition.feedItemId) < needed) {
+      const available = feed.available(definition.feedItemId);
+      if (available < needed) {
         this.events.emit('animal:hungry', {
           species: group.species,
           feedItemId: definition.feedItemId,
+          needed,
+          available,
         });
         continue;
       }
