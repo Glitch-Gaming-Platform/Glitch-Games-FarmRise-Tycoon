@@ -12,7 +12,11 @@ import {
 import { constructionProgressState } from '../../src/game/world/view/ConstructionProgressView.js';
 import { incidentLightingTarget } from '../../src/game/world/view/FarmLightingResponse.js';
 import { groundGoodsActionLabel } from '../../src/game/world/view/GroundGoodsView.js';
-import { proximityMeterAnchor } from '../../src/game/world/view/ProximityStatusView.js';
+import {
+  proximityMeterAnchor,
+  proximityMeterGroupId,
+  proximityMeterStackLayout,
+} from '../../src/game/world/view/ProximityStatusView.js';
 import { fundedCareer, makeCareer } from '../helpers/career.js';
 
 describe('world animation state', () => {
@@ -59,6 +63,49 @@ describe('world animation state', () => {
       urgent: true,
     });
     expect(animalAnchor).toEqual({ x: 4, y: 1.25, z: 7 });
+  });
+
+  it('stacks crop gauges inside one billboard so camera pitch cannot overlap them', () => {
+    expect(proximityMeterStackLayout(1)).toEqual({
+      canvasHeight: 128,
+      spriteHeight: 0.065,
+      anchorOffsetY: 0,
+    });
+    expect(proximityMeterStackLayout(2)).toEqual({
+      canvasHeight: 256,
+      spriteHeight: 0.13,
+      anchorOffsetY: 0,
+    });
+    const threeCards = proximityMeterStackLayout(3);
+    expect(threeCards.canvasHeight).toBe(384);
+    expect(threeCards.spriteHeight).toBeCloseTo(0.195);
+    expect(threeCards.anchorOffsetY).toBe(0);
+    const storageCard = proximityMeterStackLayout(1, 2);
+    expect(storageCard.canvasHeight).toBe(176);
+    expect(storageCard.spriteHeight).toBeCloseTo(0.089375);
+    expect(storageCard.anchorOffsetY).toBe(0);
+  });
+
+  it('groups crop and dropped-goods cards when they share a tile', () => {
+    const plotMeter = {
+      kind: 'water',
+      target: { kind: 'plot', id: 'plot-1' },
+      label: 'Water',
+      value: 0.5,
+      detail: 'Dry in 1m',
+      urgent: false,
+    } as const;
+    const storeMeter = {
+      kind: 'freshness',
+      target: { kind: 'store', id: 'stack-1' },
+      label: '5 Peas freshness',
+      value: 0.8,
+      detail: '1 spoils in 2m',
+      urgent: false,
+    } as const;
+    expect(proximityMeterGroupId(plotMeter, { x: 4, y: 1.75, z: 7 })).toBe(
+      proximityMeterGroupId(storeMeter, { x: 4, y: 1.15, z: 7 }),
+    );
   });
 
   it('reports construction percentage and remaining time for the overhead bar', () => {

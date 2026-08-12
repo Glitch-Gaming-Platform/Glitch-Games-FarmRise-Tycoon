@@ -155,8 +155,8 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
       render();
     }),
 
-    interaction.events.on('interaction:prompt', ({ label, secondaryLabel }) =>
-      hud.setPrompt(label, secondaryLabel),
+    interaction.events.on('interaction:prompt', ({ label, secondaryLabel, notice }) =>
+      hud.setPrompt(label, secondaryLabel, notice),
     ),
     interaction.events.on('interaction:refused', ({ reason }) => hud.toast(reason, 'warn')),
     interaction.events.on('interaction:crop-selected', render),

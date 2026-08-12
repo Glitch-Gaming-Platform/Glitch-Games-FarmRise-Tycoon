@@ -276,17 +276,25 @@ describe('InteractionController prompts', () => {
       input,
     );
     const messages: string[] = [];
+    const notices: Array<string | null> = [];
     interaction.events.on('interaction:refused', ({ reason }) => messages.push(reason));
+    interaction.events.on('interaction:prompt', ({ notice }) => notices.push(notice));
 
     interaction.fixedUpdate(STEP);
     interaction.fixedUpdate(STEP);
     expect(messages).toEqual(["You can't carry anymore. Store some items first."]);
+    expect(notices).toEqual(["You can't carry anymore. Store some items first."]);
 
     world.carry.drain();
     interaction.fixedUpdate(STEP);
     world.carry.pickUp('wheat', world.carry.capacity);
     interaction.fixedUpdate(STEP);
     expect(messages).toHaveLength(2);
+    expect(notices).toEqual([
+      "You can't carry anymore. Store some items first.",
+      null,
+      "You can't carry anymore. Store some items first.",
+    ]);
   });
 
   it('shelters animals when the response completes and removes the stale prompt', () => {
@@ -478,6 +486,26 @@ describe('proximity meters', () => {
     void career;
   });
 
+  it('keeps the full-pack warning beside Tend while goods remain on the crop tile', () => {
+    const { career, world, placement, interaction } = setUp();
+    plant(career, placement.id, 'corn');
+    world.dropAt(placement.tileX, placement.tileZ, 'pea', 5, 1);
+    world.carry.pickUp('wheat', world.carry.capacity);
+    const prompts: Array<{ label: string | null; notice: string | null }> = [];
+    interaction.events.on('interaction:prompt', ({ label, notice }) =>
+      prompts.push({ label, notice }),
+    );
+
+    interaction.fixedUpdate(STEP);
+
+    expect(prompts).toEqual([
+      {
+        label: 'Tend',
+        notice: "You can't carry anymore. Store some items first.",
+      },
+    ]);
+  });
+
   it('keeps crop status visible while a nearby store owns the E action', () => {
     const { career, world, placement, interaction } = setUp();
     plant(career, placement.id, 'corn');
@@ -497,6 +525,126 @@ describe('proximity meters', () => {
     const meters = interaction.proximityMeters();
 
     expect(meters.map((meter) => meter.kind)).toEqual(['water', 'growth']);
+  });
+
+  it('shows a nearby storage building capacity, free space and every stored item', () => {
+    const { world, player, interaction } = setUp();
+    world.structures.add({
+      id: 'building-test-barn',
+      kind: 'barn',
+      tileX: 10,
+      tileZ: 18,
+      rotation: 0,
+      remainingBuildTicks: 0,
+      broken: false,
+    });
+    world.stores.add({
+      id: 'store-building-test-barn',
+      buildingId: 'building-test-barn',
+      tileX: 10,
+      tileZ: 18,
+      capacity: 120,
+      preserving: false,
+      items: { wheat: 12, cheese: 4, eggs: 3 },
+      quality: { wheat: 1, cheese: 1, eggs: 1 },
+      spoilageRemainder: {},
+    });
+    const at = world.grid.tileToWorld(11, 18);
+    player.position.x = at.x;
+    player.position.z = at.z;
+
+    const meters = interaction.proximityMeters();
+    const storage = meters.find((meter) => meter.kind === 'storage');
+
+    expect(storage?.label).toBe('Barn storage');
+    expect(storage?.detail).toBe('23/120 used · 97 until full');
+    expect(storage?.contents).toEqual(['4 Cheese', '3 Eggs', '12 Wheat']);
+    expect(storage?.value).toBeCloseTo(97 / 120);
+    expect(storage?.urgent).toBe(false);
+    expect(meters.find((meter) => meter.kind === 'freshness')?.target).toEqual(storage?.target);
+
+    const store = world.stores.get('store-building-test-barn')!;
+    store.items = {};
+    const empty = interaction.proximityMeters().find((meter) => meter.kind === 'storage');
+    expect(empty?.detail).toBe('0/120 used · 120 until full');
+    expect(empty?.contents).toEqual([]);
+
+    store.items = { wheat: 120 };
+    const full = interaction.proximityMeters().find((meter) => meter.kind === 'storage');
+    expect(full?.detail).toBe('Full · 120/120 used');
+    expect(full?.value).toBe(0);
+    expect(full?.urgent).toBe(true);
+
+    const far = world.grid.tileToWorld(2, 2);
+    player.position.x = far.x;
+    player.position.z = far.z;
+    expect(interaction.proximityMeters().some((meter) => meter.kind === 'storage')).toBe(false);
+  });
+
+  it('keeps storage details visible while a broken building owns the Repair prompt', () => {
+    const { world, player, interaction } = setUp();
+    world.structures.add({
+      id: 'building-broken-barn',
+      kind: 'barn',
+      tileX: 10,
+      tileZ: 18,
+      rotation: 0,
+      remainingBuildTicks: 0,
+      broken: true,
+    });
+    world.stores.add({
+      id: 'store-building-broken-barn',
+      buildingId: 'building-broken-barn',
+      tileX: 10,
+      tileZ: 18,
+      capacity: 120,
+      preserving: false,
+      items: { wheat: 20 },
+      quality: { wheat: 1 },
+      spoilageRemainder: {},
+    });
+    const at = world.grid.tileToWorld(10, 18);
+    player.position.x = at.x;
+    player.position.z = at.z;
+    const prompts: Array<string | null> = [];
+    interaction.events.on('interaction:prompt', ({ label }) => prompts.push(label));
+
+    interaction.fixedUpdate(STEP);
+
+    expect(prompts).toEqual(['Repair']);
+    expect(interaction.proximityMeters().map((meter) => meter.kind)).toEqual([
+      'freshness',
+      'storage',
+    ]);
+  });
+
+  it('does not show storage capacity before the building has finished construction', () => {
+    const { world, player, interaction } = setUp();
+    world.structures.add({
+      id: 'building-unfinished-barn',
+      kind: 'barn',
+      tileX: 10,
+      tileZ: 18,
+      rotation: 0,
+      remainingBuildTicks: 10,
+      broken: false,
+    });
+    world.stores.add({
+      id: 'store-building-unfinished-barn',
+      buildingId: 'building-unfinished-barn',
+      tileX: 10,
+      tileZ: 18,
+      capacity: 120,
+      preserving: false,
+      items: {},
+      quality: {},
+      spoilageRemainder: {},
+    });
+    const at = world.grid.tileToWorld(10, 18);
+    player.position.x = at.x;
+    player.position.z = at.z;
+
+    expect(interaction.proximityMeters().some((meter) => meter.kind === 'storage')).toBe(false);
   });
 
   it('keeps crop status visible while an incident response owns the E action', () => {

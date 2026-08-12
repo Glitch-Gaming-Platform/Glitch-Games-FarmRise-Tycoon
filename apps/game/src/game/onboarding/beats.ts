@@ -72,7 +72,7 @@ export const BEATS: readonly Beat[] = [
   {
     id: 'move',
     title: 'Walk to the soil plots',
-    body: 'Use W, A, S and D to walk over to one of the brown plots of land.',
+    body: 'Use W, A, S and D to move. Hold SHIFT to run. Head to one of the brown plots of land.',
     key: 'W A S D',
     touch: {
       body: 'Use the joystick to walk over to one of the brown plots of land.',
@@ -83,7 +83,7 @@ export const BEATS: readonly Beat[] = [
     alreadySatisfied: (c) => c.plantedPlots > 0,
     hint: {
       afterMs: 12_000,
-      body: 'Keep walking toward a brown plot until the Plant Wheat prompt appears.',
+      body: 'Hold SHIFT to run. Keep moving toward a brown plot until the Plant Wheat prompt appears.',
     },
   },
   {

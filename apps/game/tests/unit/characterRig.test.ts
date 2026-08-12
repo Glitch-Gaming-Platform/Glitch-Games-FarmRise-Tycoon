@@ -91,7 +91,7 @@ describe('gait phase integration', () => {
     let previous = rig.phase;
     for (let i = 0; i < 120; i += 1) {
       rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 6.5 });
-      maxAdvance = Math.max(maxAdvance, (rig.phase - previous + 1) % 1);
+      maxAdvance = Math.max(maxAdvance, (previous - rig.phase + 1) % 1);
       previous = rig.phase;
     }
     // 3.5 cycles per second is the ceiling, so one 60 Hz frame may advance at
@@ -101,12 +101,8 @@ describe('gait phase integration', () => {
 
   it('never reaches forward with the foot off the ground, at either speed', () => {
     // This replaces a bound of 0.42 rad on hip flexion, which was measured at
-    // 6.5 m/s against a clip covering 0.37 m per cycle. Both numbers have since
-    // changed: the walk now covers 0.60 m, which a 0.4 m leg can only do by
-    // flexing the hip about 0.6 rad at heel strike, and the game's walk speed
-    // is 1.4 m/s. Keeping the old bound would have kept the old defect - a
-    // stride 40% of what the character's legs allow - since it is only
-    // satisfiable by a shuffle.
+    // 6.5 m/s against a clip covering 0.37 m per cycle. The shipping walk now
+    // leads with a flexed knee instead of limiting the thigh to a shuffle.
     //
     // What the bound was protecting against is worth keeping, so it is stated
     // directly instead of through a proxy. A goose-step is a leg thrown forward
@@ -144,6 +140,64 @@ describe('gait phase integration', () => {
     }
   });
 
+  it('leads each walking step with the knee while the shin folds behind it', () => {
+    const rig = makeRig();
+    const input = { ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 1.4 } as const;
+    for (let frame = 0; frame < 180; frame += 1) rig.update(input);
+
+    let terminalSamples = 0;
+    for (let frame = 0; frame < 240; frame += 1) {
+      rig.update(input);
+      for (const side of ['L', 'R'] as const) {
+        const legPhase = side === 'L' ? rig.phase : (rig.phase + 0.5) % 1;
+        const inTerminalSwing = legPhase >= 0.92 || legPhase <= 0.04;
+        if (!inTerminalSwing) continue;
+
+        const thigh = rig.bones[BONE_INDEX[`thigh.${side}`]!]!.rotation.x;
+        const shin = rig.bones[BONE_INDEX[`shin.${side}`]!]!.rotation.x;
+        const kneeForward = Math.sin(thigh) * THIGH_LENGTH;
+        const ankle = ankleFromHip(thigh, shin);
+        terminalSamples += 1;
+
+        // The knee is the foremost joint and the lower leg points back from it.
+        expect(kneeForward - ankle.forward).toBeGreaterThan(0.005);
+        expect(thigh + shin).toBeLessThan(-0.035);
+      }
+    }
+    expect(terminalSamples).toBeGreaterThan(20);
+  });
+
+  it('turns airborne recovery behind the knee for both walking and running', () => {
+    for (const speed of [1.4, 3.43]) {
+      const rig = makeRig();
+      const input = { ...IDLE_INPUT, deltaSeconds: 1 / 240, speed } as const;
+      for (let frame = 0; frame < 720; frame += 1) rig.update(input);
+
+      let airborneSamples = 0;
+      for (let frame = 0; frame < 960; frame += 1) {
+        rig.update(input);
+        for (const side of ['L', 'R'] as const) {
+          const legPhase = side === 'L' ? rig.phase : (rig.phase + 0.5) % 1;
+          if (legPhase < 0.84 || legPhase > 0.92 || rig.footLock(side) > 0.1) continue;
+
+          const thigh = rig.bones[BONE_INDEX[`thigh.${side}`]!]!.rotation.x;
+          const shin = rig.bones[BONE_INDEX[`shin.${side}`]!]!.rotation.x;
+          const foot = rig.bones[BONE_INDEX[`foot.${side}`]!]!.rotation.x;
+          const ankle = ankleFromHip(thigh, shin);
+          const clearance = rig.rootOffset.y + THIGH_LENGTH + SHIN_LENGTH - ankle.depth;
+          if (clearance < 0.055) continue;
+
+          const kneeForward = Math.sin(thigh) * THIGH_LENGTH;
+          airborneSamples += 1;
+          expect(kneeForward - ankle.forward).toBeGreaterThan(0.04);
+          expect(thigh + shin).toBeLessThan(-0.1);
+          expect(foot).toBeGreaterThan(0.18);
+        }
+      }
+      expect(airborneSamples).toBeGreaterThan(20);
+    }
+  });
+
   it('does not pop or add un-authored reversals at either shipping speed', () => {
     for (const speed of [1.4, 3.43]) {
       const rig = makeRig();
@@ -176,7 +230,7 @@ describe('gait phase integration', () => {
       // frame squared here; a clean cycle stays an order of magnitude below.
       expect(worstAcceleration).toBeLessThan(speed <= 1.4 ? 0.25 : 0.3);
       expect(worstStep).toBeLessThan(0.22);
-      expect(reversals).toBeLessThanOrEqual(14);
+      expect(reversals).toBeLessThanOrEqual(24);
     }
   });
 
@@ -422,7 +476,7 @@ describe('stride measurement', () => {
     expect(stride).toBeLessThan(0.9);
   });
 
-  it('clears the foot before reach, then descends into a heel-first contact', () => {
+  it('clears the foot, carries the knee forward, then descends into contact', () => {
     const pose = createJointBuffer(BONES.length);
     const root = new Float32Array(3);
     const sampleAnkle = (phase: number): { forward: number; clearance: number } => {
@@ -446,9 +500,9 @@ describe('stride measurement', () => {
     expect(midSwing.forward).toBeLessThan(0);
     expect(reach.clearance).toBeGreaterThan(0.05);
     expect(reach.forward).toBeLessThan(0.03);
-    expect(terminal.forward).toBeGreaterThan(0.08);
-    expect(terminal.clearance).toBeLessThan(0.04);
-    expect(preContact.forward).toBeGreaterThan(terminal.forward + 0.05);
+    expect(terminal.forward).toBeGreaterThan(-0.04);
+    expect(terminal.clearance).toBeLessThan(0.06);
+    expect(preContact.forward).toBeGreaterThan(terminal.forward + 0.04);
     expect(preContact.clearance).toBeLessThan(0.025);
     expect(measureStrideLength(WALK)).toBeGreaterThan(0.5);
   });

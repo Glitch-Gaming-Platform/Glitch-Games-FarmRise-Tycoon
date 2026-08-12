@@ -134,21 +134,27 @@ async function reachEggStack(page: Page) {
   const prompt = page.getByTestId('hud-prompt');
   if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
 
-  // The first plot and yard route stop west of the shelter. The basket is
-  // south-east of it, and the shelter's solid footprint blocks a straight D
-  // route, so step around the front corner before heading east.
+  // The first plot is north-west of the shelter. The basket is on its east
+  // side, and the shelter's solid footprint blocks a straight diagonal. Walk
+  // a three-leg route below the building. These durations follow the shipped
+  // 3.43 m/s sprint rather than the old arcade-speed player movement.
   await page.waitForTimeout(1_000);
+  await page.keyboard.down('Shift');
   await page.keyboard.down('s');
-  await page.waitForTimeout(1_400);
+  await page.waitForTimeout(3_500);
   await page.keyboard.up('s');
   await page.keyboard.down('d');
+  await page.waitForTimeout(4_500);
+  await page.keyboard.up('d');
+  await page.keyboard.down('w');
   try {
-    for (let step = 0; step < 100; step += 1) {
+    for (let step = 0; step < 60; step += 1) {
       await page.waitForTimeout(100);
       if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
     }
   } finally {
-    await page.keyboard.up('d');
+    await page.keyboard.up('w');
+    await page.keyboard.up('Shift');
   }
 
   await expect(prompt).toContainText(/Pick up .*Eggs/i);
@@ -197,7 +203,9 @@ test('a new player is given something to do within seconds', async ({ page }) =>
   await enterFarm(page);
   const coach = page.getByTestId('coach-mark');
   await expect(coach).toBeVisible({ timeout: 10_000 });
-  await expect(coach).toContainText(/(W, A, S and D|joystick).*brown plots/i);
+  await expect(coach).toContainText(/W A S D/i);
+  await expect(coach).toContainText(/Hold SHIFT to run/i);
+  await expect(coach).toContainText(/brown plot/i);
 });
 
 test('the first-time loop reaches harvest, sale and reinvestment without a long wait', async ({
@@ -259,6 +267,9 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   await expect(page.getByTestId('coach-mark')).toContainText(/Collect the eggs/i);
   await reachEggStack(page);
   await page.keyboard.press('e');
+  await expect(page.getByTestId('hud-prompt')).toContainText(
+    "You can't carry anymore. Store some items first.",
+  );
   await page.keyboard.press('m');
   await expect(page.getByTestId('market-sell-all-eggs')).toBeVisible();
   await page.getByTestId('market-close').click();

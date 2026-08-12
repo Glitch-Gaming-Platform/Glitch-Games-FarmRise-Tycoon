@@ -79,14 +79,11 @@ export interface Clip {
  *
  * ## Why the forward reach is larger than the previous version's
  *
- * The old table capped the ankle at 0.106 m in front of the hip because a
- * forward-thrown leg reads as a goose-step. But the goose-step read comes from
- * a *straight leg swung forward under a high pelvis*, not from reach as such.
- * Here the reach is paid for with pelvis drop and a bent knee through loading
- * response, which is the silhouette of someone taking a step rather than
- * someone marching. The excursion is still slightly rear-biased in effect,
- * because the trailing half of the cycle is where the toe roll adds its own
- * extension.
+ * The lead leg stays knee-first through terminal swing and contact. The thigh
+ * carries the knee forward while the shin remains folded behind it, avoiding
+ * the straight-boot "kick" silhouette even at the widest part of the stride.
+ * The excursion remains rear-biased because the trailing half of the cycle is
+ * where the toe roll adds its own extension.
  */
 export const WALK: Clip = {
   name: 'walk',
@@ -94,7 +91,8 @@ export const WALK: Clip = {
   nominalStride: 0.6,
   keys: [
     {
-      // Heel strike, and one of the two lowest points of the cycle.
+      // Heel strike. The pelvis remains above the following loading pose so the
+      // leg can place the heel without straightening the knee.
       //
       // Every stance key below was solved rather than dialled: the ankle path
       // was designed in hip space - how far in front, how far behind, how much
@@ -102,20 +100,17 @@ export const WALK: Clip = {
       // put the ankle exactly there. That is why the numbers look arbitrary and
       // why they should not be nudged casually: they are the answer to a
       // geometry problem, and the pelvis height in `root` is part of the same
-      // answer. A foot 0.185 m in front of the hip is only reachable with the
-      // pelvis 4 cm down.
+      // answer. Pelvis height and joint fold are authored as one chain.
       //
-      // The knee is nearly straight here because a straight leg reaches further
-      // for less hip flexion. That is also what separates this pose from a
-      // goose-step: a goose-step is a straight leg thrown forward under a high
-      // pelvis, and this is a straight leg reaching for the floor under a low
-      // one.
+      // The knee arrives ahead of the ankle and the lower leg still angles
+      // backward. This deliberately trades a little step length for a weighted,
+      // human landing instead of presenting the sole as a forward kick.
       t: 0.0,
-      root: [-0.034, -0.0427, 0.002],
+      root: [-0.034, -0.025, 0.002],
       pose: {
-        'thigh.L': [0.568, 0, 0],
-        'shin.L': [-0.171, 0, 0],
-        'foot.L': [0.16, 0, 0],
+        'thigh.L': [0.58, 0, 0],
+        'shin.L': [-0.68, 0, 0],
+        'foot.L': [0.18, 0, 0],
         'toe.L': [0, 0, 0],
         'shoulder.R': [0.06, 0, -0.04],
         'upperarm.R': [0.38, 0, -0.08],
@@ -138,9 +133,9 @@ export const WALK: Clip = {
       t: 0.12,
       root: [-0.038, -0.038, 0.008],
       pose: {
-        'thigh.L': [0.53, 0, 0],
-        'shin.L': [-0.634, 0, 0],
-        'foot.L': [0.02, 0, 0],
+        'thigh.L': [0.45, 0, 0],
+        'shin.L': [-0.9, 0, 0],
+        'foot.L': [0.2, 0, 0],
         'toe.L': [0, 0, 0],
         'shoulder.R': [0.055, 0, -0.045],
         'upperarm.R': [0.36, 0, -0.09],
@@ -214,13 +209,13 @@ export const WALK: Clip = {
       },
     },
     {
-      // The push resolves behind the body before recovery begins. The folded
-      // knee keeps this strong hip extension in swing rather than dragging the
-      // toe, producing an unmistakably rear-biased propulsion silhouette.
+      // The push resolves at its rear-most point before recovery begins. The
+      // folded knee keeps this strong hip extension in swing rather than
+      // dragging the toe, producing a rear-biased propulsion silhouette.
       t: 0.68,
       root: [0.032, -0.035, 0.004],
       pose: {
-        'thigh.L': [-0.545, 0, 0],
+        'thigh.L': [-0.6, 0, 0],
         'shin.L': [-0.8, 0, 0],
         'foot.L': [0.1, 0, 0],
         'toe.L': [0.06, 0, 0],
@@ -234,13 +229,13 @@ export const WALK: Clip = {
       },
     },
     {
-      // Rear-most propulsion arrives after the foot lock has released. This
-      // keeps the support-to-swing hand-off monotonic while preserving the
-      // stronger rear excursion that gives the walk its push.
+      // Recovery starts immediately after the rear extreme. Distributing the
+      // thigh return across this key and the next prevents a one-frame snap at
+      // the shipping walk cadence.
       t: 0.72,
       root: [0.032, -0.025, 0.005],
       pose: {
-        'thigh.L': [-0.6, 0, 0],
+        'thigh.L': [-0.46, 0, 0],
         'shin.L': [-1.12, 0, 0],
         'foot.L': [0.11, 0, 0],
         'toe.L': [0.04, 0, 0],
@@ -259,7 +254,7 @@ export const WALK: Clip = {
       t: 0.76,
       root: [0.03, -0.012, 0.004],
       pose: {
-        'thigh.L': [-0.4, 0, 0],
+        'thigh.L': [-0.3, 0, 0],
         'shin.L': [-1.25, 0, 0],
         'foot.L': [0.12, 0, 0],
         'toe.L': [0.02, 0, 0],
@@ -307,14 +302,14 @@ export const WALK: Clip = {
       },
     },
     {
-      // Terminal swing begins only after the heel has descended. The nearly
-      // fixed thigh and straightening knee create a clean heel-first path.
+      // Terminal swing begins only after the heel has descended. The thigh now
+      // leads decisively while the heel stays tucked behind the knee.
       t: 0.92,
       root: [0.008, 0, 0.002],
       pose: {
-        'thigh.L': [0.45, 0, 0],
-        'shin.L': [-0.46, 0, 0],
-        'foot.L': [0.15, 0, 0],
+        'thigh.L': [0.43, 0, 0],
+        'shin.L': [-1.05, 0, 0],
+        'foot.L': [0.17, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.32, 0, -0.07],
         'forearm.R': [-0.34, 0, -0.03],
@@ -326,15 +321,14 @@ export const WALK: Clip = {
       },
     },
     {
-      // Lower the heel on a mostly vertical path. The forward reach grows in
-      // small increments now, so the shoe is not skimming the soil at sprint
-      // speed immediately before contact.
+      // Lower the heel on a mostly vertical path. The knee remains the foremost
+      // point of the leg while the ankle begins to open beneath it.
       t: 0.94,
-      root: [-0.004, -0.008, 0.002],
+      root: [-0.004, -0.002, 0.002],
       pose: {
-        'thigh.L': [0.47, 0, 0],
-        'shin.L': [-0.372, 0, 0],
-        'foot.L': [0.153, 0, 0],
+        'thigh.L': [0.48, 0, 0],
+        'shin.L': [-0.9, 0, 0],
+        'foot.L': [0.2, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.34, 0, -0.073],
         'forearm.R': [-0.345, 0, -0.03],
@@ -348,14 +342,14 @@ export const WALK: Clip = {
       },
     },
     {
-      // Pre-contact gains reach by opening the knee, not by kicking the thigh
-      // farther forward; the following root drop supplies the final heel fall.
+      // Pre-contact opens only enough to place the heel. The shin still trails
+      // the knee, so the lower leg cannot turn into a straight forward spear.
       t: 0.96,
-      root: [-0.016, -0.02, 0.002],
+      root: [-0.016, -0.012, 0.002],
       pose: {
-        'thigh.L': [0.49, 0, 0],
-        'shin.L': [-0.269, 0, 0],
-        'foot.L': [0.155, 0, 0],
+        'thigh.L': [0.53, 0, 0],
+        'shin.L': [-0.8, 0, 0],
+        'foot.L': [0.19, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.36, 0, -0.076],
         'forearm.R': [-0.35, 0, -0.03],
@@ -370,11 +364,11 @@ export const WALK: Clip = {
     },
     {
       t: 0.98,
-      root: [-0.026, -0.032, 0.002],
+      root: [-0.026, -0.02, 0.002],
       pose: {
-        'thigh.L': [0.52, 0, 0],
-        'shin.L': [-0.212, 0, 0],
-        'foot.L': [0.158, 0, 0],
+        'thigh.L': [0.56, 0, 0],
+        'shin.L': [-0.72, 0, 0],
+        'foot.L': [0.18, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.37, 0, -0.078],
         'forearm.R': [-0.35, 0, -0.03],

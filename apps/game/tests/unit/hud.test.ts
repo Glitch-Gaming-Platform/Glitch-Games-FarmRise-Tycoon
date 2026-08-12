@@ -63,6 +63,10 @@ describe('context prompt', () => {
     hud.setPrompt('Harvest');
     expect(hud.root.textContent).toContain('Harvest  ·  press E');
     expect(hud.root.textContent).not.toContain('press Q');
+
+    hud.setPrompt('Tend', null, "You can't carry anymore. Store some items first.");
+    expect(hud.root.textContent).toContain('Tend  ·  press E');
+    expect(hud.root.textContent).toContain("You can't carry anymore. Store some items first.");
     hud.dispose();
   });
 });

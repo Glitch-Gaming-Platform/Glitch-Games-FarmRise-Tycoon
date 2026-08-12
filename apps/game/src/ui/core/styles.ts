@@ -165,6 +165,12 @@ export const UI_STYLES = `
   box-shadow: 0 3px 0 var(--fr-teal-dark); padding: 8px 18px; color: var(--fr-teal-dark);
   font-size: 14px; font-weight: 800; white-space: nowrap;
 }
+.fr-hud__prompt {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  box-sizing: border-box; max-width: min(720px, calc(100vw - 24px));
+  white-space: normal; text-align: center;
+}
+.fr-hud__prompt-notice { color: var(--fr-red); font-size: 12px; line-height: 1.2; }
 .fr-placing--blocked { border-color: var(--fr-red); color: var(--fr-red); box-shadow: 0 3px 0 var(--fr-red); }
 .fr-hud__toasts {
   position: static; grid-column: 1 / -1; justify-self: center;

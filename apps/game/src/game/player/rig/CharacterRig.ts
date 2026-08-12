@@ -323,7 +323,7 @@ export class CharacterRig {
     // `speed * dt`, because cadence is then `speed / stride` by definition, so
     // genuine foot planting at honest speeds is unchanged.
     if (moving) {
-      this.#phase += cadence * dt;
+      this.#phase -= cadence * dt;
       this.#phase -= Math.floor(this.#phase);
     }
 
@@ -382,6 +382,8 @@ export class CharacterRig {
         // walking speeds while only applying half of the correction, leaving a
         // visible residual skate precisely when the camera can read it best.
         this.#applyFootLock(gaitDistance, lockAuthority, dt);
+        this.#turnRecoveryBehind('L', this.#phase, locomotionWeight, runBlend);
+        this.#turnRecoveryBehind('R', (this.#phase + 0.5) % 1, locomotionWeight, runBlend);
       } else {
         this.#resetFeet();
       }
@@ -564,6 +566,45 @@ export class CharacterRig {
     this.#angles[thigh + 2] = this.#angles[thigh + 2]! + passing * (side === 'L' ? -0.032 : 0.032);
     this.#angles[foot] = this.#angles[foot]! + heelStrike * 0.075 - toeOff * 0.1 + passing * 0.045;
     this.#angles[toe] = this.#angles[toe]! - heelStrike * 0.025 + toeOff * 0.13;
+  }
+
+  /**
+   * Turns the airborne recovery silhouette behind the body for both walk and run.
+   *
+   * The contact solver remains authoritative once the boot plants. Before that,
+   * terminal swing keeps the knee in front while the shin folds back, so the
+   * shoe cannot become the leading point of a straight-leg kick.
+   */
+  #turnRecoveryBehind(side: 'L' | 'R', phase: number, locomotion: number, runBlend: number): void {
+    const lock = this.footLock(side);
+    const airborneAuthority = 1 - THREE.MathUtils.smoothstep(lock, 0, 0.8);
+    const thigh = BONE_INDEX[`thigh.${side}`]! * 3;
+    const shin = BONE_INDEX[`shin.${side}`]! * 3;
+    const foot = BONE_INDEX[`foot.${side}`]! * 3;
+    const toe = BONE_INDEX[`toe.${side}`]! * 3;
+    const ankle = ankleFromHip(this.#angles[thigh]!, this.#angles[shin]!);
+    const clearance = THIGH_LENGTH + SHIN_LENGTH - ankle.depth + this.rootOffset.y;
+    const airborne = THREE.MathUtils.smoothstep(clearance, 0.045, 0.085);
+    const terminalSwing = phasePulse(phase, 0.9, 0.13) * airborneAuthority * airborne * locomotion;
+    if (terminalSwing <= 0) return;
+
+    const targetShin = THREE.MathUtils.lerp(-1.02, -1.12, runBlend);
+    this.#angles[shin] = THREE.MathUtils.lerp(
+      this.#angles[shin]!,
+      Math.min(this.#angles[shin]!, targetShin),
+      terminalSwing,
+    );
+    const targetFoot = THREE.MathUtils.lerp(0.48, 0.56, runBlend);
+    this.#angles[foot] = THREE.MathUtils.lerp(
+      this.#angles[foot]!,
+      Math.max(this.#angles[foot]!, targetFoot),
+      terminalSwing,
+    );
+    this.#angles[toe] = THREE.MathUtils.lerp(
+      this.#angles[toe]!,
+      Math.max(this.#angles[toe]!, 0.08),
+      terminalSwing,
+    );
   }
 
   /**

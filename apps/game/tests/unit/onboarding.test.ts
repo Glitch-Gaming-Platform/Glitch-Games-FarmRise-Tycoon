@@ -74,7 +74,10 @@ describe('beat copy', () => {
 
   it('states the next concrete action on every sequential beat', () => {
     const copy = Object.fromEntries(BEATS.map((beat) => [beat.id, beat.body]));
-    expect(copy['move']).toMatch(/W, A, S and D.*brown plots/i);
+    expect(copy['move']).toMatch(/W, A, S and D.*Hold SHIFT to run.*brown plots/i);
+    expect(BEATS.find((beat) => beat.id === 'move')?.hint?.body).toMatch(
+      /Hold SHIFT to run.*brown plot/i,
+    );
     expect(copy['plant']).toMatch(/Plant Wheat.*press E/i);
     expect(copy['tend']).toMatch(/press E.*water/i);
     expect(copy['harvest']).toMatch(/gold or orange.*press E/i);
@@ -89,6 +92,7 @@ describe('beat copy', () => {
   it('gives touch players concrete mobile actions instead of keyboard keys', () => {
     const touchCopy = Object.fromEntries(BEATS.map((beat) => [beat.id, beat.touch?.body ?? '']));
     expect(touchCopy['move']).toMatch(/joystick/i);
+    expect(touchCopy['move']).not.toMatch(/SHIFT/i);
     expect(touchCopy['plant']).toMatch(/tap Work/i);
     expect(touchCopy['haul']).toMatch(/tap Work/i);
     expect(touchCopy['sell']).toMatch(/Tap Market/i);

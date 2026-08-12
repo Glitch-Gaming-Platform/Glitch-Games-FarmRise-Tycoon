@@ -154,14 +154,24 @@ export class Hud {
     }
   }
 
-  setPrompt(label: string | null, secondaryLabel: string | null = null): void {
-    this.#prompt.hidden = label === null;
+  setPrompt(
+    label: string | null,
+    secondaryLabel: string | null = null,
+    notice: string | null = null,
+  ): void {
+    clear(this.#prompt);
+    this.#prompt.hidden = label === null && notice === null;
     if (label) {
       const primary = `${label}  ·  ${this.#touch ? 'tap Work' : 'press E'}`;
       const secondary = secondaryLabel
         ? `  |  ${secondaryLabel}  ·  ${this.#touch ? 'tap Seed' : 'press Q'}`
         : '';
-      this.#prompt.textContent = `${primary}${secondary}`;
+      this.#prompt.append(
+        el('span', { class: 'fr-hud__prompt-actions', text: `${primary}${secondary}` }),
+      );
+    }
+    if (notice) {
+      this.#prompt.append(el('span', { class: 'fr-hud__prompt-notice', text: notice }));
     }
   }
 

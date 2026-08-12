@@ -168,8 +168,17 @@ verified browser artifact, installs dependencies from `package-lock.json`, rebui
 server packages, and runs the combined server on port 8787. It intentionally does not rebuild the
 browser client without its protected build-time configuration.
 
+The Glitch CLI directory archiver does not apply `.dockerignore` itself. Never upload the working
+tree directly: it can contain `.env*` files, build caches, review renders, and other non-runtime
+material. Create a temporary staging directory using the same exclusions as the container build,
+then confirm that no environment file or deployment-only token is present before upload:
+
 ```bash
-npx --yes --package glitch-cli-deploy glitch-deploy deploy . \
+HOSTING_STAGE="$(mktemp -d /tmp/farmrise-hosting.XXXXXX)"
+rsync -a --exclude-from=.dockerignore ./ "$HOSTING_STAGE/"
+test -z "$(find "$HOSTING_STAGE" -name '.env*' -print -quit)"
+
+npx --yes --package glitch-cli-deploy glitch-deploy deploy "$HOSTING_STAGE" \
   --title "$GLITCH_TITLE_ID" \
   --version <NODE_BUILD_VERSION> \
   --entry tools/hosting/server.mjs \
@@ -195,6 +204,8 @@ npx --yes --package glitch-cli-deploy glitch host \
 The exact Webhosting entry is `tools/hosting/server.mjs`. `package.json` is project metadata and is
 not a runnable server entry. Before upload, verify all of the following:
 
+- `.dockerignore` excludes `.env*`, and the filtered staging directory contains no environment
+  file, Distribution token, Hosting token, or MCP credential;
 - `node tools/hosting/server.mjs` starts successfully with `NODE_ENV=production`;
 - `/`, `/health`, `/readyz`, `/livez`, and `/api/v1/health` return successful responses;
 - the Linux Docker image starts through `npm run start:hosting` and exposes port 8787;
@@ -343,6 +354,48 @@ The shared Route 53 zone still reports 50 records against a quota of 50, and AWS
 generated-domain provisioning. The Hosting API still carries the old incident reference
 `HOST-DNS-01KZRSQX6XJYGXC17NYE71XXZH` and its historical `last_error`; the authoritative active
 site, domain, certificate, release, and live HTTPS checks supersede that stale diagnostic text.
+
+### Redeployment — version 0.1.8 on August 12, 2026
+
+Distribution version `0.1.8-20260812`, build `019ff67a-2b27-703f-b0aa-48236c246f63`, is ready and
+live. Its nested CDN entry and both hashed JavaScript files returned HTTP 200. The public Glitch
+Play page loaded that exact build ID, entered the farm, exposed the gameplay menus and WebGL canvas,
+and reported no browser console errors. The shipped files are `index-Bmj24EJt.js` and
+`three-BPC2If2_.js`.
+
+The matching Webhosting Node build is `019ff67f-f267-73e4-86ad-2327d96c471c`, and Hosting release
+`019ff684-c6c9-708c-b694-b4aa64743508` uses `tools/hosting/server.mjs`. The release became
+`active` at `2026-08-12T15:08:55Z`; the site and generated domain are `live`/`active`, and the
+certificate remains `Enabled`. The public `/`, `/health`, `/readyz`, `/livez`, and
+`/api/v1/health` endpoints returned HTTP 200, and the Hosting root served the exact `0.1.8` browser
+asset hashes.
+
+This Hosting build was uploaded from a filtered 114 MB staging tree; the compressed upload was
+92.5 MB. The staging audit rejected `.env*` files and verified that neither the Distribution nor
+Hosting token was present. `.dockerignore` now excludes `.env*` so local and remote Docker builds
+also omit protected environment files. The Route 53 zone still reports 50 of 50 records and AWS
+case `178639262100188` remains `CASE_OPENED`, but that stale capacity condition does not affect the
+currently active domain or certificate.
+
+### Redeployment — version 0.1.9 on August 12, 2026
+
+Distribution version `0.1.9-20260812`, build `019ff6d2-6367-73b4-ae3a-2069ba7844c9`, is ready and
+live. Its nested CDN entry and both hashed JavaScript files returned HTTP 200. The public Glitch
+Play page loaded that exact build, entered the farm, displayed the gameplay menus and WebGL canvas,
+and reported no browser console errors. The shipped files are `index-BApw3SDC.js` and
+`three-BPC2If2_.js`.
+
+The matching Webhosting Node build is `019ff6db-0bb2-7021-8c91-2738349ea543`, and Hosting release
+`019ff6e0-1835-70fe-8f67-3940650ffe07` uses `tools/hosting/server.mjs`. The release became
+`active` at `2026-08-12T16:48:37Z`; the site and generated domain remain `live`/`active`, and the
+certificate remains `Enabled`. The public `/`, `/health`, `/readyz`, `/livez`, and
+`/api/v1/health` endpoints returned HTTP 200, and the Hosting root served the exact `0.1.9` browser
+asset hashes.
+
+The Hosting source again came from a filtered 114 MB staging tree and produced a 92.5 MB upload.
+The staging audit found no `.env*` file, Distribution token, or Hosting token. The Route 53 zone
+still reports 50 of 50 records and AWS case `178639262100188` remains `CASE_OPENED`; the active
+domain and certificate continue to work despite that unchanged quota state.
 
 ## Rollback
 

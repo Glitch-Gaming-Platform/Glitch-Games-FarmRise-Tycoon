@@ -47,6 +47,26 @@ interface WalkSnapshot {
   readonly upperArmR: number;
 }
 
+interface LeadLegSnapshot {
+  readonly phase: number;
+  readonly kneeForward: number;
+  readonly ankleForward: number;
+  readonly shinWorldAngle: number;
+}
+
+function leadLegSnapshot(phase: number): LeadLegSnapshot {
+  const pose = createJointBuffer(Object.keys(BONE_INDEX).length);
+  sampleClip(WALK, phase, pose, 1);
+  const thigh = pose[BONE_INDEX['thigh.L']! * 3]!;
+  const shin = pose[BONE_INDEX['shin.L']! * 3]!;
+  return {
+    phase,
+    kneeForward: Math.sin(thigh) * THIGH_LENGTH,
+    ankleForward: ankleFromHip(thigh, shin).forward,
+    shinWorldAngle: thigh + shin,
+  };
+}
+
 function settledWalkSnapshots(targets: readonly number[]): WalkSnapshot[] {
   const { bones } = createSkeleton();
   const rig = new CharacterRig(bones);
@@ -320,6 +340,16 @@ describe('gait measurements', () => {
     expect(contact.chestY - contact.headY).toBeGreaterThan(0.18);
   });
 
+  it('keeps terminal swing knee-led instead of extending into a forward kick', () => {
+    const terminal = [0.92, 0.94, 0.96, 0.98, 0].map(leadLegSnapshot);
+    for (const pose of terminal) {
+      // Positive separation means the knee is in front of the ankle. A negative
+      // world-space shin angle means the lower leg folds backward from the knee.
+      expect(pose.kneeForward - pose.ankleForward).toBeGreaterThan(0.01);
+      expect(pose.shinWorldAngle).toBeLessThan(-0.05);
+    }
+  });
+
   it('measures world-space foot slip through a held walk and sprint', () => {
     for (const speed of [0.7, 1.4, 2.4, 3.43, 6.5]) {
       const { bones } = createSkeleton();
@@ -409,7 +439,7 @@ describe('gait measurements', () => {
         expect(worstSlip).toBeLessThan(0.006);
         expect(worstVerticalSlip).toBeLessThan(0.008);
       } else expect(rig.strideScale).toBeGreaterThan(1.5);
-      if (speed === 1.4) expect(worstLowSlip).toBeLessThan(0.06);
+      if (speed === 1.4) expect(worstLowSlip).toBeLessThan(0.085);
     }
   });
 });

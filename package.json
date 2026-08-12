@@ -2,6 +2,7 @@
   "name": "farmrise-tycoon",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "FarmRise Tycoon - a single-player farming and city-building sandbox built on Three.js with a server-authoritative Next.js backend.",
   "type": "module",
   "engines": {

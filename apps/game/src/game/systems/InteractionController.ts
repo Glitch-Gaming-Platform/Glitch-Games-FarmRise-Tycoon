@@ -14,6 +14,7 @@
 import {
   CROPS,
   ANIMALS,
+  BUILDINGS,
   FIELD_SPOILAGE_MULTIPLIER,
   STORED_SPOILAGE_MULTIPLIER,
   THIRSTY_WATER,
@@ -21,6 +22,7 @@ import {
   formatTicks,
   fractionKeptPerDay,
   isThirsty,
+  loadWeight,
   secondsToTicks,
   ticksUntilNextLoss,
   ticksUntilReady,
@@ -59,6 +61,7 @@ export interface InteractionEvents extends Record<string, unknown> {
     target: string | null;
     label: string | null;
     secondaryLabel: string | null;
+    notice: string | null;
     verb: ContextVerb | null;
   };
   'interaction:performed': { target: string; action: ContextVerb };
@@ -79,6 +82,8 @@ const WORK_TICKS: Record<ContextVerb, number> = {
   repair: secondsToTicks(1.8),
 };
 
+const FULL_PACK_MESSAGE = "You can't carry anymore. Store some items first.";
+
 interface ContextTarget {
   readonly verb: ContextVerb;
   readonly id: string;
@@ -97,7 +102,7 @@ interface ContextTarget {
  * direction before reading the number.
  */
 export interface ProximityMeter {
-  readonly kind: 'water' | 'growth' | 'freshness' | 'animal';
+  readonly kind: 'water' | 'growth' | 'freshness' | 'storage' | 'animal';
   /** The world object this gauge floats above. */
   readonly target:
     | {
@@ -116,6 +121,8 @@ export interface ProximityMeter {
   readonly value: number;
   /** What the bar means in words, e.g. "dry in 1m 20s". */
   readonly detail: string;
+  /** Optional two-column rows shown between the detail and progress bar. */
+  readonly contents?: readonly string[];
   /** True when this needs attention now. Drives the warning colour. */
   readonly urgent: boolean;
 }
@@ -126,6 +133,7 @@ export class InteractionController {
   #lastPromptId: string | null = null;
   #lastPromptLabel: string | null = null;
   #lastSecondaryLabel: string | null = null;
+  #lastPromptNotice: string | null = null;
   #fullPackStackId: string | null = null;
 
   constructor(
@@ -147,18 +155,22 @@ export class InteractionController {
     this.#reportBlockedPickup();
 
     const target = this.#resolveTarget();
+    const notice = this.#fullPackStackId ? FULL_PACK_MESSAGE : null;
     if (
       target?.id !== this.#lastPromptId ||
       target?.label !== this.#lastPromptLabel ||
-      (target?.secondaryLabel ?? null) !== this.#lastSecondaryLabel
+      (target?.secondaryLabel ?? null) !== this.#lastSecondaryLabel ||
+      notice !== this.#lastPromptNotice
     ) {
       this.#lastPromptId = target?.id ?? null;
       this.#lastPromptLabel = target?.label ?? null;
       this.#lastSecondaryLabel = target?.secondaryLabel ?? null;
+      this.#lastPromptNotice = notice;
       this.events.emit('interaction:prompt', {
         target: target?.id ?? null,
         label: target?.label ?? null,
         secondaryLabel: target?.secondaryLabel ?? null,
+        notice,
         verb: target?.verb ?? null,
       });
     }
@@ -276,10 +288,69 @@ export class InteractionController {
         : world.stores.nearestStored(tile.x, tile.z, 2));
     if (store) meters.push(...this.#storeMeters(store));
 
+    const buildingStore = this.#nearestBuildingStore(tile.x, tile.z);
+    if (buildingStore) {
+      if (buildingStore.id !== store?.id) meters.push(...this.#storeMeters(buildingStore));
+      meters.push(this.#buildingStorageMeter(buildingStore));
+    }
+
     const animal = this.#animalGuidanceMeter();
     if (animal) meters.push(animal);
 
     return meters;
+  }
+
+  /** Storage buildings report their own inventory without stealing the E action. */
+  #nearestBuildingStore(tileX: number, tileZ: number): StoreState | undefined {
+    const world = this.career.world;
+    let nearest: StoreState | undefined;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const store of world.stores.stores) {
+      if (!store.buildingId || store.capacity <= 0) continue;
+      const building = world.structures.get(store.buildingId);
+      if (!building || building.remainingBuildTicks > 0) continue;
+      const definition = BUILDINGS[building.kind];
+      const minX = building.tileX;
+      const maxX = building.tileX + definition.footprint.width - 1;
+      const minZ = building.tileZ;
+      const maxZ = building.tileZ + definition.footprint.depth - 1;
+      const dx = tileX < minX ? minX - tileX : tileX > maxX ? tileX - maxX : 0;
+      const dz = tileZ < minZ ? minZ - tileZ : tileZ > maxZ ? tileZ - maxZ : 0;
+      const distance = dx + dz;
+      if (distance > 2 || distance >= nearestDistance) continue;
+      nearest = store;
+      nearestDistance = distance;
+    }
+    return nearest;
+  }
+
+  #buildingStorageMeter(store: StoreState): ProximityMeter {
+    const building = store.buildingId
+      ? this.career.world.structures.get(store.buildingId)
+      : undefined;
+    const name = building ? BUILDINGS[building.kind].displayName : 'Building';
+    const used = loadWeight(store.items);
+    const free = Math.max(0, store.capacity - used);
+    const contents = Object.entries(store.items)
+      .filter(([, quantity]) => quantity > 0)
+      .map(([itemId, quantity]) => ({
+        name: getItem(itemId)?.displayName ?? itemId,
+        text: formatItemQuantity(itemId, quantity),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((item) => item.text);
+    return {
+      kind: 'storage',
+      target: { kind: 'store', id: store.id },
+      label: `${name} storage`,
+      value: store.capacity > 0 ? free / store.capacity : 0,
+      detail:
+        free === 0
+          ? `Full · ${used}/${store.capacity} used`
+          : `${used}/${store.capacity} used · ${free} until full`,
+      contents,
+      urgent: free === 0,
+    };
   }
 
   /** Announces a blocked pickup once when the player enters a pile's range. */
@@ -300,7 +371,7 @@ export class InteractionController {
     if (this.#fullPackStackId === stack.id) return;
     this.#fullPackStackId = stack.id;
     this.events.emit('interaction:refused', {
-      reason: "You can't carry anymore. Store some items first.",
+      reason: FULL_PACK_MESSAGE,
     });
   }
 
@@ -534,6 +605,7 @@ export class InteractionController {
     this.#lastPromptId = null;
     this.#lastPromptLabel = null;
     this.#lastSecondaryLabel = null;
+    this.#lastPromptNotice = null;
   }
 
   #cycleCrop(): void {

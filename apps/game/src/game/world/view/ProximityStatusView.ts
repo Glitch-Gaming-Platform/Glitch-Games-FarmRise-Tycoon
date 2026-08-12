@@ -10,10 +10,56 @@ interface MeterEntry {
   key: string;
 }
 
+interface MeterGroup {
+  anchor: ProximityMeterAnchor;
+  readonly meters: ProximityMeter[];
+}
+
 export interface ProximityMeterAnchor {
   readonly x: number;
   readonly y: number;
   readonly z: number;
+}
+
+export interface ProximityMeterStackLayout {
+  readonly canvasHeight: number;
+  readonly spriteHeight: number;
+  readonly anchorOffsetY: number;
+}
+
+const PANEL_CANVAS_HEIGHT = 128;
+const PANEL_CANVAS_WIDTH = 512;
+/** Shader-space width with size attenuation disabled; about 260px at 1184×768. */
+const PANEL_SCREEN_WIDTH = 0.26;
+
+/**
+ * One billboard owns every gauge for an object.
+ *
+ * Stacking separate sprites in world Y made their screen-space gap shrink with
+ * the camera pitch, which let the harvest and water cards overlap. Keeping the
+ * stack inside one camera-facing canvas makes its spacing independent of zoom
+ * and viewing angle while leaving the bottom card anchored to the object.
+ */
+export function proximityMeterStackLayout(
+  count: number,
+  contentRows = 0,
+): ProximityMeterStackLayout {
+  const safeCount = Math.max(1, Math.floor(count));
+  const canvasHeight = PANEL_CANVAS_HEIGHT * safeCount + Math.max(0, contentRows) * 24;
+  const spriteHeight = PANEL_SCREEN_WIDTH * (canvasHeight / PANEL_CANVAS_WIDTH);
+  return {
+    canvasHeight,
+    spriteHeight,
+    // The sprite's centre is moved to its bottom edge, so it grows upward in
+    // screen space and no distance-sensitive world offset is required.
+    anchorOffsetY: 0,
+  };
+}
+
+/** Plot and dropped-goods meters on the same tile share one visual stack. */
+export function proximityMeterGroupId(meter: ProximityMeter, anchor: ProximityMeterAnchor): string {
+  if (meter.target.kind === 'animal') return `animal:${meter.target.id}`;
+  return `ground:${anchor.x.toFixed(3)}:${anchor.z.toFixed(3)}`;
 }
 
 /** Resolves the object-space anchor so the gauge describes the thing beneath it. */
@@ -60,14 +106,19 @@ export class ProximityStatusView {
 
   sync(world: FarmWorld, meters: readonly ProximityMeter[]): void {
     const active = new Set<string>();
-    const stackSlots = new Map<string, number>();
+    const groups = new Map<string, MeterGroup>();
     for (const meter of meters) {
-      const id = `${meter.kind}:${meter.target.kind}:${meter.target.id}`;
       const anchor = proximityMeterAnchor(world, meter);
       if (!anchor) continue;
-      const targetId = `${meter.target.kind}:${meter.target.id}`;
-      const stackSlot = stackSlots.get(targetId) ?? 0;
-      stackSlots.set(targetId, stackSlot + 1);
+      const id = proximityMeterGroupId(meter, anchor);
+      const group = groups.get(id);
+      if (group) {
+        group.meters.push(meter);
+        if (anchor.y > group.anchor.y) group.anchor = anchor;
+      } else groups.set(id, { anchor, meters: [meter] });
+    }
+
+    for (const [id, group] of groups) {
       active.add(id);
 
       let entry = this.#entries.get(id);
@@ -78,12 +129,30 @@ export class ProximityStatusView {
         this.#entries.set(id, entry);
         this.object.add(entry.sprite);
       }
-      entry.sprite.position.set(anchor.x, anchor.y + stackSlot * 0.66, anchor.z);
+      const orderedMeters = [...group.meters].sort(
+        (left, right) => meterOrder(left.kind) - meterOrder(right.kind),
+      );
+      const contentRows = orderedMeters.reduce(
+        (total, meter) => total + Math.ceil((meter.contents?.length ?? 0) / 2),
+        0,
+      );
+      const layout = proximityMeterStackLayout(orderedMeters.length, contentRows);
+      if (entry.canvas.height !== layout.canvasHeight) {
+        entry.canvas.height = layout.canvasHeight;
+        entry.key = '';
+      }
+      entry.sprite.position.set(group.anchor.x, group.anchor.y, group.anchor.z);
+      entry.sprite.scale.set(PANEL_SCREEN_WIDTH, layout.spriteHeight, 1);
 
-      const key = `${meter.label}:${meter.detail}:${Math.round(meter.value * 100)}:${meter.urgent}`;
+      const key = orderedMeters
+        .map(
+          (meter) =>
+            `${meter.kind}:${meter.label}:${meter.detail}:${meter.contents?.join(',') ?? ''}:${Math.round(meter.value * 100)}:${meter.urgent}`,
+        )
+        .join('|');
       if (entry.key !== key) {
         entry.key = key;
-        drawMeter(entry.canvas, meter);
+        drawMeters(entry.canvas, orderedMeters);
         entry.texture.needsUpdate = true;
       }
     }
@@ -122,26 +191,65 @@ export class ProximityStatusView {
       depthTest: false,
       depthWrite: false,
       toneMapped: false,
+      // A world-sized sprite becomes enormous when the camera gets close.
+      // Disabling attenuation keeps its projected size constant at every
+      // allowed player/camera distance.
+      sizeAttenuation: false,
     });
     const sprite = new THREE.Sprite(material);
     sprite.name = 'ProximityStatusBar';
-    sprite.scale.set(3.15, 0.82, 1);
+    sprite.center.set(0.5, 0);
+    sprite.scale.set(
+      PANEL_SCREEN_WIDTH,
+      PANEL_SCREEN_WIDTH * (PANEL_CANVAS_HEIGHT / PANEL_CANVAS_WIDTH),
+      1,
+    );
     sprite.renderOrder = 21;
     sprite.frustumCulled = false;
     return { sprite, texture, canvas, key: '' };
   }
 }
 
-function drawMeter(canvas: HTMLCanvasElement, meter: ProximityMeter): void {
+function drawMeters(canvas: HTMLCanvasElement, meters: readonly ProximityMeter[]): void {
   const context = canvas.getContext('2d');
   if (!context) return;
-  const progress = Math.min(1, Math.max(0, meter.value));
   context.clearRect(0, 0, canvas.width, canvas.height);
 
-  roundedRect(context, 8, 8, 496, 112, 22);
+  let offsetY = 0;
+  for (const meter of meters) {
+    const panelHeight = PANEL_CANVAS_HEIGHT + Math.ceil((meter.contents?.length ?? 0) / 2) * 24;
+    drawMeter(context, meter, offsetY, panelHeight);
+    offsetY += panelHeight;
+  }
+}
+
+function meterOrder(kind: ProximityMeter['kind']): number {
+  switch (kind) {
+    case 'growth':
+      return 0;
+    case 'water':
+      return 1;
+    case 'storage':
+      return 0;
+    case 'freshness':
+      return 1;
+    case 'animal':
+      return 2;
+  }
+}
+
+function drawMeter(
+  context: CanvasRenderingContext2D,
+  meter: ProximityMeter,
+  offsetY: number,
+  panelHeight: number,
+): void {
+  const progress = Math.min(1, Math.max(0, meter.value));
+
+  roundedRect(context, 8, offsetY + 8, 496, panelHeight - 16, 22);
   context.fillStyle = 'rgba(42, 36, 32, 0.9)';
   context.fill();
-  roundedRect(context, 14, 14, 484, 100, 18);
+  roundedRect(context, 14, offsetY + 14, 484, panelHeight - 28, 18);
   context.fillStyle = '#f5f1e5';
   context.fill();
 
@@ -149,23 +257,36 @@ function drawMeter(canvas: HTMLCanvasElement, meter: ProximityMeter): void {
   context.font = '700 25px system-ui, sans-serif';
   context.textAlign = 'left';
   context.textBaseline = 'middle';
-  context.fillText(meter.label, 34, 34, 444);
+  context.fillText(meter.label, 34, offsetY + 34, 444);
   context.font = '600 20px system-ui, sans-serif';
-  context.fillText(meter.detail, 34, 62, 444);
+  context.fillText(meter.detail, 34, offsetY + 62, 444);
 
-  roundedRect(context, 34, 85, 444, 18, 9);
+  const contents = meter.contents ?? [];
+  if (contents.length > 0) {
+    context.font = '600 18px system-ui, sans-serif';
+    for (let index = 0; index < contents.length; index += 1) {
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      context.fillText(contents[index]!, 34 + column * 225, offsetY + 88 + row * 24, 205);
+    }
+  }
+
+  const barY = offsetY + panelHeight - 43;
+  roundedRect(context, 34, barY, 444, 18, 9);
   context.fillStyle = '#c8aa72';
   context.fill();
-  roundedRect(context, 34, 85, Math.max(8, 444 * progress), 18, 9);
+  roundedRect(context, 34, barY, Math.max(8, 444 * progress), 18, 9);
   context.fillStyle = meter.urgent
     ? '#e5ad2f'
     : meter.kind === 'water'
       ? '#4fb3c4'
       : meter.kind === 'growth'
         ? '#d6ad3d'
-        : meter.kind === 'animal'
-          ? '#3f7a82'
-          : '#73a85d';
+        : meter.kind === 'storage'
+          ? '#8a6f47'
+          : meter.kind === 'animal'
+            ? '#3f7a82'
+            : '#73a85d';
   context.fill();
 }
 
