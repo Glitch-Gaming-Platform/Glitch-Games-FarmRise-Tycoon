@@ -19,7 +19,7 @@ import {
   PlayingState,
 } from '@game/states/phases.js';
 import { AssetLoader } from '@assets/loaders/AssetLoader.js';
-import { CORE_MANIFEST } from '@assets/manifests/core.manifest.js';
+import { CORE_MANIFEST, LOW_CORE_MANIFEST } from '@assets/manifests/core.manifest.js';
 import { UiRoot } from '@ui/UiRoot.js';
 import { loadSettings } from '@ui/settings/SettingsPanel.js';
 import { createEngine } from './createEngine.js';
@@ -63,7 +63,10 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
   const net = createNetworking(options.apiBaseUrl ?? '');
   // One loader for the whole session, so a scene reload re-uses the meshes
   // already in memory instead of re-fetching them.
-  const assets = new AssetLoader(CORE_MANIFEST, import.meta.env.BASE_URL ?? '/');
+  const assets = new AssetLoader(
+    bundle.quality === 'low' ? LOW_CORE_MANIFEST : CORE_MANIFEST,
+    import.meta.env.BASE_URL ?? '/',
+  );
   const machine = new GameStateMachine();
   const settings = loadSettings();
   const preparedAudio = prepareAudio(bundle.audio, assets, {
@@ -319,8 +322,12 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
           ? { skipOnboarding: resumeState.onboardingCompleted }
           : {}),
       ...(bundle.actionReview ? { reviewActions: true } : {}),
+      ...(bundle.reviewCamera ? { reviewCamera: bundle.reviewCamera } : {}),
       ...(incidentReview ? { reviewSpawnTile: incidentReview.spawnTile } : {}),
       ...(bundle.mobileOptimized ? { shadowMapSize: 512 } : {}),
+      // Null on the low tier; the scene and its views then take exactly the
+      // branches they took before the pipeline existed.
+      ...(bundle.pipeline ? { pipeline: bundle.pipeline } : {}),
     });
     return activeScene;
   });

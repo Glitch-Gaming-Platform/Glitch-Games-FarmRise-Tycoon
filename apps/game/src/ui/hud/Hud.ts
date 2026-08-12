@@ -63,6 +63,7 @@ export class Hud {
   readonly #bar: HTMLElement;
   readonly #prompt: HTMLElement;
   readonly #toasts: HTMLElement;
+  readonly #top: HTMLElement;
   readonly #objective: HTMLElement;
   readonly #objectiveLabel: HTMLElement;
   readonly #objectiveFill: HTMLElement;
@@ -87,15 +88,9 @@ export class Hud {
       el('div', { class: 'fr-objective__track' }, this.#objectiveFill),
     );
     this.#objective.hidden = true;
+    this.#top = el('div', { class: 'fr-hud__top' }, this.#objective, this.#bar, this.#toasts);
 
-    this.root = el(
-      'div',
-      { class: 'fr-hud', testId: 'hud' },
-      this.#objective,
-      this.#bar,
-      this.#prompt,
-      this.#toasts,
-    );
+    this.root = el('div', { class: 'fr-hud', testId: 'hud' }, this.#top, this.#prompt);
   }
 
   render(snapshot: HudSnapshot): void {

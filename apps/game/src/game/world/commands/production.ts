@@ -151,6 +151,7 @@ export function startTownProject(career: Career, projectId: string): Result<void
     balance: career.balance,
     available: career.world.stores.combined(),
     unlocks: career.unlocks,
+    ownedParcelIds: career.world.parcels.ownedIds,
   });
   if (!check.ok) return check;
 

@@ -15,94 +15,196 @@
  *
  * Keep entries sorted by kind, then id, so merge conflicts stay trivial.
  */
-import type { AssetManifest } from './types.js';
+import type { AssetEntry, AssetManifest } from './types.js';
 import { AUDIO_ASSETS } from './audio.manifest.js';
 import { UI_ICON_ASSETS } from './uiIcons.manifest.js';
+import { SURFACE_TEXTURE_ASSETS } from './textures.manifest.js';
 
+const ULTRA_MODEL_ASSETS: readonly AssetEntry[] = [
+  {
+    id: 'model:animals',
+    kind: 'model',
+    url: 'assets/models/animals.glb',
+    phase: 'critical',
+    bytes: 140_928,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:buildings',
+    kind: 'model',
+    url: 'assets/models/buildings.glb',
+    phase: 'critical',
+    bytes: 758_656,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:characters',
+    kind: 'model',
+    url: 'assets/models/characters.glb',
+    phase: 'critical',
+    bytes: 156_804,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops',
+    kind: 'model',
+    url: 'assets/models/crops.glb',
+    phase: 'critical',
+    bytes: 607_128,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops-autumn',
+    kind: 'model',
+    url: 'assets/models/crops-autumn.glb',
+    phase: 'preload',
+    bytes: 334_172,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops-spring',
+    kind: 'model',
+    url: 'assets/models/crops-spring.glb',
+    phase: 'preload',
+    bytes: 377_792,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops-summer',
+    kind: 'model',
+    url: 'assets/models/crops-summer.glb',
+    phase: 'preload',
+    bytes: 351_176,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops-winter',
+    kind: 'model',
+    url: 'assets/models/crops-winter.glb',
+    phase: 'preload',
+    bytes: 342_452,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:ground',
+    kind: 'model',
+    url: 'assets/models/ground.glb',
+    phase: 'critical',
+    bytes: 28_248,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:props',
+    kind: 'model',
+    url: 'assets/models/props.glb',
+    phase: 'preload',
+    bytes: 257_868,
+    scenes: ['farm'],
+  },
+];
+
+/**
+ * The immutable model pack used by the low tier.
+ *
+ * Ultra art is regenerated from Blender. Those files must never silently
+ * replace low's established geometry again, so low has its own physical URLs
+ * and measured byte counts. Logical ids stay identical: scenes and views do
+ * not fork, only the loader's manifest does.
+ */
+export const LOW_MODEL_ASSETS: readonly AssetEntry[] = [
+  {
+    id: 'model:animals',
+    kind: 'model',
+    url: 'assets/models/low/animals.glb',
+    phase: 'critical',
+    bytes: 138_816,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:buildings',
+    kind: 'model',
+    url: 'assets/models/low/buildings.glb',
+    phase: 'critical',
+    bytes: 672_932,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:characters',
+    kind: 'model',
+    url: 'assets/models/low/characters.glb',
+    phase: 'critical',
+    bytes: 150_164,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops',
+    kind: 'model',
+    url: 'assets/models/low/crops.glb',
+    phase: 'critical',
+    bytes: 594_980,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops-autumn',
+    kind: 'model',
+    url: 'assets/models/low/crops-autumn.glb',
+    phase: 'preload',
+    bytes: 443_560,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops-spring',
+    kind: 'model',
+    url: 'assets/models/low/crops-spring.glb',
+    phase: 'preload',
+    bytes: 469_812,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops-summer',
+    kind: 'model',
+    url: 'assets/models/low/crops-summer.glb',
+    phase: 'preload',
+    bytes: 467_408,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:crops-winter',
+    kind: 'model',
+    url: 'assets/models/low/crops-winter.glb',
+    phase: 'preload',
+    bytes: 369_684,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:ground',
+    kind: 'model',
+    url: 'assets/models/low/ground.glb',
+    phase: 'critical',
+    bytes: 28_248,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:props',
+    kind: 'model',
+    url: 'assets/models/low/props.glb',
+    phase: 'preload',
+    bytes: 219_636,
+    scenes: ['farm'],
+  },
+];
+
+/** Ultra/default manifest: regenerated models plus the lazy surface library. */
 export const CORE_MANIFEST: AssetManifest = {
-  version: 10,
-  assets: [
-    ...AUDIO_ASSETS,
-    ...UI_ICON_ASSETS,
-    {
-      id: 'model:animals',
-      kind: 'model',
-      url: 'assets/models/animals.glb',
-      phase: 'critical',
-      bytes: 138_816,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:buildings',
-      kind: 'model',
-      url: 'assets/models/buildings.glb',
-      phase: 'critical',
-      bytes: 672_932,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:characters',
-      kind: 'model',
-      url: 'assets/models/characters.glb',
-      phase: 'critical',
-      bytes: 150_164,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:crops',
-      kind: 'model',
-      url: 'assets/models/crops.glb',
-      phase: 'critical',
-      bytes: 594_980,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:crops-autumn',
-      kind: 'model',
-      url: 'assets/models/crops-autumn.glb',
-      phase: 'preload',
-      bytes: 443_560,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:crops-spring',
-      kind: 'model',
-      url: 'assets/models/crops-spring.glb',
-      phase: 'preload',
-      bytes: 469_812,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:crops-summer',
-      kind: 'model',
-      url: 'assets/models/crops-summer.glb',
-      phase: 'preload',
-      bytes: 467_408,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:crops-winter',
-      kind: 'model',
-      url: 'assets/models/crops-winter.glb',
-      phase: 'preload',
-      bytes: 369_684,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:ground',
-      kind: 'model',
-      url: 'assets/models/ground.glb',
-      phase: 'critical',
-      bytes: 28_248,
-      scenes: ['farm'],
-    },
-    {
-      id: 'model:props',
-      kind: 'model',
-      url: 'assets/models/props.glb',
-      phase: 'preload',
-      bytes: 219_636,
-      scenes: ['farm'],
-    },
-  ],
+  version: 12,
+  assets: [...AUDIO_ASSETS, ...UI_ICON_ASSETS, ...SURFACE_TEXTURE_ASSETS, ...ULTRA_MODEL_ASSETS],
+};
+
+/**
+ * Low manifest: frozen legacy models and no surface-texture declarations.
+ * The absence makes the zero-download guarantee structural, not conventional.
+ */
+export const LOW_CORE_MANIFEST: AssetManifest = {
+  version: 12,
+  assets: [...AUDIO_ASSETS, ...UI_ICON_ASSETS, ...LOW_MODEL_ASSETS],
 };

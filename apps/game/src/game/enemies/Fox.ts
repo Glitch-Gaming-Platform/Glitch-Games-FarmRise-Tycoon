@@ -20,7 +20,7 @@ export class Fox {
     startX: number,
     startZ: number,
     private readonly target: Vec2,
-    private readonly speed = 4,
+    private readonly speed = 1.3,
     readonly raidTicks = 180,
     readonly collisionId = 'fox',
   ) {

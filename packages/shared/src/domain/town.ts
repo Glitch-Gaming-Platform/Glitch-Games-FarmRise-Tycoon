@@ -7,7 +7,9 @@
  * something the player then has to decide whether to fund.
  */
 import { cents, type Cents } from './ids.js';
+import { STARTER_EXTENSION_PARCEL_ID, type ParcelId } from './parcels.js';
 import { secondsToTicks, type Ticks } from './time.js';
+import type { UnlockId } from './milestones.js';
 
 export type TownStage = 0 | 1 | 2 | 3;
 
@@ -68,6 +70,8 @@ export interface CommunityProjectDefinition {
   readonly id: string;
   readonly displayName: string;
   readonly requiresTownStage: TownStage;
+  readonly requiresUnlock: UnlockId | null;
+  readonly requiresParcelId: ParcelId | null;
   readonly cost: Cents;
   /** Goods the project also wants, on top of money. */
   readonly materials: Readonly<Record<string, number>>;
@@ -78,11 +82,28 @@ export interface CommunityProjectDefinition {
   readonly description: string;
 }
 
+export const STARTER_COMMUNITY_PROJECT_ID = 'project-seed-box';
+
 const PROJECT_LIST: CommunityProjectDefinition[] = [
+  {
+    id: STARTER_COMMUNITY_PROJECT_ID,
+    displayName: 'Millbrook Seed Box',
+    requiresTownStage: 0,
+    requiresUnlock: null,
+    requiresParcelId: STARTER_EXTENSION_PARCEL_ID,
+    cost: cents(0),
+    materials: {},
+    buildTicks: secondsToTicks(8),
+    prosperity: 8,
+    benefit: 'Town deliveries pay 1% more once the shared requests are posted here.',
+    description: 'A council-funded seed and request box beside the new field gate.',
+  },
   {
     id: 'project-market-road',
     displayName: 'Market Road',
     requiresTownStage: 0,
+    requiresUnlock: 'town_projects',
+    requiresParcelId: null,
     cost: cents(18_000),
     materials: { wheat: 20 },
     buildTicks: secondsToTicks(300),
@@ -95,6 +116,8 @@ const PROJECT_LIST: CommunityProjectDefinition[] = [
     id: 'project-grain-store',
     displayName: 'Public Grain Store',
     requiresTownStage: 1,
+    requiresUnlock: 'town_projects',
+    requiresParcelId: null,
     cost: cents(32_000),
     materials: { flour: 15, wheat: 40 },
     buildTicks: secondsToTicks(420),
@@ -106,6 +129,8 @@ const PROJECT_LIST: CommunityProjectDefinition[] = [
     id: 'project-well-network',
     displayName: 'Village Wells',
     requiresTownStage: 2,
+    requiresUnlock: 'town_projects',
+    requiresParcelId: null,
     cost: cents(48_000),
     materials: { preserves: 10, cheese: 10 },
     buildTicks: secondsToTicks(480),
@@ -132,10 +157,18 @@ export function townStageFor(prosperity: number): TownStageDefinition {
 export function availableProjects(
   prosperity: number,
   completedIds: readonly string[],
+  access: {
+    readonly unlocks: readonly string[];
+    readonly ownedParcelIds: readonly string[];
+  },
 ): readonly CommunityProjectDefinition[] {
   const stage = townStageFor(prosperity).stage;
   const completed = new Set(completedIds);
   return COMMUNITY_PROJECTS.filter(
-    (project) => !completed.has(project.id) && project.requiresTownStage <= stage,
+    (project) =>
+      !completed.has(project.id) &&
+      project.requiresTownStage <= stage &&
+      (!project.requiresUnlock || access.unlocks.includes(project.requiresUnlock)) &&
+      (!project.requiresParcelId || access.ownedParcelIds.includes(project.requiresParcelId)),
   );
 }

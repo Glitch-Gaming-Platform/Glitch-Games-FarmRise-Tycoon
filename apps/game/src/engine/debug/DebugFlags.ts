@@ -14,10 +14,67 @@ export interface DebugFlags {
   readonly logEvents: boolean;
   /** Starts the player beside a crop bed for deterministic action review. */
   readonly actionReview: boolean;
+  /**
+   * Frames the camera on the character for animation review.
+   *
+   * A locomotion or work-pose defect is a few dozen pixels tall at the
+   * shipping 13.25 m camera, which is why two consecutive animation audits
+   * were argued from screenshots that could not have shown the fault either
+   * way. This flag implies the action-review fixture (no tutorial card over
+   * the actor, no random incidents stealing the interaction) and pulls the
+   * follow camera in to a character close-up. It changes nothing else: the
+   * same views, the same rig and the same clips run.
+   */
+  readonly actorReview: boolean;
+  /** Explicit follow-camera override, `?cam=distance,pitchDeg,yawDeg,targetY`. */
+  readonly reviewCamera: ReviewCameraOverride | null;
   /** Loads a non-persistent late-game career for progression acceptance review. */
   readonly progressionReviewStage: 3 | 5 | null;
   /** Loads one named incident through the normal career hydration path. */
   readonly incidentReviewId: string | null;
+}
+
+export interface ReviewCameraOverride {
+  readonly distance: number;
+  readonly pitchDegrees: number;
+  readonly yawDegrees: number;
+  /** Height of the look-at point above the player's feet, in metres. */
+  readonly targetY: number;
+  /**
+   * When false the camera holds the spawn point instead of following.
+   *
+   * A following camera cannot show foot slip: the character stays in the
+   * middle of the frame and the ground slides past, which is exactly the
+   * ambiguity being tested. Pinning the camera puts a fixed ground feature in
+   * shot and lets the character walk across it.
+   */
+  readonly follow: boolean;
+}
+
+/** Character close-up: waist-height look-at, low pitch, one body length back. */
+const ACTOR_REVIEW_CAMERA: ReviewCameraOverride = {
+  distance: 4.4,
+  pitchDegrees: 12,
+  yawDegrees: -42,
+  targetY: 0.85,
+  follow: true,
+};
+
+function parseReviewCamera(
+  params: URLSearchParams,
+  fallback: ReviewCameraOverride | null,
+): ReviewCameraOverride | null {
+  const raw = params.get('cam');
+  if (!raw) return fallback;
+  const parts = raw.split(',').map((part) => Number(part.trim()));
+  if (parts.length < 3 || parts.some((value) => !Number.isFinite(value))) return fallback;
+  return {
+    distance: parts[0]!,
+    pitchDegrees: parts[1]!,
+    yawDegrees: parts[2]!,
+    targetY: Number.isFinite(parts[3]) ? parts[3]! : ACTOR_REVIEW_CAMERA.targetY,
+    follow: parts[4] !== 0,
+  };
 }
 
 const INCIDENT_REVIEW_FLAGS = [
@@ -53,13 +110,16 @@ export function resolveDebugFlags(
   }
 
   const has = (flag: string) => requested.has(flag) || requested.has('all');
+  const actorReview = has('actor');
 
   return {
     overlay: has('overlay') || (isDev && requested.size === 0),
     physics: has('physics'),
     wireframe: has('wireframe'),
     logEvents: has('events'),
-    actionReview: has('actions'),
+    actionReview: has('actions') || actorReview,
+    actorReview,
+    reviewCamera: parseReviewCamera(params, actorReview ? ACTOR_REVIEW_CAMERA : null),
     progressionReviewStage: has('estate') ? 5 : has('progression') ? 3 : null,
     incidentReviewId: INCIDENT_REVIEW_FLAGS.find((flag) => has(flag)) ?? null,
   };

@@ -28,6 +28,10 @@ export function proximityMeterAnchor(
     return { x: at.x, y: 1.75, z: at.z };
   }
 
+  if (meter.target.kind === 'animal') {
+    return { x: meter.target.x, y: meter.target.y, z: meter.target.z };
+  }
+
   const store = world.stores.get(meter.target.id);
   if (!store) return null;
   if (store.buildingId) {
@@ -159,7 +163,9 @@ function drawMeter(canvas: HTMLCanvasElement, meter: ProximityMeter): void {
       ? '#4fb3c4'
       : meter.kind === 'growth'
         ? '#d6ad3d'
-        : '#73a85d';
+        : meter.kind === 'animal'
+          ? '#3f7a82'
+          : '#73a85d';
   context.fill();
 }
 

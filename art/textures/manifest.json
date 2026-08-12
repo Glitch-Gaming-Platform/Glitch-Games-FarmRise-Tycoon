@@ -1,0 +1,298 @@
+{
+  "version": 1,
+  "generator": "tools/textures/generate.mjs",
+  "note": "Generated. Do not hand-edit; run `node tools/textures/generate.mjs`.",
+  "totalBytes": 990359,
+  "materials": [
+    {
+      "id": "soil_dry_cracked",
+      "role": "terrain",
+      "summary": "Baked outback clay broken into plates. The default ground under everything.",
+      "size": 256,
+      "ormSize": 128,
+      "tileMetres": 2,
+      "reliefMetres": 0.05,
+      "meanLinear": [
+        0.3766,
+        0.0861,
+        0.034
+      ],
+      "maps": {
+        "albedo": {
+          "file": "soil_dry_cracked_albedo.png",
+          "bytes": 31590
+        },
+        "normal": {
+          "file": "soil_dry_cracked_normal.png",
+          "bytes": 98752
+        },
+        "orm": {
+          "file": "soil_dry_cracked_orm.png",
+          "bytes": 24977
+        }
+      },
+      "bytes": 155319
+    },
+    {
+      "id": "soil_tilled",
+      "role": "terrain",
+      "summary": "Worked bed soil: hoe furrows, broken clods, damp in the trough and dry on the crest.",
+      "size": 256,
+      "ormSize": 128,
+      "tileMetres": 1.6,
+      "reliefMetres": 0.085,
+      "meanLinear": [
+        0.3528,
+        0.0781,
+        0.0284
+      ],
+      "maps": {
+        "albedo": {
+          "file": "soil_tilled_albedo.png",
+          "bytes": 28083
+        },
+        "normal": {
+          "file": "soil_tilled_normal.png",
+          "bytes": 95741
+        },
+        "orm": {
+          "file": "soil_tilled_orm.png",
+          "bytes": 20952
+        }
+      },
+      "bytes": 144776
+    },
+    {
+      "id": "grass_dry",
+      "role": "foliage",
+      "summary": "Sun-cured tussock over leaf litter, with the few blades that stayed green.",
+      "size": 256,
+      "ormSize": 128,
+      "tileMetres": 1.9,
+      "reliefMetres": 0.05,
+      "meanLinear": [
+        0.6471,
+        0.4428,
+        0.0582
+      ],
+      "maps": {
+        "albedo": {
+          "file": "grass_dry_albedo.png",
+          "bytes": 41452
+        },
+        "normal": {
+          "file": "grass_dry_normal.png",
+          "bytes": 120151
+        },
+        "orm": {
+          "file": "grass_dry_orm.png",
+          "bytes": 21165
+        }
+      },
+      "bytes": 182768
+    },
+    {
+      "id": "scrub_gravel",
+      "role": "terrain",
+      "summary": "Stony scrub floor: dust, gibber pebbles, exposed clay and dropped twigs.",
+      "size": 256,
+      "ormSize": 128,
+      "tileMetres": 2.2,
+      "reliefMetres": 0.06,
+      "meanLinear": [
+        0.6168,
+        0.4181,
+        0.0721
+      ],
+      "maps": {
+        "albedo": {
+          "file": "scrub_gravel_albedo.png",
+          "bytes": 20951
+        },
+        "normal": {
+          "file": "scrub_gravel_normal.png",
+          "bytes": 60649
+        },
+        "orm": {
+          "file": "scrub_gravel_orm.png",
+          "bytes": 18428
+        }
+      },
+      "bytes": 100028
+    },
+    {
+      "id": "bark_eucalyptus",
+      "role": "foliage",
+      "summary": "Smooth eucalypt trunk with ribbons of bark peeling off orange fresh wood.",
+      "size": 256,
+      "ormSize": 128,
+      "tileMetres": 1.1,
+      "reliefMetres": 0.09,
+      "meanLinear": [
+        0.3228,
+        0.2236,
+        0.1515
+      ],
+      "maps": {
+        "albedo": {
+          "file": "bark_eucalyptus_albedo.png",
+          "bytes": 16826
+        },
+        "normal": {
+          "file": "bark_eucalyptus_normal.png",
+          "bytes": 69074
+        },
+        "orm": {
+          "file": "bark_eucalyptus_orm.png",
+          "bytes": 16307
+        }
+      },
+      "bytes": 102207
+    },
+    {
+      "id": "timber_painted",
+      "role": "structure",
+      "summary": "Painted weatherboard: board grooves, brush grain, and paint chipped back to timber.",
+      "size": 256,
+      "ormSize": 128,
+      "tileMetres": 1,
+      "reliefMetres": 0.05,
+      "meanLinear": [
+        0.0358,
+        0.1273,
+        0.1461
+      ],
+      "maps": {
+        "albedo": {
+          "file": "timber_painted_albedo.png",
+          "bytes": 13644
+        },
+        "normal": {
+          "file": "timber_painted_normal.png",
+          "bytes": 38924
+        },
+        "orm": {
+          "file": "timber_painted_orm.png",
+          "bytes": 13596
+        }
+      },
+      "bytes": 66164
+    },
+    {
+      "id": "metal_corrugated",
+      "role": "metal",
+      "summary": "Galvanised corrugated iron with sheet seams, rivets, scratches and rust bloom.",
+      "size": 256,
+      "ormSize": 128,
+      "tileMetres": 1,
+      "reliefMetres": 0.11,
+      "meanLinear": [
+        0.2561,
+        0.2975,
+        0.3235
+      ],
+      "maps": {
+        "albedo": {
+          "file": "metal_corrugated_albedo.png",
+          "bytes": 2497
+        },
+        "normal": {
+          "file": "metal_corrugated_normal.png",
+          "bytes": 7995
+        },
+        "orm": {
+          "file": "metal_corrugated_orm.png",
+          "bytes": 3792
+        }
+      },
+      "bytes": 14284
+    },
+    {
+      "id": "roof_shingle",
+      "role": "structure",
+      "summary": "Staggered shingle courses with per-tile weathering, granule tooth and moss in the laps.",
+      "size": 256,
+      "ormSize": 128,
+      "tileMetres": 1.2,
+      "reliefMetres": 0.075,
+      "meanLinear": [
+        0.2416,
+        0.2905,
+        0.3262
+      ],
+      "maps": {
+        "albedo": {
+          "file": "roof_shingle_albedo.png",
+          "bytes": 22580
+        },
+        "normal": {
+          "file": "roof_shingle_normal.png",
+          "bytes": 84632
+        },
+        "orm": {
+          "file": "roof_shingle_orm.png",
+          "bytes": 21088
+        }
+      },
+      "bytes": 128300
+    },
+    {
+      "id": "cloth_canvas",
+      "role": "cloth",
+      "summary": "Plain-weave canvas: warp over weft, fibre fuzz, a woven stripe and worn grime.",
+      "size": 128,
+      "ormSize": 64,
+      "tileMetres": 0.45,
+      "reliefMetres": 0.02,
+      "meanLinear": [
+        0.5875,
+        0.5313,
+        0.4325
+      ],
+      "maps": {
+        "albedo": {
+          "file": "cloth_canvas_albedo.png",
+          "bytes": 10706
+        },
+        "normal": {
+          "file": "cloth_canvas_normal.png",
+          "bytes": 33398
+        },
+        "orm": {
+          "file": "cloth_canvas_orm.png",
+          "bytes": 7319
+        }
+      },
+      "bytes": 51423
+    },
+    {
+      "id": "fur_short",
+      "role": "skin",
+      "summary": "Short animal coat: clumped strands over a darker undercoat, plus a pale-belly ramp.",
+      "size": 128,
+      "ormSize": 64,
+      "tileMetres": 0.3,
+      "reliefMetres": 0.03,
+      "meanLinear": [
+        0.3994,
+        0.0883,
+        0.019
+      ],
+      "maps": {
+        "albedo": {
+          "file": "fur_short_albedo.png",
+          "bytes": 9972
+        },
+        "normal": {
+          "file": "fur_short_normal.png",
+          "bytes": 28225
+        },
+        "orm": {
+          "file": "fur_short_orm.png",
+          "bytes": 6893
+        }
+      },
+      "bytes": 45090
+    }
+  ]
+}

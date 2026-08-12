@@ -136,4 +136,49 @@ describe('createGroundGeometry', () => {
     a.dispose();
     b.dispose();
   });
+
+  /**
+   * The tier guarantee, as a test rather than as a promise.
+   *
+   * The Ultra terrain material blends its textures from a per-vertex
+   * `aTerrain` attribute. `low` must not carry it: not because a spare
+   * float3 would hurt, but because "the low tier is unchanged" should be
+   * something a test can fail on, not something a reviewer has to take on
+   * trust while reading a diff.
+   */
+  it('emits no surface-weight attribute unless it is asked for', () => {
+    const plain = createGroundGeometry(OPTIONS);
+    expect(plain.getAttribute('aTerrain')).toBeUndefined();
+    expect(Object.keys(plain.attributes).sort()).toEqual(['color', 'normal', 'position', 'uv']);
+    plain.dispose();
+  });
+
+  it('emits surface weights that agree with the sampled fields', () => {
+    const geometry = createGroundGeometry({ ...OPTIONS, surfaceWeights: true });
+    const position = geometry.getAttribute('position') as THREE.BufferAttribute;
+    const terrain = geometry.getAttribute('aTerrain') as THREE.BufferAttribute;
+    expect(terrain).toBeDefined();
+    expect(terrain.count).toBe(position.count);
+
+    for (let i = 0; i < position.count; i += 631) {
+      const sample = sampleGroundSurface(position.getX(i), position.getZ(i), OPTIONS);
+      expect(terrain.getX(i)).toBeCloseTo(sample.localPasture, 6);
+      expect(terrain.getY(i)).toBeCloseTo(sample.localEarth, 6);
+      expect(terrain.getZ(i)).toBeCloseTo(sample.worn, 6);
+    }
+    geometry.dispose();
+  });
+
+  it('leaves colour and position identical whether or not weights are emitted', () => {
+    const plain = createGroundGeometry(OPTIONS);
+    const weighted = createGroundGeometry({ ...OPTIONS, surfaceWeights: true });
+    expect(Array.from(weighted.getAttribute('color').array)).toEqual(
+      Array.from(plain.getAttribute('color').array),
+    );
+    expect(Array.from(weighted.getAttribute('position').array)).toEqual(
+      Array.from(plain.getAttribute('position').array),
+    );
+    plain.dispose();
+    weighted.dispose();
+  });
 });

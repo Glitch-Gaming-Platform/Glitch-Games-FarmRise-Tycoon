@@ -6,7 +6,9 @@
  * limbs authored stance/swing timing without breaking instancing. The player
  * uses the real skeletal rig under game/player/rig instead.
  */
-import * as THREE from 'three';
+import type * as THREE from 'three';
+
+export { createWaterMaterial, type AnimatedWater } from './waterMaterials.js';
 
 interface ShaderSource {
   uniforms: Record<string, { value: number }>;
@@ -442,64 +444,6 @@ export function createFoxMotionMaterial(base: THREE.MeshStandardMaterial): FoxMo
       flee.value = nextFlee;
       pace.value = nextPace;
       phaseOffset.value = nextPhaseOffset;
-    },
-    dispose(): void {
-      material.dispose();
-    },
-  };
-}
-
-export interface AnimatedWater {
-  readonly material: THREE.ShaderMaterial;
-  setTime(seconds: number): void;
-  dispose(): void;
-}
-
-export function createWaterMaterial(flowing = false): AnimatedWater {
-  const time = { value: 0 };
-  const material = new THREE.ShaderMaterial({
-    name: flowing ? 'M_FarmRise_RunningWater' : 'M_FarmRise_RippleWater',
-    uniforms: { uTime: time },
-    transparent: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    vertexShader: `
-      uniform float uTime;
-      varying vec2 vFarmWater;
-      varying float vFarmWave;
-      void main() {
-        vec3 p = position;
-        float wave = sin(p.x * 11.0 + uTime * 3.2)
-          + 0.45 * sin(p.z * 17.0 - uTime * 4.1);
-        p.y += wave * ${flowing ? '0.006' : '0.012'};
-        vFarmWater = vec2(p.x, p.z);
-        vFarmWave = wave;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform float uTime;
-      varying vec2 vFarmWater;
-      varying float vFarmWave;
-      void main() {
-        float band = 0.5 + 0.5 * sin(
-          vFarmWater.x * ${flowing ? '7.0' : '13.0'}
-          + vFarmWater.y * 9.0
-          - uTime * ${flowing ? '7.5' : '2.8'}
-        );
-        vec3 deep = vec3(0.032, 0.263, 0.332);
-        vec3 light = vec3(0.078, 0.570, 0.674);
-        vec3 colour = mix(deep, light, 0.42 + band * 0.30 + vFarmWave * 0.04);
-        gl_FragColor = vec4(colour, ${flowing ? '0.76' : '0.84'});
-      }
-    `,
-  });
-  material.toneMapped = false;
-
-  return {
-    material,
-    setTime(seconds): void {
-      time.value = seconds;
     },
     dispose(): void {
       material.dispose();

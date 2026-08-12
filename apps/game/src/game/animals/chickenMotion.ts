@@ -39,6 +39,21 @@ interface ChickenPathPoint {
   z: number;
 }
 
+function smoothStep01(value: number): number {
+  const clamped = Math.min(1, Math.max(0, value));
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+function smootherStep01(value: number): number {
+  const clamped = Math.min(1, Math.max(0, value));
+  return clamped * clamped * clamped * (clamped * (clamped * 6 - 15) + 10);
+}
+
+/** Fades a walk in and out without changing the deterministic path endpoints. */
+function locomotionEnvelope(progress: number): number {
+  return Math.min(smoothStep01(progress / 0.12), smoothStep01((1 - progress) / 0.16));
+}
+
 /** Writes the coop/trough-adjusted local path point without allocating per bird. */
 function writeChickenPathPoint(angle: number, radius: number, out: ChickenPathPoint): void {
   let offsetX = Math.cos(angle) * radius;
@@ -88,7 +103,13 @@ export function chickenPose(
   const withinCycle = localTime - cycle * cycleLength;
   const walkDuration = cycleLength * (0.58 + (index % 3) * 0.035);
   const walking = withinCycle < walkDuration;
-  const motionTime = cycle * walkDuration + Math.min(withinCycle, walkDuration);
+  const walkProgress = Math.min(1, withinCycle / walkDuration);
+  // The old linear clamp started and stopped every bird at full tangential
+  // speed. Easing the travelled fraction gives the flock anticipation and
+  // settle while keeping the exact same path, endpoints and collision source.
+  const travelledWalk = smootherStep01(walkProgress) * walkDuration;
+  const motionTime = cycle * walkDuration + travelledWalk;
+  const motion = walking ? locomotionEnvelope(walkProgress) : 0;
   const angle = (index / Math.max(1, total)) * Math.PI * 2 + motionTime * pace;
   // Keep the orbit outside the coop's solid proxy. The variation gives each
   // bird its own lane instead of drawing a perfectly artificial ring.
@@ -98,7 +119,13 @@ export function chickenPose(
   const offsetZ = out.z;
   // Average the heading across the same fixed tick used by simulation. This
   // also gives the bird a stable direction through the trough-avoidance bend.
-  writeChickenPathPoint(angle + pace * TICK_SECONDS, radius, out);
+  const nextLocalTime = localTime + TICK_SECONDS;
+  const nextCycle = Math.floor(nextLocalTime / cycleLength);
+  const nextWithinCycle = nextLocalTime - nextCycle * cycleLength;
+  const nextWalkProgress = Math.min(1, nextWithinCycle / walkDuration);
+  const nextMotionTime = nextCycle * walkDuration + smootherStep01(nextWalkProgress) * walkDuration;
+  const nextAngle = (index / Math.max(1, total)) * Math.PI * 2 + nextMotionTime * pace;
+  writeChickenPathPoint(nextAngle, radius, out);
   const tangentX = out.x - offsetX;
   const tangentZ = out.z - offsetZ;
 
@@ -115,25 +142,32 @@ export function chickenPose(
   const gaitPhase = (((step / (Math.PI * 2)) % 1) + 1) % 1;
   const stance = 0.62;
   const lift = gaitPhase < stance ? 0 : Math.sin(((gaitPhase - stance) / (1 - stance)) * Math.PI);
-  const bob = (walking ? lift * 0.034 : 0) + animalHop;
+  const bob = lift * 0.034 * motion + animalHop;
   // Compression peaks at the plant, which is the start of stance, not at the
   // top of the lift.
   const impact = gaitPhase < 0.18 ? 1 - gaitPhase / 0.18 : 0;
-  const squash = walking ? impact * 0.06 : peck * 0.018;
+  const squash = walking ? impact * 0.06 * motion : peck * 0.018;
+  const restLook = walking ? 0 : Math.sin(restTime * 0.72 + index * 1.37);
 
   out.x = shelter.x + offsetX;
   out.y = bob;
   out.z = shelter.z + offsetZ;
-  out.pitch = peck * 0.64;
+  // The shader already rotates the head through the peck. Pitching the whole
+  // bird by another 37 degrees doubled the action and made its feet leave the
+  // floor; the body now only follows through enough to sell intent.
+  out.pitch = peck * 0.085;
   // Blender -Y becomes Three.js +Z, so the authored beak/head is local +Z.
   // Aim that axis along the adjusted path tangent; using the orbit angle alone
   // made the birds move sideways and sometimes backwards near the trough.
-  out.yaw = Math.hypot(tangentX, tangentZ) > 1e-8 ? Math.atan2(tangentX, tangentZ) : -angle;
-  out.roll = walking ? Math.sin(step) * 0.065 : Math.sin(restTime * 1.7) * 0.012;
+  const travelYaw = Math.hypot(tangentX, tangentZ) > 1e-8 ? Math.atan2(tangentX, tangentZ) : -angle;
+  out.yaw = travelYaw + restLook * 0.11 * (1 - peck);
+  out.roll = walking
+    ? Math.sin(step) * 0.065 * motion
+    : restLook * 0.026 + Math.sin(restTime * 1.7) * 0.008;
   out.scaleX = (1 + squash * 0.25) * purchaseIntro;
   out.scaleY = (1 - squash + animalHop * 0.18) * purchaseIntro;
   out.scaleZ = (1 + squash * 0.45) * purchaseIntro;
-  out.motion = walking ? 1 : 0;
+  out.motion = motion;
   out.action = peck;
   out.gaitPhase = gaitPhase;
   return out;

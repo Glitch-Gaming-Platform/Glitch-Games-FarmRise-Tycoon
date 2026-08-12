@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import type { IncidentInstance } from '@farmrise/shared';
+import { STARTER_COMMUNITY_PROJECT_ID, type IncidentInstance } from '@farmrise/shared';
 import { InputSystem } from '@engine/input/InputSystem.js';
 import { ServiceContainer } from '@engine/core/ServiceContainer.js';
 import { CareerDirector } from '@game/career/CareerDirector.js';
@@ -158,6 +158,21 @@ describe('progression remains continuous', () => {
     expect(career.world.parcels.count).toBe(before + 2);
     expect(career.world.fields.placements.some((plot) => plot.id === 'plot-n1')).toBe(true);
     expect(session.summary().outcome).toBe('season');
+  });
+
+  it('offers the onboarding community project only after the Starter Extension', () => {
+    const { career, session } = harness;
+    const refusals: string[] = [];
+    session.events.on('session:refused', ({ reason }) => refusals.push(reason));
+
+    session.fundTownProject(STARTER_COMMUNITY_PROJECT_ID);
+    expect(career.town.activeProject).toBeNull();
+    expect(refusals.at(-1)).toMatch(/Starter Extension/i);
+
+    session.purchaseLand('parcel-starter-extension');
+    session.fundTownProject(STARTER_COMMUNITY_PROJECT_ID);
+    expect(career.town.activeProject?.id).toBe(STARTER_COMMUNITY_PROJECT_ID);
+    expect(career.balance).toBe(98_000);
   });
 
   it('buys livestock only while shelter space remains', () => {

@@ -324,6 +324,26 @@ limit. AWS quota case `178639262100188`, requesting a limit of 10,000 records, r
 approved; the public hostname currently fails TLS name verification and must not be reported as a
 working Webhosting deployment.
 
+### Redeployment — version 0.1.7 on August 12, 2026
+
+Distribution version `0.1.7-20260812`, build `019ff5e8-d64f-7312-b30c-1bafbbcb7f9c`, is ready and
+live. The real nested CDN URL returned HTTP 200 for `index.html` and both hashed JavaScript files.
+The public Glitch Play page loaded that exact build, rendered the WebGL canvas and main menu, and
+**Work the farm** reached the interactive gameplay menus without browser console errors.
+
+The matching Webhosting Node build is `019ff5f1-f3af-7052-98af-3be6776d7eba`, and Hosting release
+`019ff5f6-bd8d-729e-90c2-c1239c0fd22f` uses `tools/hosting/server.mjs`. The release became
+`active` at `2026-08-12T12:33:45Z`, the site became `live`, the generated domain became `active`,
+and certificate status became `Enabled`. The public `/`, `/health`, `/readyz`, `/livez`, and
+`/api/v1/health` endpoints all returned HTTP 200 over valid HTTPS. The public root also served the
+same `index-BMexLfu0.js` and `three-BPC2If2_.js` files as the verified Distribution artifact.
+
+The shared Route 53 zone still reports 50 records against a quota of 50, and AWS quota case
+`178639262100188` remains `CASE_OPENED`, but Glitch successfully completed the previously queued
+generated-domain provisioning. The Hosting API still carries the old incident reference
+`HOST-DNS-01KZRSQX6XJYGXC17NYE71XXZH` and its historical `last_error`; the authoritative active
+site, domain, certificate, release, and live HTTPS checks supersede that stale diagnostic text.
+
 ## Rollback
 
 Distribution and Hosting release state are separate. To restore a previous website release:

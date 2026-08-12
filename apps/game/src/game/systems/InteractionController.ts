@@ -13,6 +13,7 @@
  */
 import {
   CROPS,
+  ANIMALS,
   FIELD_SPOILAGE_MULTIPLIER,
   STORED_SPOILAGE_MULTIPLIER,
   THIRSTY_WATER,
@@ -28,9 +29,11 @@ import {
   type PlotState,
   type Season,
   getCrop,
+  getItem,
   getIncident,
   plantableCrops,
   plotStage,
+  ticksToSeconds,
   type Result,
 } from '@farmrise/shared';
 import { EventBus } from '@engine/core/EventBus.js';
@@ -45,6 +48,8 @@ import type { WorkAction } from '../player/Player.js';
 import type { PlayerController } from '../player/PlayerController.js';
 import type { GameAction } from '../GameActions.js';
 import { shelterDoorPoint } from '../world/collisionProfiles.js';
+import { chickenPose, createChickenPose } from '../animals/chickenMotion.js';
+import { cowPose, createCowPose } from '../animals/cowMotion.js';
 
 export type ContextVerb =
   'plant' | 'tend' | 'harvest' | 'deposit' | 'collect' | 'respond' | 'repair';
@@ -92,12 +97,20 @@ interface ContextTarget {
  * direction before reading the number.
  */
 export interface ProximityMeter {
-  readonly kind: 'water' | 'growth' | 'freshness';
+  readonly kind: 'water' | 'growth' | 'freshness' | 'animal';
   /** The world object this gauge floats above. */
-  readonly target: {
-    readonly kind: 'plot' | 'store';
-    readonly id: string;
-  };
+  readonly target:
+    | {
+        readonly kind: 'plot' | 'store';
+        readonly id: string;
+      }
+    | {
+        readonly kind: 'animal';
+        readonly id: string;
+        readonly x: number;
+        readonly y: number;
+        readonly z: number;
+      };
   readonly label: string;
   /** 0..1, remaining. */
   readonly value: number;
@@ -113,6 +126,7 @@ export class InteractionController {
   #lastPromptId: string | null = null;
   #lastPromptLabel: string | null = null;
   #lastSecondaryLabel: string | null = null;
+  #fullPackStackId: string | null = null;
 
   constructor(
     private readonly career: Career,
@@ -130,6 +144,7 @@ export class InteractionController {
 
   fixedUpdate(_context: FixedUpdateContext): void {
     if (this.input.wasPressed('cycleCrop')) this.#cycleCrop();
+    this.#reportBlockedPickup();
 
     const target = this.#resolveTarget();
     if (
@@ -261,7 +276,97 @@ export class InteractionController {
         : world.stores.nearestStored(tile.x, tile.z, 2));
     if (store) meters.push(...this.#storeMeters(store));
 
+    const animal = this.#animalGuidanceMeter();
+    if (animal) meters.push(animal);
+
     return meters;
+  }
+
+  /** Announces a blocked pickup once when the player enters a pile's range. */
+  #reportBlockedPickup(): void {
+    const world = this.career.world;
+    const tile = world.grid.worldToTile(this.player.position.x, this.player.position.z);
+    const stack = world.stores.nearestStack(tile.x, tile.z, 2);
+    const contents = stack
+      ? Object.entries(stack.items).filter(([, quantity]) => quantity > 0)
+      : [];
+    const cannotFitAny =
+      contents.length > 0 &&
+      contents.every(([itemId]) => world.carry.free < (getItem(itemId)?.storageWeight ?? 1));
+    if (!stack || !cannotFitAny) {
+      this.#fullPackStackId = null;
+      return;
+    }
+    if (this.#fullPackStackId === stack.id) return;
+    this.#fullPackStackId = stack.id;
+    this.events.emit('interaction:refused', {
+      reason: "You can't carry anymore. Store some items first.",
+    });
+  }
+
+  /** Feed/product guidance follows the nearest visible animal without owning E. */
+  #animalGuidanceMeter(): ProximityMeter | null {
+    const world = this.career.world;
+    const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
+    const simulationTime = ticksToSeconds(world.tick);
+    let nearest:
+      | {
+          readonly species: 'chicken' | 'cow';
+          readonly distance: number;
+          readonly x: number;
+          readonly z: number;
+        }
+      | undefined;
+
+    const chickenCount = Math.min(world.livestock.countOf('chicken'), 64);
+    const chicken = createChickenPose();
+    for (let index = 0; index < chickenCount; index += 1) {
+      chickenPose(shelter, index, chickenCount, simulationTime, 0, 1, chicken);
+      const distance = Math.hypot(
+        this.player.position.x - chicken.x,
+        this.player.position.z - chicken.z,
+      );
+      if (!nearest || distance < nearest.distance) {
+        nearest = { species: 'chicken', distance, x: chicken.x, z: chicken.z };
+      }
+    }
+
+    const cowCount = Math.min(world.livestock.countOf('cow'), 16);
+    const cow = createCowPose();
+    for (let index = 0; index < cowCount; index += 1) {
+      cowPose(shelter, index, cowCount, simulationTime, 1, cow);
+      const distance = Math.hypot(this.player.position.x - cow.x, this.player.position.z - cow.z);
+      if (!nearest || distance < nearest.distance) {
+        nearest = { species: 'cow', distance, x: cow.x, z: cow.z };
+      }
+    }
+
+    if (!nearest || nearest.distance > 2.6) return null;
+    const definition = ANIMALS[nearest.species];
+    const count = world.livestock.countOf(nearest.species);
+    const needed = definition.feedPerCycle * count;
+    const available = world.stores.storedTotalOf(definition.feedItemId);
+    const produced = definition.producePerCycle * count;
+    const animals =
+      nearest.species === 'chicken'
+        ? `${count} ${count === 1 ? 'Hen' : 'Hens'}`
+        : `${count} ${count === 1 ? 'Dairy cow' : 'Dairy cows'}`;
+    const feed = getItem(definition.feedItemId)?.displayName ?? definition.feedItemId;
+    const product = getItem(definition.producesItemId)?.displayName ?? definition.producesItemId;
+    return {
+      kind: 'animal',
+      target: {
+        kind: 'animal',
+        id: nearest.species,
+        x: nearest.x,
+        y: nearest.species === 'chicken' ? 1.25 : 1.9,
+        z: nearest.z,
+      },
+      label: `${animals} ${count === 1 ? 'makes' : 'make'} ${produced} ${product}`,
+      value: needed <= 0 ? 1 : Math.min(1, available / needed),
+      detail: `Store ${needed} ${feed} each cycle · ${available}/${needed} stored`,
+      urgent: available < needed,
+    };
   }
 
   /** Freshness of the pile the player is standing at, if it can spoil at all. */

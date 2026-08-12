@@ -18,7 +18,7 @@ import type { Career } from '../career/Career.js';
 // Keep this shorter than the coach hint even on a low-frame-rate software
 // renderer. Fixed-step catch-up is capped, so six simulation seconds could
 // become a much longer real-world wait on a struggling first-load device.
-const FAST_GROWTH_TICKS = secondsToTicks(3);
+const FAST_GROWTH_TICKS = secondsToTicks(1);
 
 export class OnboardingCropBoost {
   readonly #lastTendCounts = new Map<string, number>();

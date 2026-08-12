@@ -32,6 +32,23 @@ describe('chicken motion', () => {
     expect(later.gaitPhase).toBeCloseTo(first.gaitPhase, 6);
   });
 
+  it('eases into and out of a walk instead of starting at full path speed', () => {
+    const shelter = { x: 9, z: 1 };
+    const speedAt = (seconds: number): number => {
+      const pose = chickenPose(shelter, 0, 4, seconds);
+      const next = chickenPose(shelter, 0, 4, seconds + TICK_SECONDS);
+      return Math.hypot(next.x - pose.x, next.z - pose.z) / TICK_SECONDS;
+    };
+
+    const starting = speedAt(0.04);
+    const cruising = speedAt(1.2);
+    const settling = speedAt(5.46);
+    expect(starting).toBeLessThan(cruising * 0.35);
+    expect(settling).toBeLessThan(cruising * 0.35);
+    expect(chickenPose(shelter, 0, 4, 0.04).motion).toBeLessThan(0.5);
+    expect(chickenPose(shelter, 0, 4, 1.2).motion).toBeGreaterThan(0.95);
+  });
+
   it('aims the authored +Z beak along the actual walking path', () => {
     const shelter = { x: 9, z: 1 };
 
@@ -52,6 +69,17 @@ describe('chicken motion', () => {
         expect(alignment).toBeGreaterThan(0.98);
       }
     }
+  });
+
+  it('keeps peck follow-through in the chest while the shader owns the head action', () => {
+    const shelter = { x: 9, z: 1 };
+    let strongest = createChickenPose();
+    for (let seconds = 5.8; seconds < 9.4; seconds += 0.05) {
+      const pose = chickenPose(shelter, 0, 4, seconds);
+      if (pose.action > strongest.action) strongest = { ...pose };
+    }
+    expect(strongest.action).toBeGreaterThan(0.9);
+    expect(strongest.pitch).toBeLessThan(0.1);
   });
 
   it('keeps every supported flock lane clear of static shelter props', () => {

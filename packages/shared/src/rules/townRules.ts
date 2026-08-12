@@ -14,6 +14,7 @@ import {
   PROSPERITY_DECAY_PER_DAY,
   PROSPERITY_PER_CONTRACT,
   PROSPERITY_PER_DELIVERED_UNIT,
+  STARTER_COMMUNITY_PROJECT_ID,
   townStageFor,
   type CommunityProjectDefinition,
 } from '../domain/town.js';
@@ -42,6 +43,7 @@ export interface ProjectStartRequest {
   readonly balance: Cents;
   readonly available: Inventory;
   readonly unlocks: readonly string[];
+  readonly ownedParcelIds: readonly string[];
 }
 
 export interface ProjectStart {
@@ -54,8 +56,11 @@ export interface ProjectStart {
 export function validateProjectStart(request: ProjectStartRequest): Result<ProjectStart> {
   const project = COMMUNITY_PROJECTS_BY_ID[request.projectId];
   if (!project) return ruleViolation(`Millbrook has no such project: ${request.projectId}.`);
-  if (!request.unlocks.includes('town_projects')) {
+  if (project.requiresUnlock && !request.unlocks.includes(project.requiresUnlock)) {
     return ruleViolation('The town council does not take proposals from you yet.');
+  }
+  if (project.requiresParcelId && !request.ownedParcelIds.includes(project.requiresParcelId)) {
+    return ruleViolation('Open the Starter Extension before funding this project.');
   }
   if (request.completedProjectIds.includes(project.id)) {
     return ruleViolation('That has already been built.');
@@ -89,7 +94,10 @@ export function validateProjectStart(request: ProjectStartRequest): Result<Proje
 
 /** Payout multiplier granted by completed projects. Small, permanent, cumulative. */
 export function projectDeliveryBonus(completedProjectIds: readonly string[]): number {
-  return completedProjectIds.includes('project-market-road') ? 1.06 : 1;
+  let multiplier = 1;
+  if (completedProjectIds.includes(STARTER_COMMUNITY_PROJECT_ID)) multiplier += 0.01;
+  if (completedProjectIds.includes('project-market-road')) multiplier += 0.06;
+  return multiplier;
 }
 
 /** Drought damage multiplier granted by the village wells. */

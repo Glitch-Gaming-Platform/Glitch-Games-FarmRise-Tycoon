@@ -99,6 +99,16 @@ export interface GroundGeometryOptions {
     readonly to: { readonly x: number; readonly z: number };
     readonly width: number;
   }[];
+  /**
+   * Emits an `aTerrain` attribute carrying (pasture, earth, worn) per vertex,
+   * which the Ultra tier's layered ground material blends its textures with.
+   *
+   * Off by default, and that default is the point: on `low` the geometry that
+   * reaches the GPU is byte-for-byte the geometry that reached it before this
+   * material existed. An always-on attribute would be harmless in practice and
+   * would still make "low is unchanged" a claim rather than a fact.
+   */
+  readonly surfaceWeights?: boolean;
 }
 
 export interface GroundSurfaceSample {
@@ -240,6 +250,7 @@ export function createGroundGeometry(options: GroundGeometryOptions): THREE.Buff
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
   const count = position.count;
   const colours = new Float32Array(count * 3);
+  const surfaces = options.surfaceWeights ? new Float32Array(count * 3) : null;
 
   // The relief reaches full strength halfway out into the border ring, so the
   // transition from flat play area to rolling land is gradual rather than a
@@ -281,10 +292,17 @@ export function createGroundGeometry(options: GroundGeometryOptions): THREE.Buff
     colours[i * 3] = sample.value * greenRed * earthRed;
     colours[i * 3 + 1] = sample.value * greenGreen * earthGreen;
     colours[i * 3 + 2] = sample.value * greenBlue * earthBlue;
+
+    if (surfaces) {
+      surfaces[i * 3] = sample.localPasture;
+      surfaces[i * 3 + 1] = sample.localEarth;
+      surfaces[i * 3 + 2] = sample.worn;
+    }
   }
 
   position.needsUpdate = true;
   geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  if (surfaces) geometry.setAttribute('aTerrain', new THREE.BufferAttribute(surfaces, 3));
   geometry.computeVertexNormals();
 
   // The collision area remains mathematically flat, but a perfectly uniform

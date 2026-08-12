@@ -150,19 +150,26 @@ def crop_corn(stage: int):
                 # the plant becomes a bundle of spikes and loses the species.
                 droop=0.95,
             )
-        if stage == 4:
+        if stage >= 3 and (stage == 4 or ci % 2 == 0):
+            ready = stage == 4
             angle = base_yaw + 0.5
             cx, cy = px + math.cos(angle) * 0.08, py + math.sin(angle) * 0.08
-            b.cylinder("corn_ready", 0.055, 0.27, loc=(cx, cy, h * 0.55),
-                       rot=(0.16, 0.22, 0), segments=5, radius_top=0.028)
-            for side in (-1, 1):
-                b.blade("corn_husk", 0.24, 0.070, 0.014,
+            ear_colour = "corn_ready" if ready else "crop_mature"
+            husk_colour = "corn_husk" if ready else "crop_mature"
+            ear_height = 0.27 if ready else 0.17
+            b.cylinder(ear_colour, 0.055 if ready else 0.038, ear_height,
+                       loc=(cx, cy, h * 0.55), rot=(0.16, 0.22, 0),
+                       segments=5, radius_top=0.028 if ready else 0.018)
+            for side in ((-1, 1) if ready else (1,)):
+                b.blade(husk_colour, 0.24 if ready else 0.15,
+                        0.070 if ready else 0.052, 0.014,
                         loc=(cx, cy, h * 0.43), yaw=angle + side * 0.42,
                         droop=0.62)
-            for i in range(3):
-                b.blade("corn_tassel", 0.17, 0.020, 0.006,
+            for i in range(3 if ready else 2):
+                b.blade("corn_tassel" if ready else "crop_mature",
+                        0.17 if ready else 0.10, 0.020, 0.006,
                         loc=(px, py, h), yaw=base_yaw + i * TAU / 3,
-                        droop=0.72, segments=3)
+                        droop=0.72 if ready else 0.38, segments=3)
     return b.build(collection("CROPS"), smooth=False)
 
 
@@ -251,6 +258,15 @@ def crop_clover(stage: int):
                 tilt=0.2,
                 lobes=3,
                 inner=0.52,
+            )
+        if stage == 3 and ci % 3 == 0:
+            b.cylinder(
+                "crop_mature",
+                0.034,
+                0.16,
+                loc=(px, py, height + 0.065),
+                segments=4,
+                radius_top=0.006,
             )
         if stage == 4 and ci % 2 == 0:
             for petal in range(4):
@@ -352,6 +368,26 @@ def _sliding_door_handle(b, x, front_y, z):
         surface="metal_panels")
 
 
+def _roof_end_volume(b, colour, profile, depth, surface="auto", rot=(0, 0, 0)):
+    """Fill an authored gable/gambrel profile so roofs assemble as buildings."""
+    count = len(profile)
+    vertices = [(x, -depth / 2, z) for x, z in profile]
+    vertices += [(x, depth / 2, z) for x, z in profile]
+    faces = [tuple(range(count)), tuple(reversed(range(count, count * 2)))]
+    for index in range(count):
+        following = (index + 1) % count
+        faces.append((index, following, count + following, count + index))
+    b.polyhedron(colour, vertices, faces, rot=rot, surface=surface)
+
+
+def _roof_shell_x(b, colour, profile, depth, thickness=0.13, rot=(0, 0, 0)):
+    """Extrude one continuous roof band with straight eaves and ridge lines."""
+    shell = list(profile)
+    shell.extend((x, z - thickness) for x, z in reversed(profile))
+    _roof_end_volume(
+        b, colour, shell, depth, surface="metal_panels", rot=rot)
+
+
 def building_barn():
     """
     Barn: 2x2 tiles, the largest silhouette on the farm.
@@ -372,23 +408,30 @@ def building_barn():
             b.box("trim_white", size=(0.16, 0.16, wall_h),
                   loc=(sx * (w / 2 - 0.06), sy * (d / 2 - 0.06), wall_h / 2))
 
-    # Lower (steep) roof planes.
-    for sy in (-1, 1):
-        b.box("roof_grey", size=(w * 1.06, d * 0.50, 0.14),
-              loc=(0, sy * d * 0.29, wall_h + 0.30),
-              rot=(sy * -0.85, 0, 0))
-    # Upper (shallow) roof planes.
-    for sy in (-1, 1):
-        b.box("roof_grey_dark", size=(w * 1.02, d * 0.34, 0.13),
-              loc=(0, sy * d * 0.11, wall_h + 0.78),
-              rot=(sy * -0.36, 0, 0))
-    b.box("roof_grey", size=(w * 1.04, 0.14, 0.10), loc=(0, 0, wall_h + 0.92))
+    # The ridge now runs away from the doors, putting the iconic gambrel end
+    # over the working facade instead of hanging a hay loft in an eave wall.
+    _roof_end_volume(
+        b,
+        "wall_teal",
+        [(-w / 2, wall_h), (w / 2, wall_h),
+         (w * 0.27, wall_h + 0.57), (0, wall_h + 0.93),
+         (-w * 0.27, wall_h + 0.57)],
+        d,
+    )
+    _roof_shell_x(
+        b,
+        "roof_grey",
+        [(-w / 2 - 0.08, wall_h + 0.02),
+         (-w * 0.27, wall_h + 0.60),
+         (0, wall_h + 0.97),
+         (w * 0.27, wall_h + 0.60),
+         (w / 2 + 0.08, wall_h + 0.02)],
+        d * 1.06,
+    )
 
     door_w, door_h = 1.34, 1.90
     b.box("timber_warm", size=(door_w, 0.10, door_h),
           loc=(0, -d / 2 - 0.02, door_h / 2))
-    b.box("timber_dark", size=(0.09, 0.12, door_h * 0.98),
-          loc=(0, -d / 2 - 0.05, door_h / 2))
     for angle in (-0.62, 0.62):
         b.box("timber_light", size=(door_w * 0.92, 0.08, 0.075),
               loc=(0, -d / 2 - 0.09, door_h * 0.51), rot=(0, angle, 0))
@@ -403,9 +446,9 @@ def building_barn():
 
     # A loft hatch makes the front read as a barn rather than a teal shed.
     b.box("trim_white", size=(0.62, 0.075, 0.58),
-          loc=(0, -d / 2 - 0.04, wall_h + 0.18))
+          loc=(0, -d / 2 - 0.04, wall_h + 0.31))
     b.box("timber_warm", size=(0.48, 0.082, 0.44),
-          loc=(0, -d / 2 - 0.085, wall_h + 0.18))
+          loc=(0, -d / 2 - 0.085, wall_h + 0.31))
     # One bevel segment, not two. Bevel segments scale inversely with asset
     # size: the barn's edges are metres long, so a single chamfer already
     # reads as a rim highlight at any distance, and the second segment cost
@@ -438,6 +481,14 @@ def building_irrigation():
                        radius_top=0.035)
     b.box("timber_light", size=(0.92, 0.40, 0.22), loc=(0.25, -0.72, 0.11))
     b.box("water_teal", size=(0.80, 0.29, 0.055), loc=(0.25, -0.72, 0.22))
+    # Two broad braces make the elevated tank read as a load-bearing frame,
+    # not a cylinder floating over four unrelated sticks.
+    for angle in (-0.72, 0.72):
+        b.box("timber_light", size=(0.78, 0.055, 0.070),
+              loc=(0, -0.35, 0.43), rot=(0, angle, 0))
+    b.cylinder("metal_dark", 0.10, 0.06, loc=(0.30, -0.56, 0.48),
+               rot=(math.pi / 2, 0, 0), segments=6,
+               surface="metal_panels")
     b.bevel(segments=1, width=0.015)
     return b.build(collection("BUILDINGS"))
 
@@ -513,6 +564,13 @@ def building_fence():
     for angle in (-0.43, 0.43):
         b.box("timber_light", size=(span * 0.92, 0.065, 0.085),
               loc=(0, -0.015, 0.60), rot=(0, angle, 0))
+    # Hinges and a receiver turn the repeated X-brace into a believable gate
+    # leaf when ParcelView swings it, while remaining quiet on fence runs.
+    for z in (0.36, 0.84):
+        b.box("metal_dark", size=(0.30, 0.055, 0.075),
+              loc=(-span / 2 + 0.12, -0.07, z), surface="metal_panels")
+    b.box("metal_dark", size=(0.18, 0.060, 0.10),
+          loc=(span / 2 - 0.08, -0.07, 0.64), surface="metal_panels")
     b.bevel(segments=1, width=0.015)
     return b.build(collection("BUILDINGS"))
 
@@ -524,15 +582,29 @@ def building_coop():
     """
     b = MeshBuilder("SM_building_coop", budget="building")
     w, d, h = TILE_SIZE * 1.35, TILE_SIZE * 1.15, 1.02
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            b.box("timber_dark", size=(0.12, 0.12, 0.30),
-                  loc=(sx * w * 0.38, sy * d * 0.34, 0.15))
-    b.box("wall_teal_dark", size=(w, d, h), loc=(0, 0, h / 2 + 0.24))
-    b.box("roof_grey", size=(w * 1.10, d * 0.62, 0.16),
-          loc=(0, -d * 0.26, h + 0.44), rot=(-0.42, 0, 0))
-    b.box("roof_grey", size=(w * 1.10, d * 0.62, 0.16),
-          loc=(0, d * 0.26, h + 0.44), rot=(0.42, 0, 0))
+    body_top = h + 0.24
+    ridge_z = h + 0.76
+    # Broad skids overlap the body and stay readable from the starter camera;
+    # four tiny stilts previously disappeared and left the coop floating.
+    for sy in (-1, 1):
+        b.box("timber_warm", size=(w * 0.82, 0.14, 0.16),
+              loc=(0, sy * d * 0.31, 0.18))
+    b.box("wall_teal", size=(w, d, h), loc=(0, 0, h / 2 + 0.24))
+    _roof_end_volume(
+        b, "wall_teal",
+        [(-d / 2, body_top), (d / 2, body_top), (0, ridge_z)],
+        w,
+        rot=(0, 0, math.pi / 2),
+    )
+    _roof_shell_x(
+        b,
+        "roof_grey",
+        [(-d / 2 - 0.08, body_top + 0.02),
+         (0, ridge_z + 0.05),
+         (d / 2 + 0.08, body_top + 0.02)],
+        w * 1.10,
+        rot=(0, 0, math.pi / 2),
+    )
     b.box("trim_white", size=(0.60, 0.075, 0.68),
           loc=(0, -d / 2 - 0.015, 0.60))
     b.box("timber_warm", size=(0.46, 0.08, 0.56),
@@ -553,8 +625,28 @@ def building_coop():
     b.box("wall_teal_light", size=(0.48, 0.62, 0.44),
           loc=(-w / 2 - 0.18, 0.10, 0.66))
     b.box("roof_grey_light", size=(0.58, 0.72, 0.09),
-          loc=(-w / 2 - 0.18, 0.10, 0.91), rot=(0, 0.12, 0))
+          loc=(-w / 2 - 0.18, 0.10, 0.91), rot=(0, -0.12, 0))
     b.bevel(segments=1, width=0.015)
+
+    # The shipping camera sees the north-west service side, so one broad
+    # covered feed dock carries the building identity there: open bay, deck,
+    # canopy and approach ramp read as one functional unit rather than trim.
+    service_y = d / 2
+    service_x = -0.48
+    b.box("trim_white", size=(1.10, 0.075, 0.84),
+          loc=(service_x, service_y + 0.035, 0.73))
+    b.box("timber_dark", size=(0.86, 0.085, 0.62),
+          loc=(service_x, service_y + 0.080, 0.71))
+    b.box("timber_warm", size=(1.48, 0.74, 0.12),
+          loc=(service_x, service_y + 0.34, 0.24))
+    for sx in (-1, 1):
+        b.box("timber_dark", size=(0.11, 0.11, 1.14),
+              loc=(service_x + sx * 0.60, service_y + 0.62, 0.82))
+    b.box("roof_grey_light", size=(1.66, 0.86, 0.10),
+          loc=(service_x, service_y + 0.34, 1.38), rot=(-0.12, 0, 0),
+          surface="metal_panels")
+    b.box("timber_warm", size=(0.82, 0.72, 0.08),
+          loc=(service_x, service_y + 0.86, 0.14), rot=(-0.18, 0, 0))
     _front_door_knob(b, 0.15, -d / 2 - 0.13, 0.58)
     return b.build(collection("BUILDINGS"))
 
@@ -586,6 +678,8 @@ def building_cold_store():
     """Low insulated store with an unmistakable sliding door and cooling fan."""
     b = MeshBuilder("SM_building_cold_store", budget="building")
     w, d, h = TILE_SIZE * 1.82, TILE_SIZE * 1.78, 2.18
+    b.box("metal_dark", size=(w * 0.98, d * 0.98, 0.18), loc=(0, 0, 0.09),
+          surface="metal_panels")
     b.box("wall_teal_light", size=(w, d, h), loc=(0, 0, h / 2))
     b.box("roof_grey_light", size=(w * 1.06, d * 1.06, 0.20),
           loc=(0, 0, h + 0.10), surface="metal_panels")
@@ -596,6 +690,17 @@ def building_cold_store():
         b.box("metal_galv", size=(0.82, 0.10, 1.68), loc=(sx, -d / 2 - 0.08, 1.02))
         b.box("metal_dark", size=(0.07, 0.12, 1.56), loc=(sx + 0.34, -d / 2 - 0.14, 1.02))
     b.box("window_blue", size=(0.58, 0.11, 0.46), loc=(1.10, -d / 2 - 0.08, 1.34))
+    # The stepped condenser breaks the anonymous flat-roof silhouette and
+    # makes refrigeration legible even when the animated front fan is hidden.
+    b.box("roof_grey_dark", size=(w * 0.94, 0.12, 0.22),
+          loc=(0, d * 0.48, h + 0.21), surface="metal_panels")
+    b.box("metal_galv", size=(1.06, 0.76, 0.42),
+          loc=(0.82, 0.54, h + 0.35), surface="metal_panels")
+    b.box("roof_grey_dark", size=(1.16, 0.86, 0.10),
+          loc=(0.82, 0.54, h + 0.61), surface="metal_panels")
+    for x in (0.62, 1.02):
+        b.box("metal_dark", size=(0.11, 0.055, 0.24),
+              loc=(x, 0.145, h + 0.35), surface="metal_panels")
     for sx in (-1, 1):
         b.box("metal_dark", size=(0.12, d * 0.92, 0.18),
               loc=(sx * w * 0.46, 0, 0.09))
@@ -627,6 +732,16 @@ def building_worker_hut():
               loc=(sx * w * 0.34, -d * 0.72, 0.86))
     b.box("roof_grey_light", size=(w * 0.88, 0.92, 0.10),
           loc=(0, -d * 0.70, 1.55), rot=(-0.15, 0, 0))
+    # One broad step and two porch rails make the raised floor believable at
+    # gameplay distance without spending geometry on balusters that vanish.
+    b.box("timber_light", size=(w * 0.54, 0.34, 0.14),
+          loc=(0, -d * 0.93, 0.14))
+    # The entry side stays open; a broad rail and brace protect the window
+    # side and read front-on instead of becoming two end-on wooden handles.
+    b.box("timber_light", size=(w * 0.25, 0.09, 0.10),
+          loc=(w * 0.235, -d * 0.72, 0.72))
+    b.box("timber_light", size=(w * 0.25, 0.08, 0.075),
+          loc=(w * 0.235, -d * 0.72, 0.52), rot=(0, -0.42, 0))
     b.box("trim_white", size=(0.72, 0.08, 1.54), loc=(-0.66, -d / 2 - 0.04, 1.00))
     b.box("timber_warm", size=(0.58, 0.09, 1.40), loc=(-0.66, -d / 2 - 0.09, 0.98))
     b.box("trim_white", size=(0.78, 0.08, 0.70), loc=(0.72, -d / 2 - 0.04, 1.20))
@@ -646,13 +761,25 @@ def building_well():
         b.box("roof_grey", size=(1.62, 0.74, 0.11),
               loc=(0, sy * 0.31, 1.90), rot=(sy * -0.42, 0, 0))
     b.bevel(segments=1, width=0.015)
-    b.cylinder("sand_stone", 0.66, 0.50, loc=(0, 0, 0.25),
+    # Individual ring stones leave a dark opening around recessed water. The
+    # former solid cylinder read as a painted barrel with water on its lid.
+    b.cylinder("rock_shadow", 0.50, 0.26, loc=(0, 0, 0.13),
                segments=10, surface="stone")
-    b.cylinder("water_deep", 0.50, 0.04, loc=(0, 0, 0.51), segments=10)
+    for index in range(10):
+        angle = index * TAU / 10
+        b.box("sand_stone" if index % 3 else "rock",
+              size=(0.24, 0.34, 0.36),
+              loc=(math.cos(angle) * 0.55, math.sin(angle) * 0.55, 0.18),
+              rot=(0, 0, angle), surface="stone")
+    b.cylinder("water_deep", 0.44, 0.035, loc=(0, 0, 0.30), segments=10)
     b.cylinder_between("timber_light", (-0.70, 0, 1.64), (0.70, 0, 1.64),
                        0.075, segments=6, radius_top=0.065)
     b.cylinder("metal_dark", 0.09, 1.46, loc=(0, 0, 1.30),
                rot=(0, math.pi / 2, 0), segments=7)
+    b.cylinder("timber_dark", 0.018, 0.58, loc=(0, 0, 1.29), segments=5)
+    b.cylinder("timber_warm", 0.14, 0.22, loc=(0, 0, 0.89),
+               segments=7, radius_top=0.11)
+    b.cylinder("metal_dark", 0.145, 0.035, loc=(0, 0, 0.99), segments=7)
     return b.build(collection("BUILDINGS"))
 
 
@@ -660,10 +787,20 @@ def building_mill():
     """Compact stone mill whose exposed wheel makes processing readable."""
     b = MeshBuilder("SM_building_mill", budget="building")
     w, d, h = TILE_SIZE * 1.78, TILE_SIZE * 1.72, 2.12
-    b.box("wall_teal_dark", size=(w, d, h), loc=(0, 0, h / 2))
-    for sy in (-1, 1):
-        b.box("roof_grey", size=(w * 1.08, d * 0.58, 0.16),
-              loc=(0, sy * d * 0.25, h + 0.50), rot=(sy * -0.52, 0, 0))
+    b.box("wall_teal", size=(w, d, h), loc=(0, 0, h / 2))
+    _roof_end_volume(
+        b, "wall_teal",
+        [(-w / 2, h), (w / 2, h), (0, h + 0.67)], d,
+    )
+    _roof_shell_x(
+        b,
+        "roof_grey",
+        [(-w / 2 - 0.08, h + 0.02),
+         (0, h + 0.72),
+         (w / 2 + 0.08, h + 0.02)],
+        d * 1.08,
+        thickness=0.15,
+    )
     b.box("trim_white", size=(1.20, 0.08, 1.72), loc=(-0.55, -d / 2 - 0.04, 0.94))
     b.box("timber_warm", size=(1.04, 0.09, 1.58), loc=(-0.55, -d / 2 - 0.09, 0.92))
     for angle in (-0.62, 0.62):
@@ -671,12 +808,22 @@ def building_mill():
               loc=(-0.55, -d / 2 - 0.14, 0.92), rot=(0, angle, 0))
     b.box("trim_white", size=(0.72, 0.08, 0.64), loc=(0.76, -d / 2 - 0.04, 1.34))
     b.box("window_blue", size=(0.56, 0.09, 0.48), loc=(0.76, -d / 2 - 0.09, 1.34))
+    b.cylinder("trim_white", 0.31, 0.08,
+               loc=(0, -d / 2 - 0.04, h + 0.20),
+               rot=(math.pi / 2, 0, 0), segments=8)
+    b.cylinder("window_blue", 0.22, 0.10,
+               loc=(0, -d / 2 - 0.09, h + 0.20),
+               rot=(math.pi / 2, 0, 0), segments=8)
     b.cylinder("metal_dark", 0.16, 0.30, loc=(w / 2 + 0.05, 0, 1.04),
                rot=(0, math.pi / 2, 0), segments=8)
     b.box("timber_light", size=(0.56, 0.72, 0.60), loc=(0.72, 0.58, 0.58))
     b.box("roof_grey_light", size=(0.68, 0.82, 0.10), loc=(0.72, 0.58, 0.92))
     b.box("roof_grey_dark", size=(0.28, 0.28, 0.72), loc=(-1.12, 0.35, 2.38))
     b.bevel(segments=1, width=0.015)
+    # Stone is the deliberate hard-edge exception, so the grounding plinth
+    # stays faceted and does not spend the mill's budget on invisible chamfers.
+    b.box("sand_stone", size=(w * 0.98, d * 0.98, 0.24), loc=(0, 0, 0.12),
+          surface="stone")
     _front_door_knob(b, -0.21, -d / 2 - 0.16, 0.92)
     return b.build(collection("BUILDINGS"))
 
@@ -876,6 +1023,9 @@ def character_farmer():
           loc=(0.255, 0.045, 0.59), rot=(0, 0.08, -0.04))
     b.box("timber_light", size=(0.18, 0.018, 0.055),
           loc=(0.255, -0.026, 0.65))
+    b.cylinder("straw_hat_band", 0.021, 0.018,
+               loc=(0.255, -0.040, 0.64),
+               rot=(math.pi / 2, 0, 0), segments=5)
     # Collar as a ring around the neck, not a plate across the chest.
     #
     # Three versions were needed here. A wide slab read as a plinth with a bust
@@ -897,6 +1047,11 @@ def character_farmer():
         wrist = (sx * 0.295, -0.055, 0.73)
         b.cylinder_between("shirt_blue", shoulder, elbow, 0.070,
                            segments=7, radius_top=0.058)
+        # A rolled cuff creates a readable elbow hinge. The old uninterrupted
+        # blue-to-skin tube stayed visually straight even when the rig bent it.
+        b.cylinder_between("shirt_blue_dark",
+                           (sx * 0.255, -0.010, 0.922), elbow, 0.064,
+                           segments=6, radius_top=0.058)
         b.cylinder_between("skin", elbow, wrist, 0.052,
                            segments=7, radius_top=0.044)
         b.sphere("skin", 0.060, loc=(sx * 0.30, -0.064, 0.695), u=8, v=5)
@@ -953,6 +1108,11 @@ def character_farmer():
     # white, which is why the first version looked like a beak.
     b.sphere("skin_shadow", 0.023, loc=(0, -0.188, eye_z - 0.038),
              scale=(0.85, 0.55, 0.62), u=7, v=4)
+
+    # A compact knot keeps the kerchief identity hook visible through torso
+    # twists and makes it feel tied rather than printed onto the shirt.
+    b.sphere("scarf_red", 0.027, loc=(0, -0.162, 1.112),
+             scale=(0.86, 0.48, 0.72), u=6, v=3)
 
     # --- hair -------------------------------------------------------------
     # The crown is pushed back so the forehead is skin, not hair. Previously
@@ -1020,6 +1180,10 @@ def animal_chicken():
     b = MeshBuilder("SM_animal_chicken", budget="animal")
     b.sphere("chicken_body", 0.165, loc=(0, 0.01, 0.18),
              scale=(1.0, 1.24, 0.95), u=10, v=6)
+    # A proud breast interrupts the bean profile and gives the neck a clean
+    # transition into the body without introducing close-up-only feather noise.
+    b.sphere("chicken_body", 0.100, loc=(0, -0.105, 0.225),
+             scale=(0.80, 0.72, 0.92), u=8, v=5)
     for sx in (-1, 1):
         b.sphere("chicken_wing", 0.083, loc=(sx * 0.125, 0.02, 0.20),
                  scale=(0.42, 1.25, 0.95), u=6, v=4)
@@ -1036,10 +1200,10 @@ def animal_chicken():
              scale=(0.7, 0.5, 1.1), u=5, v=3)
     # Three unequal feathers form a tapered fan. The previous four identical
     # blades read as a rectangular broom in profile.
-    for yaw, height, width in ((-0.28, 0.15, 0.060), (0.0, 0.205, 0.070),
-                               (0.28, 0.16, 0.060)):
+    for yaw, height, width in ((-0.42, 0.145, 0.058), (0.0, 0.205, 0.070),
+                               (0.36, 0.165, 0.060)):
         b.blade("chicken_wing", height, width, 0.016,
-                loc=(0, 0.15, 0.22), yaw=yaw, droop=-0.72, segments=3)
+                loc=(0, 0.145, 0.215), yaw=yaw, droop=-0.78, segments=3)
     for sx in (-1, 1):
         b.cylinder("chicken_beak", 0.018, 0.10,
                    loc=(sx * 0.055, -0.01, 0.055), segments=4)
@@ -1067,69 +1231,71 @@ def animal_cow():
     a broad muzzle, outward ears, four grounded hooves and a visible udder.
     """
     b = MeshBuilder("SM_animal_cow", budget="animal")
-    b.sphere("cow_hide", 0.34, loc=(0, 0.02, 0.61),
-             scale=(1.08, 1.55, 0.84), u=8, v=5)
+    b.sphere("cow_hide", 0.35, loc=(0, 0.02, 0.50),
+             scale=(1.24, 1.52, 0.90), u=8, v=5)
     # Shoulder and haunch masses break the body into readable anatomy instead
     # of one extruded capsule.
-    b.sphere("cow_hide", 0.24, loc=(0, -0.32, 0.69),
-             scale=(1.02, 0.92, 1.02), u=6, v=3)
-    b.sphere("cow_hide", 0.25, loc=(0, 0.34, 0.64),
-             scale=(1.04, 0.96, 0.96), u=6, v=3)
+    b.sphere("cow_hide", 0.27, loc=(0, -0.31, 0.55),
+             scale=(1.18, 1.00, 1.05), u=6, v=3)
+    b.sphere("cow_hide", 0.28, loc=(0, 0.32, 0.52),
+             scale=(1.18, 1.02, 1.05), u=6, v=3)
 
     # Irregular flank patches sit proud of the body by only a few millimetres.
     # Their asymmetry keeps repeated cows from reading as painted toys even
     # though every instance shares one mesh.
-    b.sphere("cow_patch", 0.20, loc=(0.325, 0.04, 0.68),
-             scale=(0.18, 0.92, 0.72), rot=(0.08, 0.18, -0.16), u=6, v=4)
-    b.sphere("cow_patch", 0.16, loc=(-0.328, 0.20, 0.55),
-             scale=(0.16, 0.82, 0.72), rot=(-0.12, -0.12, 0.22), u=6, v=4)
+    b.sphere("cow_patch", 0.20, loc=(0.405, 0.04, 0.57),
+             scale=(0.17, 0.92, 0.72), rot=(0.08, 0.18, -0.16), u=5, v=4)
+    b.sphere("cow_patch", 0.16, loc=(-0.407, 0.20, 0.46),
+             scale=(0.15, 0.82, 0.72), rot=(-0.12, -0.12, 0.22), u=5, v=4)
 
     # Neck, head and muzzle form a gentle downward line that remains clear
     # when the grazing shader rotates only the front mass.
-    b.sphere("cow_hide", 0.20, loc=(0, -0.46, 0.76),
-             scale=(0.94, 0.78, 1.04), u=7, v=4)
-    b.sphere("cow_hide", 0.215, loc=(0, -0.64, 0.78),
-             scale=(1.02, 0.86, 0.88), u=8, v=5)
-    b.sphere("cow_patch", 0.105, loc=(-0.085, -0.677, 0.86),
-             scale=(1.05, 0.36, 0.72), rot=(0, 0.10, -0.18), u=6, v=3)
-    b.sphere("cow_muzzle", 0.145, loc=(0, -0.79, 0.69),
-             scale=(1.18, 0.70, 0.58), u=7, v=4)
+    b.sphere("cow_hide", 0.22, loc=(0, -0.47, 0.65),
+             scale=(0.98, 0.90, 1.12), u=7, v=4)
+    b.sphere("cow_hide", 0.22, loc=(0, -0.68, 0.69),
+             scale=(1.12, 0.92, 0.88), u=8, v=5)
+    b.sphere("cow_patch", 0.105, loc=(-0.095, -0.715, 0.77),
+             scale=(1.05, 0.36, 0.72), rot=(0, 0.10, -0.18), u=5, v=3)
+    b.sphere("cow_muzzle", 0.15, loc=(0, -0.85, 0.59),
+             scale=(1.22, 0.76, 0.62), u=7, v=4)
 
     # Ears and short horns widen the head silhouette. Horns are deliberately
     # modest: this is a dairy cow, not a bull or a buffalo.
     for sx in (-1, 1):
-        b.sphere("cow_patch", 0.095, loc=(sx * 0.205, -0.61, 0.84),
-                 scale=(1.15, 0.50, 0.42), rot=(0.0, sx * 0.20, sx * 0.18),
-                 u=6, v=3)
-        b.cylinder_between("cow_horn", (sx * 0.10, -0.60, 0.93),
-                           (sx * 0.155, -0.625, 1.02), 0.024,
+        b.sphere("cow_patch", 0.095, loc=(sx * 0.245, -0.65, 0.77),
+                 scale=(1.35, 0.48, 0.38), rot=(0.0, sx * 0.20, sx * 0.18),
+                 u=5, v=3)
+        b.cylinder_between("cow_horn", (sx * 0.11, -0.64, 0.85),
+                           (sx * 0.175, -0.665, 0.94), 0.024,
                            segments=4, radius_top=0.008)
-        b.sphere("eye_dark", 0.020, loc=(sx * 0.105, -0.805, 0.805),
+        b.sphere("eye_dark", 0.020, loc=(sx * 0.115, -0.845, 0.715),
                  scale=(0.9, 0.55, 1.0), u=5, v=3)
 
     # Tapered legs overlap the body and end in broad hooves, so the animal is
     # grounded from both the gameplay camera and the side silhouette pass.
     for sx in (-1, 1):
-        for fy in (-0.25, 0.28):
+        for fy in (-0.27, 0.28):
             colour = "cow_patch" if (sx > 0) == (fy > 0) else "cow_hide"
-            b.cylinder(colour, 0.060, 0.43,
-                       loc=(sx * 0.205, fy, 0.245), segments=5, radius_top=0.046)
-            b.box("cow_hoof", size=(0.125, 0.17, 0.07),
-                  loc=(sx * 0.205, fy - 0.025, 0.035))
+            hoof_y = fy - 0.045 if fy < 0 else fy + 0.045
+            leg_x = sx * 0.225
+            hoof_x = sx * 0.235
+            b.cylinder_between(colour, (leg_x, fy, 0.40),
+                               (hoof_x, hoof_y, 0.09), 0.078,
+                               segments=5, radius_top=0.060)
+            for cleft in (-1, 1):
+                b.box("cow_hoof", size=(0.072, 0.20, 0.085),
+                      loc=(hoof_x + cleft * 0.043, hoof_y - 0.020, 0.0425),
+                      rot=(0, 0, cleft * 0.05))
 
-    # Udder and two readable teats are large enough to identify the production
-    # role without becoming close-up anatomy.
-    b.sphere("cow_udder", 0.115, loc=(0, 0.12, 0.34),
-             scale=(1.22, 0.82, 0.48), u=7, v=4)
-    for sx in (-1, 1):
-        b.cylinder("cow_udder", 0.018, 0.075,
-                   loc=(sx * 0.048, 0.095, 0.255), segments=4,
-                   radius_top=0.013)
+    # One broad udder carries the dairy read at gameplay distance; separate
+    # teat geometry was too small to survive the shipping camera.
+    b.sphere("cow_udder", 0.12, loc=(0, 0.11, 0.265),
+             scale=(1.25, 0.86, 0.52), u=7, v=4)
 
-    b.cylinder_between("cow_patch", (0, 0.48, 0.70), (0.035, 0.77, 0.51),
-                       0.021, segments=4, radius_top=0.012)
-    b.sphere("cow_patch", 0.070, loc=(0.04, 0.80, 0.47),
-             scale=(0.62, 0.90, 1.15), rot=(0.2, 0, 0.18), u=5, v=3)
+    b.cylinder_between("cow_patch", (0, 0.50, 0.58), (0.060, 0.77, 0.44),
+                       0.024, segments=4, radius_top=0.013)
+    b.sphere("cow_patch", 0.080, loc=(0.075, 0.80, 0.40),
+             scale=(0.74, 0.96, 1.16), rot=(0.2, 0, 0.28), u=5, v=3)
     return b.build(collection("ANIMALS"), smooth=True)
 
 
@@ -1144,49 +1310,50 @@ def animal_fox():
     findability threshold against BOTH the red soil and the gold scrub.
     """
     b = MeshBuilder("SM_animal_fox", budget="animal")
-    b.sphere("fox_body", 0.155, loc=(0, 0, 0.21),
-             scale=(1.0, 1.34, 0.88), u=9, v=5)
-    b.sphere("fox_belly", 0.108, loc=(0, -0.03, 0.145),
-             scale=(0.95, 1.30, 0.52), u=7, v=4)
+    b.sphere("fox_body", 0.16, loc=(0, 0.015, 0.20),
+             scale=(1.02, 1.12, 0.95), u=9, v=5)
+    b.sphere("fox_belly", 0.112, loc=(0, -0.045, 0.145),
+             scale=(1.10, 1.12, 0.58), u=7, v=4)
     # Shoulder and haunch masses keep the side view from collapsing into one
     # orange sausage, while preserving the toy-like convex language.
-    b.sphere("fox_body", 0.115, loc=(0, -0.13, 0.235),
-             scale=(1.02, 0.92, 1.04), u=6, v=4)
-    b.sphere("fox_body", 0.125, loc=(0, 0.15, 0.225),
-             scale=(1.04, 0.96, 0.98), u=6, v=4)
-    b.sphere("fox_body", 0.105, loc=(0, -0.245, 0.275),
-             scale=(1.0, 0.96, 0.94), u=8, v=5)
+    b.sphere("fox_body", 0.125, loc=(0, -0.115, 0.235),
+             scale=(1.34, 1.02, 1.12), u=6, v=4)
+    b.sphere("fox_body", 0.14, loc=(0, 0.13, 0.22),
+             scale=(1.26, 1.05, 1.08), u=6, v=4)
+    b.sphere("fox_body", 0.112, loc=(0, -0.25, 0.285),
+             scale=(1.08, 1.00, 0.96), u=8, v=5)
     b.cylinder("fox_belly", 0.055, 0.11, loc=(0, -0.345, 0.235),
                rot=(-1.57, 0, 0), segments=5, radius_top=0.022)
     b.sphere("fox_dark", 0.024, loc=(0, -0.405, 0.232), u=5, v=3)
     for sx in (-1, 1):
         b.cylinder("fox_body", 0.060, 0.14,
-                   loc=(sx * 0.060, -0.215, 0.385),
-                   rot=(0, sx * 0.25, 0), segments=4, radius_top=0.004)
-        b.sphere("fox_dark", 0.021, loc=(sx * 0.052, -0.315, 0.292),
+                   loc=(sx * 0.075, -0.215, 0.395),
+                   rot=(0, sx * 0.32, sx * 0.08), segments=4,
+                   radius_top=0.004)
+        b.sphere("fox_dark", 0.021, loc=(sx * 0.060, -0.322, 0.302),
                  scale=(0.9, 0.6, 1.0), u=5, v=3)
-    # A three-lobed plume gives the fox a species-specific outline even when
-    # its body is hidden by crops. The pale tip carries contrast on both soil
-    # and scrub, as required by the palette audit exception.
-    b.sphere("fox_body", 0.125, loc=(0, 0.29, 0.25),
-             rot=(0.34, 0, 0), scale=(0.90, 1.45, 0.92), u=8, v=5)
-    b.sphere("fox_body", 0.115, loc=(0, 0.48, 0.32),
-             rot=(0.48, 0, 0), scale=(0.86, 1.35, 0.88), u=7, v=4)
-    b.sphere("fox_belly", 0.090, loc=(0, 0.65, 0.39),
-             rot=(0.56, 0, 0), scale=(0.78, 1.20, 0.80), u=7, v=4)
+    # One continuous plume replaces the old bead-chain tail. Its lateral sweep
+    # opens the front silhouette while the pale tip still carries contrast on
+    # both soil and scrub.
+    b.sphere("fox_body", 0.145, loc=(0.045, 0.39, 0.30),
+             rot=(0.47, 0, -0.18), scale=(1.00, 1.85, 1.02), u=9, v=5)
+    b.sphere("fox_belly", 0.105, loc=(0.13, 0.66, 0.43),
+             rot=(0.63, 0, -0.32), scale=(0.88, 1.30, 0.86), u=7, v=4)
     for sx in (-1, 1):
         for fy in (-0.15, 0.17):
-            b.cylinder("fox_dark", 0.032, 0.15, loc=(sx * 0.088, fy, 0.075),
-                       segments=5, radius_top=0.027)
-            b.box("fox_dark", size=(0.074, 0.13, 0.035),
-                  loc=(sx * 0.088, fy - 0.035, 0.018))
-    # Pale cheek points and dark brow wedges make the face readable without
-    # relying on the orange body colour alone.
+            paw_x = sx * (0.115 if fy < 0 else 0.105)
+            foot_y = fy - 0.045 if fy < 0 else fy + 0.045
+            b.cylinder_between("fox_dark", (paw_x * 0.94, fy, 0.16),
+                               (paw_x, foot_y, 0.060), 0.039,
+                               segments=5, radius_top=0.031)
+            b.box("fox_dark", size=(0.086, 0.145, 0.045),
+                  loc=(paw_x, foot_y - 0.030, 0.0225),
+                  rot=(0, 0, sx * 0.05))
+    # Pale cheek points keep the face readable without relying on the orange
+    # body colour alone; the former brow strips were close-up-only geometry.
     for sx in (-1, 1):
-        b.sphere("fox_belly", 0.046, loc=(sx * 0.058, -0.326, 0.247),
-                 scale=(0.78, 0.48, 0.64), u=6, v=3)
-        b.box("fox_dark", size=(0.055, 0.018, 0.016),
-              loc=(sx * 0.052, -0.326, 0.318), rot=(0, 0, sx * -0.18))
+        b.sphere("fox_belly", 0.048, loc=(sx * 0.065, -0.330, 0.252),
+                 scale=(0.82, 0.50, 0.66), u=6, v=3)
     return b.build(collection("ANIMALS"), smooth=True)
 
 
@@ -1200,9 +1367,21 @@ def prop_rock():
     allowed a hard edge, because rock is the only non-organic,
     non-manufactured material in the palette."""
     b = MeshBuilder("SM_prop_rock", budget="prop")
-    b.sphere("rock", 0.42, loc=(0, 0, 0.30), scale=(1.0, 0.86, 0.72), u=7, v=4)
-    b.sphere("rock_shadow", 0.22, loc=(0.26, 0.16, 0.14),
-             scale=(1.0, 0.9, 0.8), u=6, v=3)
+    b.sphere("rock", 0.42, loc=(-0.04, 0, 0.30),
+             rot=(0.08, -0.10, 0.18), scale=(1.08, 0.80, 0.74), u=7, v=4)
+    b.sphere("rock_shadow", 0.22, loc=(0.27, 0.15, 0.14),
+             rot=(-0.06, 0.12, -0.28), scale=(1.0, 0.88, 0.76), u=6, v=3)
+    # A low shard breaks the two-sphere snowman outline while remaining broad
+    # enough to survive the gameplay camera.
+    b.polyhedron(
+        "rock_shadow",
+        [(-0.19, -0.12, 0), (0.18, -0.10, 0), (0.14, 0.14, 0),
+         (-0.16, 0.12, 0), (-0.11, -0.07, 0.22),
+         (0.10, -0.06, 0.18), (0.06, 0.08, 0.16), (-0.09, 0.07, 0.20)],
+        [(0, 1, 2, 3), (4, 7, 6, 5), (0, 4, 5, 1),
+         (1, 5, 6, 2), (2, 6, 7, 3), (3, 7, 4, 0)],
+        loc=(-0.28, -0.12, 0), rot=(0, 0, -0.18), surface="stone",
+    )
     return b.build(collection("PROPS"), smooth=False)
 
 
@@ -1215,11 +1394,25 @@ def prop_grass_tuft():
     are the cheapest possible fix for a bare-looking field.
     """
     b = MeshBuilder("SM_prop_grass_tuft", budget="prop")
-    for i in range(7):
-        angle = i * (TAU / 7) + 0.4
-        b.blade("ground_scrub_pale", 0.26 + 0.10 * ((i % 3) / 2.0), 0.035, 0.008,
-                loc=(math.cos(angle) * 0.06, math.sin(angle) * 0.06, 0.0),
-                yaw=angle, droop=0.45)
+    blades = [
+        (-0.09, -0.03, 0.36, -0.20, 0.54),
+        (-0.03, 0.04, 0.31, -0.02, 0.46),
+        (0.03, -0.04, 0.34, 0.16, 0.50),
+        (0.08, 0.03, 0.28, 0.31, 0.44),
+        (0.26, 0.12, 0.25, 0.12, 0.40),
+        (0.32, 0.17, 0.21, 0.34, 0.36),
+        (0.36, 0.09, 0.18, 0.52, 0.32),
+    ]
+    for x, y, height, yaw, droop in blades:
+        b.blade(
+            "ground_scrub_pale",
+            height,
+            0.035,
+            0.008,
+            loc=(x, y, 0.0),
+            yaw=yaw,
+            droop=droop,
+        )
     return b.build(collection("PROPS"), smooth=False)
 
 
@@ -1320,142 +1513,361 @@ def prop_dirt_clods():
 
 
 def prop_bush():
-    """A low scrub bush. Mid-height mass between grass tufts and rocks."""
+    """A low scrub bush with visible forks and a broken, wind-shaped crown."""
     b = MeshBuilder("SM_prop_bush", budget="prop")
-    b.sphere("crop_leaf_dark", 0.34, loc=(0, 0, 0.24),
-             scale=(1.0, 0.92, 0.62), u=8, v=4)
-    b.sphere("crop_mature", 0.22, loc=(0.18, -0.10, 0.30),
-             scale=(1.0, 0.95, 0.70), u=7, v=4)
-    b.sphere("crop_mature", 0.18, loc=(-0.19, 0.09, 0.26),
-             scale=(1.0, 0.95, 0.70), u=6, v=3)
-    return b.build(collection("PROPS"), smooth=True)
-
-
-def _eucalyptus_leaf_spray(b, centre, radius, yaw, colour_offset=0):
-    """Five separate eucalyptus leaves grouped around a visible branch tip."""
-    x, y, z = centre
-    colours = ["tree_leaf_dark", "tree_leaf_mid", "tree_leaf_light"]
-    placements = [
-        (-0.30, -0.18, -0.03, -0.62),
-        (-0.12, 0.20, 0.03, 0.54),
-        (0.08, -0.22, 0.00, -0.48),
-        (0.27, 0.18, 0.05, 0.46),
-        (0.40, 0.00, 0.08, 0.04),
-        (-0.39, 0.05, 0.06, 0.18),
-        (0.18, 0.31, -0.02, 0.76),
+    b.cylinder("tree_trunk", 0.055, 0.34, loc=(0, 0, 0.17),
+               rot=(0.08, -0.10, 0), segments=5, radius_top=0.035)
+    branches = [
+        ((0, 0, 0.16), (-0.30, 0.06, 0.42)),
+        ((0, 0, 0.20), (0.29, -0.10, 0.46)),
+        ((0, 0, 0.24), (0.02, 0.25, 0.50)),
     ]
-    for index, (along, side, up, fan) in enumerate(placements):
-        cos_yaw = math.cos(yaw)
-        sin_yaw = math.sin(yaw)
-        px = x + (along * cos_yaw - side * sin_yaw) * radius
-        py = y + (along * sin_yaw + side * cos_yaw) * radius
-        pz = z + up * radius
-        b.lance_leaf(
-            colours[(index + colour_offset) % len(colours)],
-            length=radius * (0.84 if index < 5 else 0.72),
-            width=radius * 0.30,
-            loc=(px, py, pz),
-            rot=(0.22 + (index % 2) * 0.20, fan * 0.34, yaw + fan),
-            curl=0.18,
+    for start, end in branches:
+        b.cylinder_between("tree_trunk_light", start, end, 0.030,
+                           segments=5, radius_top=0.014)
+    clusters = [
+        (-0.31, 0.07, 0.45, 0.30, -0.18, 0.18, "crop_leaf_dark"),
+        (0.30, -0.10, 0.49, 0.32, 0.24, 0.56, "crop_mature"),
+        (0.03, 0.26, 0.52, 0.28, -0.34, 0.92, "crop_leaf_dark"),
+        (-0.02, -0.04, 0.39, 0.33, 0.08, 0.36, "crop_mature"),
+        (-0.10, -0.13, 0.55, 0.25, 0.74, 1.08, "crop_leaf_dark"),
+    ]
+    for x, y, z, radius, yaw, tilt, colour in clusters:
+        b.foliage_cluster(colour, radius, loc=(x, y, z),
+                          rot=(tilt, -0.12, yaw), scale=(1.0, 0.82, 0.92),
+                          lobes=5, inner=0.64, depth=0.10)
+    return b.build(collection("PROPS"), smooth=False)
+
+
+def _tree_buttress(b, colour, radius, height, roots, variant=0,
+                   surface="auto"):
+    """An uneven trunk foot with one or two partly buried exposed roots."""
+    lower_profile = (1.00, 0.72, 0.88, 0.64, 0.82)
+    upper_profile = (0.62, 0.52, 0.58, 0.48, 0.56)
+    phase = variant * 0.31
+    lower = []
+    upper = []
+    for index in range(5):
+        angle = phase + index * TAU / 5
+        lower_scale = lower_profile[(index + variant) % 5]
+        upper_scale = upper_profile[(index * 2 + variant) % 5]
+        lower.append((
+            math.cos(angle) * radius * lower_scale,
+            math.sin(angle) * radius * lower_scale,
+            -0.035,
+        ))
+        upper_angle = angle + 0.10
+        upper.append((
+            math.cos(upper_angle) * radius * upper_scale,
+            math.sin(upper_angle) * radius * upper_scale,
+            height,
+        ))
+    faces = [
+        (index, (index + 1) % 5, 5 + (index + 1) % 5, 5 + index)
+        for index in range(5)
+    ]
+    faces.append((5, 6, 7, 8, 9))
+    b.polyhedron(colour, lower + upper, faces, surface=surface)
+
+    root_points = [
+        (0.0, -0.50, -0.10),
+        (0.0, 0.50, -0.10),
+        (0.0, -0.22, 1.0),
+        (0.0, 0.22, 1.0),
+        (1.0, -0.12, -0.08),
+        (1.0, 0.12, -0.08),
+    ]
+    root_faces = [(0, 1, 3, 2), (2, 3, 5, 4), (0, 2, 4), (1, 5, 3)]
+    for yaw, length, width, root_height in roots:
+        b.polyhedron(
+            colour,
+            root_points,
+            root_faces,
+            rot=(0.0, 0.0, yaw),
+            scale=(length, width, root_height),
+            surface=surface,
+        )
+
+
+def _tree_chain(b, colours, points, radii, segments=5, surface="auto"):
+    """One tapered tube follows an entire limb without capped segment seams."""
+    palette = (colours,) if isinstance(colours, str) else colours
+    if len(points) != len(radii) or len(points) < 2:
+        raise ValueError("tree chains need matching point/radius paths")
+
+    def subtract(a, c):
+        return (a[0] - c[0], a[1] - c[1], a[2] - c[2])
+
+    def cross(a, c):
+        return (
+            a[1] * c[2] - a[2] * c[1],
+            a[2] * c[0] - a[0] * c[2],
+            a[0] * c[1] - a[1] * c[0],
+        )
+
+    def normalize(vector):
+        length = math.sqrt(sum(component * component for component in vector))
+        return tuple(component / max(length, 1e-6) for component in vector)
+
+    vertices = []
+    for index, (point, radius) in enumerate(zip(points, radii)):
+        if index == 0:
+            tangent = subtract(points[1], point)
+        elif index == len(points) - 1:
+            tangent = subtract(point, points[index - 1])
+        else:
+            tangent = subtract(points[index + 1], points[index - 1])
+        tangent = normalize(tangent)
+        reference = (0.0, 0.0, 1.0) if abs(tangent[2]) < 0.92 else (0.0, 1.0, 0.0)
+        side = normalize(cross(tangent, reference))
+        up = normalize(cross(side, tangent))
+        for segment in range(segments):
+            angle = segment * TAU / segments
+            vertices.append((
+                point[0] + radius * (math.cos(angle) * side[0] + math.sin(angle) * up[0]),
+                point[1] + radius * (math.cos(angle) * side[1] + math.sin(angle) * up[1]),
+                point[2] + radius * (math.cos(angle) * side[2] + math.sin(angle) * up[2]),
+            ))
+
+    faces = []
+    for ring in range(len(points) - 1):
+        for segment in range(segments):
+            following = (segment + 1) % segments
+            lower = ring * segments
+            upper = (ring + 1) * segments
+            faces.append((
+                lower + segment,
+                lower + following,
+                upper + following,
+                upper + segment,
+            ))
+    faces.append(tuple(reversed(range(segments))))
+    final_ring = (len(points) - 1) * segments
+    faces.append(tuple(final_ring + segment for segment in range(segments)))
+    b.polyhedron(palette[0], vertices, faces, surface=surface)
+
+
+def _eucalyptus_crown(b, centre, radius, rotation, scale, colour_offset):
+    """A rounded faceted clump restores crown volume without card-like leaves."""
+    colours = ["tree_leaf_dark", "tree_leaf_mid", "tree_leaf_light"]
+    colour = colours[colour_offset % len(colours)]
+    b.sphere(
+        colour,
+        radius,
+        loc=centre,
+        rot=rotation,
+        scale=scale,
+        u=5,
+        v=3,
+        surface="leaf",
+    )
+
+
+def _broken_splinters(b, colour, base, tips, radius, surface="dead_bark"):
+    """Triangular taper spikes replace the perfectly sawn ends of dead limbs."""
+    colours = (colour, "tree_dead_bark_light")
+    for index, tip in enumerate(tips):
+        b.cylinder_between(
+            colours[index % len(colours)],
+            base,
+            tip,
+            radius * (1.0 - index * 0.18),
+            segments=3,
+            radius_top=radius * 0.08,
+            caps=False,
+            surface=surface,
         )
 
 
 def prop_eucalyptus():
     """
-    Balanced eucalyptus with a visible fork and layered leaf sprays.
-
-    The old crown used overlapping spheres. It had volume, but the outline and
-    branch read were those of a procedural broccoli tree. Shallow lobed sprays
-    preserve the same low-poly mass while opening deliberate windows through
-    the canopy, so the trunk and each major branch remain visible.
+    Balanced eucalyptus with a visible fork and rounded separated crown clumps.
     """
     b = MeshBuilder("SM_prop_eucalyptus", budget="prop")
-    b.cylinder("tree_trunk", 0.17, 1.62, loc=(0, 0, 0.81),
-               rot=(-0.035, 0.055, 0), segments=6, radius_top=0.085)
-    branches = [
-        ((0.0, 0.0, 0.98), (-0.58, 0.05, 1.68)),
-        ((0.0, 0.0, 1.10), (0.53, -0.12, 1.82)),
-        ((0.0, 0.0, 1.28), (0.12, 0.42, 2.02)),
-        ((-0.20, 0.02, 1.23), (-0.28, -0.25, 1.92)),
-    ]
-    for start, end in branches:
-        b.cylinder_between("tree_trunk_light", start, end, 0.070,
-                           segments=5, radius_top=0.028)
+    _tree_buttress(
+        b, "tree_trunk", 0.27, 0.20,
+        [(3.82, 0.43, 0.28, 0.18)], variant=0,
+    )
+    _tree_chain(
+        b,
+        "tree_trunk",
+        [(0, 0, 0.02), (0.025, -0.01, 0.68), (0.01, 0.02, 1.16), (0.11, 0.10, 1.79)],
+        [0.205, 0.158, 0.098, 0.034],
+        segments=6,
+    )
+    _tree_chain(
+        b, "tree_trunk",
+        [(0.01, 0.0, 0.70), (-0.08, 0.01, 0.88),
+         (-0.22, 0.02, 1.14), (-0.64, 0.05, 1.68)],
+        [0.16, 0.13, 0.09, 0.032],
+    )
+    _tree_chain(
+        b, "tree_trunk",
+        [(0.02, -0.01, 0.80), (0.10, -0.03, 0.96),
+         (0.25, -0.06, 1.28), (0.60, -0.16, 1.78)],
+        [0.145, 0.115, 0.075, 0.030],
+    )
+    _tree_chain(b, "tree_trunk",
+                [(0.02, 0.02, 1.02), (0.10, 0.34, 1.82)], [0.085, 0.028])
+    _tree_chain(b, "tree_trunk_light",
+                [(0.11, 0.10, 1.79), (0.13, 0.12, 2.10)],
+                [0.026, 0.011], segments=4)
     crowns = [
-        (-0.68, 0.02, 1.74, 0.44, -0.12), (-0.28, -0.21, 2.02, 0.40, 0.28),
-        (0.10, 0.43, 2.10, 0.43, -0.34), (0.58, -0.12, 1.89, 0.46, 0.16),
-        (0.39, 0.24, 2.22, 0.35, 0.42), (-0.15, 0.16, 2.28, 0.34, -0.25),
-        (-0.83, 0.08, 1.93, 0.27, 0.36),
+        ((-0.68, 0.04, 1.74), 0.39, (0.36, -0.18, -0.20), (1.18, 0.68, 0.78)),
+        ((-0.36, -0.14, 1.98), 0.32, (0.62, 0.12, 0.34), (1.06, 0.72, 0.86)),
+        ((0.13, 0.12, 2.10), 0.36, (0.52, -0.26, -0.08), (1.02, 0.72, 0.92)),
+        ((0.10, 0.40, 1.92), 0.34, (0.78, 0.18, -0.44), (1.10, 0.66, 0.86)),
+        ((0.66, -0.15, 1.84), 0.40, (0.44, 0.22, 0.24), (1.20, 0.68, 0.78)),
     ]
-    for index, (x, y, z, radius, yaw) in enumerate(crowns):
-        _eucalyptus_leaf_spray(b, (x, y, z), radius, yaw, index)
+    for index, (centre, radius, rotation, scale) in enumerate(crowns):
+        _eucalyptus_crown(b, centre, radius, rotation, scale, index)
     return b.build(collection("PROPS"), smooth=True)
 
 
 def prop_eucalyptus_tall():
     """Narrow eucalyptus whose crown steps upward around a long exposed trunk."""
     b = MeshBuilder("SM_prop_eucalyptus_tall", budget="prop")
-    b.cylinder("tree_trunk", 0.13, 2.05, loc=(0, 0, 1.025),
-               rot=(0.035, -0.05, 0), segments=6, radius_top=0.065)
-    branches = [
-        ((0, 0, 1.20), (-0.42, 0.04, 1.88)),
-        ((0, 0, 1.42), (0.36, -0.10, 2.15)),
-        ((0, 0, 1.62), (0.08, 0.31, 2.38)),
-    ]
-    for start, end in branches:
-        b.cylinder_between("tree_trunk_light", start, end, 0.060,
-                           segments=5, radius_top=0.025)
+    _tree_buttress(
+        b, "tree_trunk", 0.22, 0.17,
+        [(2.60, 0.35, 0.24, 0.15)], variant=1,
+    )
+    _tree_chain(
+        b,
+        "tree_trunk",
+        [(0, 0, 0.02), (0.03, -0.01, 0.82), (-0.03, 0.02, 1.53), (0.07, 0.03, 2.36)],
+        [0.16, 0.12, 0.075, 0.028],
+        segments=6,
+    )
+    _tree_chain(
+        b, "tree_trunk",
+        [(0.0, 0.0, 1.18), (-0.08, 0.01, 1.34),
+         (-0.19, 0.02, 1.55), (-0.43, 0.04, 1.91)],
+        [0.105, 0.085, 0.058, 0.025],
+    )
+    _tree_chain(
+        b, "tree_trunk",
+        [(-0.01, 0.02, 1.48), (0.07, -0.01, 1.62),
+         (0.17, -0.04, 1.78), (0.39, -0.10, 2.16)],
+        [0.095, 0.075, 0.050, 0.022],
+    )
+    _tree_chain(b, "tree_trunk",
+                [(0.03, 0.03, 1.83), (0.10, 0.27, 2.38)], [0.055, 0.020])
+    _tree_chain(b, "tree_trunk_light",
+                [(0.07, 0.03, 2.36), (0.08, 0.04, 2.62)],
+                [0.023, 0.009], segments=4)
     crowns = [
-        (-0.50, 0.01, 1.96, 0.37, -0.15), (-0.20, -0.10, 2.21, 0.32, 0.22),
-        (0.38, -0.10, 2.23, 0.39, -0.28), (0.08, 0.31, 2.48, 0.34, 0.35),
-        (0.44, 0.14, 2.53, 0.26, -0.42), (-0.18, 0.23, 2.64, 0.24, 0.18),
+        ((-0.47, 0.04, 1.96), 0.32, (0.70, -0.14, -0.22), (1.05, 0.62, 0.92)),
+        ((-0.18, -0.08, 2.22), 0.27, (0.92, 0.18, 0.30), (0.92, 0.62, 1.02)),
+        ((0.42, -0.10, 2.20), 0.34, (0.62, -0.20, -0.34), (1.05, 0.64, 0.92)),
+        ((0.10, 0.30, 2.43), 0.29, (0.88, 0.22, 0.42), (0.96, 0.60, 1.04)),
+        ((0.08, 0.04, 2.62), 0.27, (0.56, -0.28, -0.06), (0.90, 0.62, 1.08)),
     ]
-    for index, (x, y, z, radius, yaw) in enumerate(crowns):
-        _eucalyptus_leaf_spray(b, (x, y, z), radius, yaw, index + 1)
+    for index, (centre, radius, rotation, scale) in enumerate(crowns):
+        _eucalyptus_crown(b, centre, radius, rotation, scale, index + 1)
     return b.build(collection("PROPS"), smooth=True)
 
 
 def prop_eucalyptus_wide():
     """Low forked eucalyptus with a broad, broken umbrella silhouette."""
     b = MeshBuilder("SM_prop_eucalyptus_wide", budget="prop")
-    b.cylinder("tree_trunk", 0.19, 1.15, loc=(0, 0, 0.575),
-               rot=(-0.025, 0.06, 0), segments=6, radius_top=0.11)
-    branches = [
-        ((0, 0, 0.72), (-0.78, 0.02, 1.48)),
-        ((0, 0, 0.76), (0.78, -0.08, 1.50)),
-        ((-0.18, 0, 0.94), (-0.38, 0.46, 1.70)),
-        ((0.18, 0, 0.96), (0.38, 0.42, 1.76)),
-        ((0, 0, 0.88), (0.02, -0.42, 1.62)),
-    ]
-    for start, end in branches:
-        b.cylinder_between("tree_trunk_light", start, end, 0.078,
-                           segments=5, radius_top=0.032)
+    _tree_buttress(
+        b, "tree_trunk", 0.31, 0.21,
+        [(5.18, 0.44, 0.30, 0.18)], variant=2,
+    )
+    _tree_chain(b, "tree_trunk", [(0, 0, 0.02), (0.01, 0.01, 0.74)],
+                [0.22, 0.15], segments=6)
+    _tree_chain(
+        b, "tree_trunk",
+        [(0.0, 0.01, 0.68), (-0.10, 0.02, 0.85),
+         (-0.25, 0.03, 1.05), (-0.88, 0.05, 1.47)],
+        [0.18, 0.145, 0.100, 0.038],
+    )
+    _tree_chain(
+        b, "tree_trunk",
+        [(0.02, 0.0, 0.68), (0.12, -0.01, 0.84),
+         (0.27, -0.02, 1.04), (0.88, -0.05, 1.48)],
+        [0.18, 0.145, 0.100, 0.038],
+    )
+    _tree_chain(b, "tree_trunk",
+                [(-0.23, 0.03, 1.03), (-0.47, 0.39, 1.61)], [0.075, 0.028])
+    _tree_chain(b, "tree_trunk",
+                [(0.24, -0.02, 1.02), (0.51, 0.36, 1.62)], [0.075, 0.028])
+    _tree_chain(b, "tree_trunk",
+                [(0.01, 0.02, 0.78), (0.02, -0.43, 1.48)], [0.085, 0.030])
+    _tree_chain(b, "tree_trunk_light",
+                [(0.88, -0.05, 1.48), (1.02, -0.04, 1.59)],
+                [0.030, 0.011], segments=4)
     crowns = [
-        (-0.90, 0.02, 1.56, 0.43, -0.18), (-0.54, 0.25, 1.76, 0.40, 0.27),
-        (-0.10, 0.45, 1.86, 0.37, -0.35), (0.36, 0.38, 1.87, 0.39, 0.32),
-        (0.82, 0.02, 1.64, 0.45, -0.22), (0.20, -0.30, 1.68, 0.40, 0.41),
-        (-0.38, -0.28, 1.66, 0.36, -0.38),
+        ((-0.95, 0.04, 1.53), 0.42, (0.38, -0.18, -0.24), (1.24, 0.66, 0.76)),
+        ((-0.53, 0.40, 1.66), 0.36, (0.70, 0.20, 0.34), (1.12, 0.64, 0.84)),
+        ((-0.38, -0.16, 1.56), 0.32, (0.84, -0.18, -0.42), (1.08, 0.62, 0.88)),
+        ((0.35, -0.20, 1.55), 0.32, (0.76, 0.22, 0.46), (1.08, 0.62, 0.88)),
+        ((0.55, 0.38, 1.67), 0.37, (0.66, -0.16, -0.36), (1.12, 0.64, 0.84)),
+        ((0.95, -0.04, 1.54), 0.43, (0.40, 0.20, 0.22), (1.24, 0.66, 0.76)),
     ]
-    for index, (x, y, z, radius, yaw) in enumerate(crowns):
-        _eucalyptus_leaf_spray(b, (x, y, z), radius, yaw, index + 2)
+    for index, (centre, radius, rotation, scale) in enumerate(crowns):
+        _eucalyptus_crown(b, centre, radius, rotation, scale, index + 2)
     return b.build(collection("PROPS"), smooth=True)
 
 
 def prop_dead_tree():
-    """A sun-bleached branching silhouette for sparse outback variety."""
+    """Twisted snag with exposed roots, split crown and uneven broken limbs."""
     b = MeshBuilder("SM_prop_dead_tree", budget="prop")
-    b.cylinder("tree_dead_bark", 0.15, 1.45, loc=(0, 0, 0.725),
-               segments=6, radius_top=0.075, surface="dead_bark")
-    for start, end, radius in [
-        ((0, 0, 0.85), (-0.50, 0.03, 1.35), 0.065),
-        ((0, 0, 1.05), (0.43, -0.05, 1.58), 0.060),
-        ((0, 0, 1.20), (0.08, 0.38, 1.78), 0.050),
-        ((-0.50, 0.03, 1.35), (-0.68, 0.09, 1.58), 0.035),
-        ((0.43, -0.05, 1.58), (0.65, -0.10, 1.74), 0.032),
-    ]:
-        b.cylinder_between("tree_dead_bark_light", start, end, radius,
-                           segments=5, radius_top=radius * 0.42,
-                           surface="dead_bark")
+    _tree_buttress(
+        b, "tree_dead_bark", 0.27, 0.20,
+        [(0.26, 0.48, 0.31, 0.20), (3.62, 0.43, 0.29, 0.18)],
+        variant=3, surface="dead_bark",
+    )
+    _tree_chain(
+        b,
+        "tree_dead_bark",
+        [(0, 0, 0.02), (0.05, -0.03, 0.62), (-0.025, 0.045, 1.10), (0.07, -0.015, 1.52)],
+        [0.185, 0.15, 0.108, 0.068],
+        segments=6,
+        surface="dead_bark",
+    )
+    _tree_chain(
+        b, "tree_dead_bark",
+        [(-0.01, 0.02, 0.80), (-0.10, 0.025, 0.95),
+         (-0.22, 0.03, 1.14), (-0.52, 0.08, 1.38),
+         (-0.68, 0.10, 1.49)],
+        [0.145, 0.12, 0.09, 0.055, 0.034], surface="dead_bark",
+    )
+    _broken_splinters(
+        b, "tree_dead_bark", (-0.68, 0.10, 1.49),
+        [(-0.79, 0.10, 1.55), (-0.73, 0.17, 1.59)], 0.032,
+    )
+    _tree_chain(
+        b, "tree_dead_bark",
+        [(-0.01, 0.02, 1.00), (0.10, -0.02, 1.15),
+         (0.31, -0.09, 1.40), (0.50, -0.15, 1.60)],
+        [0.12, 0.095, 0.060, 0.034], surface="dead_bark",
+    )
+    _broken_splinters(
+        b, "tree_dead_bark", (0.50, -0.15, 1.60),
+        [(0.60, -0.20, 1.72), (0.54, -0.09, 1.68)], 0.032,
+    )
+    _tree_chain(
+        b, "tree_dead_bark",
+        [(0.015, 0.02, 1.20), (-0.06, 0.30, 1.50),
+         (0.02, 0.40, 1.68)],
+        [0.078, 0.050, 0.032], surface="dead_bark",
+    )
+    _broken_splinters(
+        b, "tree_dead_bark", (0.02, 0.40, 1.68),
+        [(0.06, 0.45, 1.80), (-0.08, 0.43, 1.75)], 0.030,
+    )
+    _tree_chain(b, "tree_dead_bark_light",
+                [(0.03, -0.015, 0.69), (0.27, 0.13, 0.91)],
+                [0.065, 0.004], segments=4, surface="dead_bark")
+    _broken_splinters(
+        b, "tree_dead_bark", (0.07, -0.015, 1.52),
+        [(0.02, 0.02, 1.77), (-0.05, 0.09, 1.67)], 0.052,
+    )
+    b.cylinder_between(
+        "tree_dead_bark", (0.07, -0.015, 1.52), (0.17, -0.08, 1.66),
+        0.046, segments=3, radius_top=0.003, surface="dead_bark",
+    )
     return b.build(collection("PROPS"), smooth=False)
 
 
@@ -1463,15 +1875,16 @@ def prop_rock_cluster():
     """Several faceted stones sharing one footprint, breaking clone repetition."""
     b = MeshBuilder("SM_prop_rock_cluster", budget="prop")
     stones = [
-        (-0.22, 0.02, 0.25, 0.34, "rock"),
-        (0.20, 0.10, 0.18, 0.27, "rock_shadow"),
-        (0.05, -0.24, 0.14, 0.22, "rock"),
-        (0.35, -0.17, 0.10, 0.16, "rock_shadow"),
+        (-0.24, 0.03, 0.27, 0.35, "rock"),
+        (0.18, 0.12, 0.20, 0.27, "rock_shadow"),
+        (0.02, -0.25, 0.13, 0.22, "rock"),
+        (0.37, -0.18, 0.09, 0.16, "rock_shadow"),
     ]
     for index, (x, y, z, radius, colour) in enumerate(stones):
         b.sphere(colour, radius, loc=(x, y, z),
-                 rot=(0, 0, index * 0.37),
-                 scale=(1.0, 0.82, 0.68), u=6, v=3)
+                 rot=(index * 0.06, -index * 0.08, index * 0.43),
+                 scale=(1.0 + index * 0.06, 0.82 - index * 0.04,
+                        0.72 - index * 0.06), u=6, v=3)
     return b.build(collection("PROPS"), smooth=False)
 
 
@@ -1479,18 +1892,19 @@ def prop_wildflowers():
     """Tiny colour notes grouped into a patch large enough to read in gameplay."""
     b = MeshBuilder("SM_prop_wildflowers", budget="prop")
     flowers = [
-        (-0.18, -0.05, 0.24, "flower_white"),
-        (0.03, 0.10, 0.30, "flower_blue"),
-        (0.20, -0.02, 0.22, "flower_yellow"),
-        (-0.04, -0.18, 0.20, "flower_blue"),
-        (0.15, 0.18, 0.26, "flower_white"),
+        (-0.12, -0.04, 0.30, "flower_white", -0.025, 0.010, 0.060),
+        (-0.02, 0.03, 0.25, "flower_blue", 0.015, -0.012, 0.052),
+        (0.08, -0.02, 0.22, "flower_yellow", 0.020, 0.006, 0.050),
+        (0.36, 0.17, 0.20, "flower_blue", -0.015, 0.014, 0.048),
+        (0.43, 0.22, 0.26, "flower_white", 0.018, -0.010, 0.056),
     ]
-    for index, (x, y, height, colour) in enumerate(flowers):
-        b.cylinder("crop_leaf_dark", 0.010, height, loc=(x, y, height / 2),
-                   segments=4, radius_top=0.007)
-        b.lobed_leaf(colour, 0.055, loc=(x, y, height),
+    for index, (x, y, height, colour, lean_x, lean_y, radius) in enumerate(flowers):
+        tip = (x + lean_x, y + lean_y, height)
+        b.cylinder_between("crop_leaf_dark", (x, y, 0), tip, 0.010,
+                           segments=4, radius_top=0.007)
+        b.lobed_leaf(colour, radius, loc=tip,
                      yaw=index * 0.73, tilt=0.08, lobes=5, inner=0.46)
-        b.sphere("flower_yellow", 0.018, loc=(x, y, height + 0.008),
+        b.sphere("flower_yellow", 0.018, loc=(tip[0], tip[1], height + 0.008),
                  scale=(1.0, 1.0, 0.55), u=5, v=3)
     return b.build(collection("PROPS"), smooth=False)
 
@@ -1517,15 +1931,20 @@ def prop_scrub_patch():
 
 
 def prop_water_trough():
-    """A low timber trough that gives the animal area a clear focal prop."""
+    """Open, braced timber trough with water visibly recessed inside its rim."""
     b = MeshBuilder("SM_prop_water_trough", budget="prop")
-    b.box("timber_dark", size=(1.10, 0.44, 0.12), loc=(0, 0, 0.14))
-    b.box("timber_light", size=(1.00, 0.34, 0.14), loc=(0, 0, 0.22))
-    b.box("water_deep", size=(0.88, 0.22, 0.045), loc=(0, 0, 0.31))
+    b.box("timber_dark", size=(1.02, 0.30, 0.10), loc=(0, 0, 0.10))
+    for sy in (-1, 1):
+        b.box("timber_light", size=(1.18, 0.10, 0.30),
+              loc=(0, sy * 0.19, 0.23), rot=(sy * -0.08, 0, 0))
     for sx in (-1, 1):
-        b.box("timber_dark", size=(0.12, 0.48, 0.22),
-              loc=(sx * 0.49, 0, 0.13))
+        b.box("timber_light", size=(0.10, 0.48, 0.30),
+              loc=(sx * 0.54, 0, 0.23), rot=(0, sx * 0.08, 0))
     b.bevel(width=0.012, segments=1)
+    b.box("water_deep", size=(0.92, 0.24, 0.035), loc=(0, 0, 0.30))
+    for sx in (-1, 1):
+        b.box("timber_dark", size=(0.16, 0.56, 0.12),
+              loc=(sx * 0.42, 0, 0.06))
     return b.build(collection("PROPS"), smooth=False)
 
 

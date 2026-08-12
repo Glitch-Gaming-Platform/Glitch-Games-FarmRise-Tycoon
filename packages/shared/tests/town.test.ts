@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   COMMUNITY_PROJECTS,
   GAME_DAY_TICKS,
+  STARTER_COMMUNITY_PROJECT_ID,
+  STARTER_EXTENSION_PARCEL_ID,
   TOWN_STAGES,
   availableProjects,
   cents,
@@ -23,6 +25,7 @@ const start = (overrides = {}) => ({
   balance: cents(100_000),
   available: { wheat: 100, flour: 100, preserves: 100, cheese: 100 },
   unlocks: ['town_projects'],
+  ownedParcelIds: [],
   ...overrides,
 });
 
@@ -65,6 +68,29 @@ describe('validateProjectStart', () => {
     expect(validateProjectStart(start({ unlocks: [] })).ok).toBe(false);
   });
 
+  it('offers the council-funded starter project only after the extension opens', () => {
+    const before = validateProjectStart(
+      start({
+        projectId: STARTER_COMMUNITY_PROJECT_ID,
+        unlocks: [],
+        balance: cents(0),
+        available: {},
+      }),
+    );
+    expect(before.ok).toBe(false);
+
+    const after = validateProjectStart(
+      start({
+        projectId: STARTER_COMMUNITY_PROJECT_ID,
+        unlocks: [],
+        ownedParcelIds: [STARTER_EXTENSION_PARCEL_ID],
+        balance: cents(0),
+        available: {},
+      }),
+    );
+    expect(after.ok).toBe(true);
+  });
+
   it('refuses a second project while one is being built', () => {
     expect(validateProjectStart(start({ hasActiveProject: true })).ok).toBe(false);
   });
@@ -99,9 +125,31 @@ describe('validateProjectStart', () => {
 
 describe('availableProjects', () => {
   it('offers only what the town has grown into and has not already built', () => {
-    const offered = availableProjects(0, []);
+    const offered = availableProjects(0, [], {
+      unlocks: ['town_projects'],
+      ownedParcelIds: [STARTER_EXTENSION_PARCEL_ID],
+    });
     expect(offered.every((project) => project.requiresTownStage === 0)).toBe(true);
-    expect(availableProjects(0, [offered[0]?.id ?? ''])).toHaveLength(offered.length - 1);
+    expect(
+      availableProjects(0, [offered[0]?.id ?? ''], {
+        unlocks: ['town_projects'],
+        ownedParcelIds: [STARTER_EXTENSION_PARCEL_ID],
+      }),
+    ).toHaveLength(offered.length - 1);
+  });
+
+  it('does not reveal the starter project before its land requirement', () => {
+    expect(
+      availableProjects(0, [], { unlocks: [], ownedParcelIds: [] }).some(
+        (project) => project.id === STARTER_COMMUNITY_PROJECT_ID,
+      ),
+    ).toBe(false);
+    expect(
+      availableProjects(0, [], {
+        unlocks: [],
+        ownedParcelIds: [STARTER_EXTENSION_PARCEL_ID],
+      }).some((project) => project.id === STARTER_COMMUNITY_PROJECT_ID),
+    ).toBe(true);
   });
 });
 
@@ -113,7 +161,11 @@ describe('what a finished project buys', () => {
   });
 
   it('pays out permanently once it is', () => {
+    expect(projectDeliveryBonus([STARTER_COMMUNITY_PROJECT_ID])).toBeCloseTo(1.01);
     expect(projectDeliveryBonus(['project-market-road'])).toBeGreaterThan(1);
+    expect(projectDeliveryBonus([STARTER_COMMUNITY_PROJECT_ID, 'project-market-road'])).toBeCloseTo(
+      1.07,
+    );
     expect(projectDroughtRelief(['project-well-network'])).toBeLessThan(1);
     expect(projectStorageBonus(['project-grain-store'])).toBeGreaterThan(0);
   });

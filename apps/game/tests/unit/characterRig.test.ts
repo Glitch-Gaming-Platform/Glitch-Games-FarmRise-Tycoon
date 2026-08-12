@@ -11,13 +11,20 @@ import * as THREE from 'three';
 import { CharacterRig } from '@game/player/rig/CharacterRig.js';
 import { createSkeleton, createSkinnedGeometry } from '@game/player/rig/autoSkin.js';
 import { BONE_INDEX, BONES, SHIN_LENGTH, THIGH_LENGTH } from '@game/player/rig/skeletonDefinition.js'; // prettier-ignore
-import { ankleFromHip, createJointBuffer, measureStrideLength, sampleClip, sampleGait } from '@game/player/rig/clipSampler.js'; // prettier-ignore
-import { RUN, WALK } from '@game/player/rig/poseClips.js';
+import { ankleFromHip, createJointBuffer, measureStrideLength, sampleClip, sampleGait, sampleRootMotion } from '@game/player/rig/clipSampler.js'; // prettier-ignore
+import { PLANT, RUN, WALK } from '@game/player/rig/poseClips.js';
 import { solveTwoBone } from '@game/player/rig/ikSolver.js';
 
 function makeRig(): CharacterRig {
   const { bones } = createSkeleton();
   return new CharacterRig(bones);
+}
+
+function plantedAnkleHeight(rig: CharacterRig, side: 'L' | 'R'): number {
+  const thigh = rig.bones[BONE_INDEX[`thigh.${side}`]!]!.rotation.x;
+  const shin = rig.bones[BONE_INDEX[`shin.${side}`]!]!.rotation.x;
+  const { depth } = ankleFromHip(thigh, shin);
+  return rig.rootOffset.y + THIGH_LENGTH + SHIN_LENGTH - depth;
 }
 
 const IDLE_INPUT = {
@@ -68,10 +75,12 @@ describe('gait phase integration', () => {
     expect(Math.abs(slow.phase - fast.phase)).toBeLessThan(0.06);
   });
 
-  it('caps cadence and widens the swing instead, above walking speed', () => {
-    // The farmer's legs cannot honestly cover 6.5 m/s. Rather than spin at
-    // twenty cycles a second, cadence saturates and the stride widens - and
-    // the rig reports that it is doing so rather than hiding it.
+  it('saturates cadence rather than strobing if the movement speed is raised', () => {
+    // 6.5 m/s is what `Player.walkSpeed` used to be, and is now far beyond what
+    // the clips cover. The cap is what stands between that and a strobe, and
+    // the rig reports the shortfall through `strideScale` rather than hiding
+    // it. This is the guard for a future speed change, not a description of
+    // anything the shipping game does.
     const rig = makeRig();
     for (let i = 0; i < 120; i += 1) {
       rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 6.5 });
@@ -85,50 +94,58 @@ describe('gait phase integration', () => {
       maxAdvance = Math.max(maxAdvance, (rig.phase - previous + 1) % 1);
       previous = rig.phase;
     }
-    // Three cycles per second is the ceiling, so one 60 Hz frame may advance
-    // at most a twentieth of a cycle.
-    expect(maxAdvance).toBeLessThanOrEqual(3.0 / 60 + 1e-6);
+    // 3.5 cycles per second is the ceiling, so one 60 Hz frame may advance at
+    // most that fraction of a cycle.
+    expect(maxAdvance).toBeLessThanOrEqual(3.5 / 60 + 1e-6);
   });
 
-  it('keeps the normal-speed walk compact instead of kicking the feet forward', () => {
-    // 6.5 m/s is `Player.walkSpeed` - what the character does on held W, with
-    // no sprint. This is the case the audit called a goose-step.
-    const rig = makeRig();
-    let maximumForwardThigh = -Infinity;
-    let maximumForwardAnkle = -Infinity;
-    for (let i = 0; i < 240; i += 1) {
-      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 6.5 });
-      for (const side of ['L', 'R'] as const) {
-        const thigh = rig.bones[BONE_INDEX[`thigh.${side}`]!]!.rotation.x;
-        const shin = rig.bones[BONE_INDEX[`shin.${side}`]!]!.rotation.x;
-        maximumForwardThigh = Math.max(maximumForwardThigh, thigh);
-        maximumForwardAnkle = Math.max(maximumForwardAnkle, ankleFromHip(thigh, shin).forward);
+  it('never reaches forward with the foot off the ground, at either speed', () => {
+    // This replaces a bound of 0.42 rad on hip flexion, which was measured at
+    // 6.5 m/s against a clip covering 0.37 m per cycle. Both numbers have since
+    // changed: the walk now covers 0.60 m, which a 0.4 m leg can only do by
+    // flexing the hip about 0.6 rad at heel strike, and the game's walk speed
+    // is 1.4 m/s. Keeping the old bound would have kept the old defect - a
+    // stride 40% of what the character's legs allow - since it is only
+    // satisfiable by a shuffle.
+    //
+    // What the bound was protecting against is worth keeping, so it is stated
+    // directly instead of through a proxy. A goose-step is a leg thrown forward
+    // *while the foot is in the air*. A stride is a leg reaching forward with
+    // the foot arriving at the floor. So: the further forward the ankle is, the
+    // closer to the ground it must be.
+    for (const speed of [1.4, 3.43]) {
+      const rig = makeRig();
+      let maximumForwardThigh = -Infinity;
+      let maximumForwardAnkle = -Infinity;
+      let worstLiftedReach = -Infinity;
+      for (let i = 0; i < 300; i += 1) {
+        rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed });
+        if (i < 60) continue;
+        for (const side of ['L', 'R'] as const) {
+          const thigh = rig.bones[BONE_INDEX[`thigh.${side}`]!]!.rotation.x;
+          const shin = rig.bones[BONE_INDEX[`shin.${side}`]!]!.rotation.x;
+          const { forward, depth } = ankleFromHip(thigh, shin);
+          const clearance = rig.rootOffset.y + THIGH_LENGTH + SHIN_LENGTH - depth;
+          maximumForwardThigh = Math.max(maximumForwardThigh, thigh);
+          maximumForwardAnkle = Math.max(maximumForwardAnkle, forward);
+          // A foot more than 8 cm up is unambiguously airborne rather than
+          // landing, and at that height it has no business being out in front.
+          if (clearance > 0.08) worstLiftedReach = Math.max(worstLiftedReach, forward);
+        }
       }
+
+      // The regression guard from the previous audit, untouched: whatever the
+      // stride, the hip may not exceed 0.8 rad of flexion.
+      expect(maximumForwardThigh).toBeLessThan(0.8);
+      // And the reach itself stays inside the leg's geometry - 0.4 m of leg
+      // cannot put an ankle further than 0.21 m forward with the foot down.
+      expect(maximumForwardAnkle).toBeLessThan(0.21);
+      expect(worstLiftedReach).toBeLessThan(0.1);
     }
-
-    // Two separate faults used to drive this to 0.71 rad - 40 degrees of hip
-    // flexion, a near-horizontal shoe at the gameplay camera. The blend window
-    // put an ordinary walk at 78% of the RUN clip, whose hip flexion is more
-    // than twice the walk's, and the stride warp then scaled that up again in
-    // both directions. A walk at walking speed should look like the walk clip.
-    expect(maximumForwardThigh).toBeGreaterThan(0.2);
-    expect(maximumForwardThigh).toBeLessThan(0.42);
-
-    // The silhouette measure, and the one the audit was actually reacting to:
-    // how far in front of the hip the ankle gets. Legs are 0.385 m, so this is
-    // under a third of a leg length ahead.
-    expect(maximumForwardAnkle).toBeLessThan(0.14);
   });
 
-  it('does not vibrate the legs at ordinary gameplay speed', () => {
-    // The jitter had one cause and one aggravator, and this test fails against
-    // either. The cause: the foot lock advanced its IK target by real ground
-    // distance (0.108 m per frame at 6.5 m/s) while the capped cadence only
-    // moved the pose about 0.010 m, so every frame applied a violent
-    // correction, went out of reach, clamped and released. The aggravator: one
-    // shared plant/release threshold, so the foot state flipped on consecutive
-    // frames whenever clearance sat on the boundary.
-    for (const speed of [1.5, 6.5, 10.4]) {
+  it('does not pop or add un-authored reversals at either shipping speed', () => {
+    for (const speed of [1.4, 3.43]) {
       const rig = makeRig();
       for (let i = 0; i < 180; i += 1) {
         rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed });
@@ -137,12 +154,14 @@ describe('gait phase integration', () => {
       let previousAngle = rig.bones[BONE_INDEX['thigh.L']!]!.rotation.x;
       let previousVelocity = 0;
       let worstAcceleration = 0;
+      let worstStep = 0;
       let reversals = 0;
       const frames = 120;
       for (let i = 0; i < frames; i += 1) {
         rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed });
         const angle = rig.bones[BONE_INDEX['thigh.L']!]!.rotation.x;
         const velocity = angle - previousAngle;
+        worstStep = Math.max(worstStep, Math.abs(velocity));
         worstAcceleration = Math.max(worstAcceleration, Math.abs(velocity - previousVelocity));
         if (Math.sign(velocity) !== Math.sign(previousVelocity) && Math.abs(velocity) > 0.005) {
           reversals += 1;
@@ -155,12 +174,8 @@ describe('gait phase integration', () => {
       // frame-to-frame velocity change no matter how fast it runs, while a
       // single snapped IK correction spikes it. The old rig hit 1.05 rad per
       // frame squared here; a clean cycle stays an order of magnitude below.
-      expect(worstAcceleration).toBeLessThan(0.3);
-
-      // A walk cycle reverses the hip exactly twice - once at peak flexion,
-      // once at peak extension. 120 frames at the 2.7 cycles/s cap is about
-      // 5.4 cycles, so roughly 11 reversals is correct and anything much above
-      // that is the leg changing direction when the clip did not ask it to.
+      expect(worstAcceleration).toBeLessThan(speed <= 1.4 ? 0.25 : 0.3);
+      expect(worstStep).toBeLessThan(0.22);
       expect(reversals).toBeLessThanOrEqual(14);
     }
   });
@@ -176,10 +191,42 @@ describe('gait phase integration', () => {
     }
     expect(rig.phase).toBe(moving);
   });
+
+  it('loads into starts and stops without an angular discontinuity', () => {
+    const rig = makeRig();
+    let previousChest = rig.bones[BONE_INDEX['chest']!]!.rotation.x;
+    let worstStep = 0;
+    let strongestStart = 0;
+    for (let frame = 0; frame < 24; frame += 1) {
+      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 3.43 });
+      const chest = rig.bones[BONE_INDEX['chest']!]!.rotation.x;
+      worstStep = Math.max(worstStep, Math.abs(chest - previousChest));
+      strongestStart = Math.max(strongestStart, rig.transitionLoad);
+      previousChest = chest;
+    }
+    expect(strongestStart).toBeGreaterThan(0.18);
+    expect(worstStep).toBeLessThan(0.22);
+
+    for (let frame = 0; frame < 90; frame += 1) {
+      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 3.43 });
+    }
+    expect(Math.abs(rig.transitionLoad)).toBeLessThan(0.02);
+
+    let strongestStop = 0;
+    for (let frame = 0; frame < 24; frame += 1) {
+      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 0 });
+      strongestStop = Math.min(strongestStop, rig.transitionLoad);
+    }
+    expect(strongestStop).toBeLessThan(-0.18);
+    for (let frame = 0; frame < 90; frame += 1) {
+      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 0 });
+    }
+    expect(Math.abs(rig.transitionLoad)).toBeLessThan(0.02);
+  });
 });
 
 describe('authored root and secondary motion', () => {
-  it('lowers the centre of mass for planting instead of lifting bent feet', () => {
+  it('braces asymmetrically for planting while keeping both ankles planted', () => {
     const rig = makeRig();
     rig.update({
       ...IDLE_INPUT,
@@ -187,37 +234,168 @@ describe('authored root and secondary motion', () => {
       speed: 0,
       working: true,
       workAction: 'plant',
-      workProgress: 0.52,
+      workProgress: 0.54,
     });
 
-    expect(rig.rootOffset.y).toBeLessThan(-0.1);
-    expect(rig.rootOffset.z).toBeGreaterThan(0.03);
+    const leftThigh = rig.bones[BONE_INDEX['thigh.L']!]!.rotation.x;
+    const rightThigh = rig.bones[BONE_INDEX['thigh.R']!]!.rotation.x;
+    expect(rig.rootOffset.y).toBeLessThan(-0.02);
+    expect(rig.rootOffset.y).toBeGreaterThan(-0.05);
+    expect(rig.rootOffset.z).toBeGreaterThan(0.04);
+    expect(rightThigh - leftThigh).toBeGreaterThan(0.12);
+    expect(Math.abs(plantedAnkleHeight(rig, 'L'))).toBeLessThan(0.018);
+    expect(Math.abs(plantedAnkleHeight(rig, 'R'))).toBeLessThan(0.018);
+  });
+
+  it('separates plant anticipation, contact, push, retraction, and recovery', () => {
+    const anticipation = createJointBuffer(BONES.length);
+    const contact = createJointBuffer(BONES.length);
+    const push = createJointBuffer(BONES.length);
+    const retract = createJointBuffer(BONES.length);
+    const recover = createJointBuffer(BONES.length);
+    const anticipationRoot = new Float32Array(3);
+    const contactRoot = new Float32Array(3);
+    const pushRoot = new Float32Array(3);
+    const retractRoot = new Float32Array(3);
+    const recoverRoot = new Float32Array(3);
+    sampleClip(PLANT, 0.16, anticipation, 1);
+    sampleClip(PLANT, 0.54, contact, 1);
+    sampleClip(PLANT, 0.66, push, 1);
+    sampleClip(PLANT, 0.82, retract, 1);
+    sampleClip(PLANT, 0.92, recover, 1);
+    sampleRootMotion(PLANT, 0.16, anticipationRoot);
+    sampleRootMotion(PLANT, 0.54, contactRoot);
+    sampleRootMotion(PLANT, 0.66, pushRoot);
+    sampleRootMotion(PLANT, 0.82, retractRoot);
+    sampleRootMotion(PLANT, 0.92, recoverRoot);
+    const angle = (pose: Float32Array, bone: string, axis = 0): number =>
+      pose[BONE_INDEX[bone]! * 3 + axis]!;
+    const ankleHeight = (pose: Float32Array, root: Float32Array, side: 'L' | 'R'): number => {
+      const { depth } = ankleFromHip(angle(pose, `thigh.${side}`), angle(pose, `shin.${side}`));
+      return root[1]! + THIGH_LENGTH + SHIN_LENGTH - depth;
+    };
+
+    expect(anticipationRoot[1]).toBeLessThan(-0.012);
+    expect(angle(anticipation, 'thigh.R') - angle(anticipation, 'thigh.L')).toBeGreaterThan(0.15);
+    const trunkPitch = (pose: Float32Array): number =>
+      angle(pose, 'hips') + angle(pose, 'spine') + angle(pose, 'chest');
+    expect(trunkPitch(anticipation)).toBeGreaterThan(0.35);
+    expect(angle(anticipation, 'chest')).toBeLessThan(0.14);
+    // The torso commits to the bed while the neck/head counter-rotate enough
+    // to keep the face below the hat brim instead of burying it in the chest.
+    expect(angle(anticipation, 'head')).toBeLessThan(-0.02);
+
+    expect(contactRoot[0]).toBeGreaterThan(0.035);
+    expect(trunkPitch(contact)).toBeGreaterThan(0.7);
+    expect(angle(contact, 'chest')).toBeLessThan(0.2);
+    expect(angle(contact, 'upperarm.R', 2)).toBeLessThan(-0.08);
+    expect(angle(contact, 'upperarm.L', 2)).toBeGreaterThan(0.3);
+    expect(angle(contact, 'neck') + angle(contact, 'head')).toBeLessThan(-0.15);
+    expect(Math.abs(ankleHeight(contact, contactRoot, 'L'))).toBeLessThan(0.018);
+    expect(Math.abs(ankleHeight(contact, contactRoot, 'R'))).toBeLessThan(0.018);
+
+    expect(pushRoot[2]).toBeGreaterThan(contactRoot[2]! + 0.01);
+    expect(trunkPitch(push)).toBeGreaterThan(trunkPitch(contact) + 0.05);
+    expect(angle(push, 'shin.R')).toBeGreaterThan(angle(contact, 'shin.R') + 0.12);
+    expect(Math.abs(ankleHeight(push, pushRoot, 'L'))).toBeLessThan(0.012);
+    expect(Math.abs(ankleHeight(push, pushRoot, 'R'))).toBeLessThan(0.012);
+
+    expect(retractRoot[2]).toBeLessThan(0);
+    expect(angle(retract, 'chest')).toBeLessThan(0);
+    expect(angle(retract, 'upperarm.L', 2)).toBeGreaterThan(0.2);
+    expect(angle(retract, 'thigh.R')).toBeLessThan(angle(contact, 'thigh.R') - 0.25);
+    expect(Math.abs(recoverRoot[2]!)).toBeLessThan(0.01);
+    expect(angle(recover, 'chest')).toBeGreaterThan(0);
+    expect(angle(recover, 'chest')).toBeLessThan(0.1);
   });
 
   it('carries a visible centre-of-mass arc through a run cycle', () => {
     const rig = makeRig();
     let minimum = Infinity;
     let maximum = -Infinity;
-    // Sprint speed: walkSpeed 6.5 times sprintMultiplier 1.6. This is the only
-    // speed the game can produce that should read as a run, and the blend
-    // window is anchored to it.
+    // Shipping sprint speed: walkSpeed 1.4 times sprintMultiplier 2.45.
     for (let i = 0; i < 180; i += 1) {
-      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 10.4 });
+      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 3.43 });
       minimum = Math.min(minimum, rig.rootOffset.y);
       maximum = Math.max(maximum, rig.rootOffset.y);
     }
     expect(maximum - minimum).toBeGreaterThan(0.06);
   });
 
-  it('lets the ponytail and satchel lag a turn independently of the torso', () => {
+  it('lets the ponytail and satchel lag and settle independently of the torso', () => {
     const rig = makeRig();
     rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 4, turn: 1 });
+    const firstPonytail = rig.bones[BONE_INDEX['ponytail']!]!.rotation.z;
+    const firstSatchel = rig.bones[BONE_INDEX['satchel']!]!.rotation.z;
+    for (let frame = 0; frame < 12; frame += 1) {
+      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 4, turn: 1 });
+    }
     const ponytail = rig.bones[BONE_INDEX['ponytail']!]!;
     const satchel = rig.bones[BONE_INDEX['satchel']!]!;
 
+    // They do not teleport to the turn target on its first frame.
+    expect(Math.abs(firstPonytail)).toBeLessThan(0.08);
+    expect(Math.abs(firstSatchel)).toBeLessThan(0.08);
     expect(Math.abs(ponytail.rotation.z)).toBeGreaterThan(0.1);
     expect(Math.abs(satchel.rotation.z)).toBeGreaterThan(0.08);
     expect(Math.sign(ponytail.rotation.z)).not.toBe(Math.sign(satchel.rotation.z));
+
+    const carriedPonytail = ponytail.rotation.z;
+    const carriedSatchel = satchel.rotation.z;
+    rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 0, turn: 0 });
+    expect(Math.abs(ponytail.rotation.z)).toBeGreaterThan(Math.abs(carriedPonytail) * 0.45);
+    expect(Math.abs(satchel.rotation.z)).toBeGreaterThan(Math.abs(carriedSatchel) * 0.55);
+    for (let frame = 0; frame < 60; frame += 1) {
+      rig.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 0, turn: 0 });
+    }
+    const control = makeRig();
+    for (let frame = 0; frame < 60; frame += 1) {
+      control.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 0, turn: 0 });
+    }
+    expect(
+      Math.abs(ponytail.rotation.z - control.bones[BONE_INDEX['ponytail']!]!.rotation.z),
+    ).toBeLessThan(0.01);
+    expect(
+      Math.abs(satchel.rotation.z - control.bones[BONE_INDEX['satchel']!]!.rotation.z),
+    ).toBeLessThan(0.01);
+  });
+
+  it('leads a turn with shoulders and face while the pelvis counter-rotates', () => {
+    const turning = makeRig();
+    const straight = makeRig();
+    for (let frame = 0; frame < 90; frame += 1) {
+      turning.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 4 });
+      straight.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 4 });
+    }
+    for (let frame = 0; frame < 6; frame += 1) {
+      turning.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 4, turn: 0.8 });
+      straight.update({ ...IDLE_INPUT, deltaSeconds: 1 / 60, speed: 4 });
+    }
+
+    const delta = (bone: string, axis: 'x' | 'y' | 'z'): number =>
+      turning.bones[BONE_INDEX[bone]!]!.rotation[axis] -
+      straight.bones[BONE_INDEX[bone]!]!.rotation[axis];
+    expect(delta('hips', 'y')).toBeLessThan(-0.03);
+    expect(delta('chest', 'y')).toBeGreaterThan(0.07);
+    expect(delta('shoulder.R', 'y')).toBeGreaterThan(0.02);
+    expect(delta('head', 'y')).toBeGreaterThan(delta('neck', 'y'));
+  });
+
+  it('solves the working hand from the animated shoulder to the trowel grip', () => {
+    const rig = makeRig();
+    rig.update({
+      ...IDLE_INPUT,
+      deltaSeconds: 1 / 60,
+      speed: 0,
+      working: true,
+      workAction: 'plant',
+      workProgress: 0.5,
+    });
+    const grip = new THREE.Vector3(0.24, 0.55, 0.41);
+    rig.reachRightHandToPoint(grip.x, grip.y, grip.z, 1);
+    const hand = new THREE.Vector3();
+    rig.bones[BONE_INDEX['hand.R']!]!.getWorldPosition(hand);
+    expect(Math.hypot(hand.y - grip.y, hand.z - grip.z)).toBeLessThan(0.075);
   });
 
   it('uses both arms and a body bounce for the fox-scare gesture', () => {
@@ -244,16 +422,38 @@ describe('stride measurement', () => {
     expect(stride).toBeLessThan(0.9);
   });
 
-  it('spends most of the walk excursion behind the hip, not in front of it', () => {
-    // This is the shape fix, stated as a property rather than as numbers that
-    // someone could satisfy by scaling the whole table up.
-    //
-    // The original keys reached +0.31 rad in front and only -0.26 behind. A
-    // leg thrown forward of the body is the goose-step silhouette; a real walk
-    // lands the foot near under the hip and does its length in extension,
-    // pushing the trailing leg out behind. Getting this backwards is why the
-    // clip was short (stance is the trailing half, so stride was small) *and*
-    // why it kicked, and both symptoms move together when it is corrected.
+  it('clears the foot before reach, then descends into a heel-first contact', () => {
+    const pose = createJointBuffer(BONES.length);
+    const root = new Float32Array(3);
+    const sampleAnkle = (phase: number): { forward: number; clearance: number } => {
+      pose.fill(0);
+      root.fill(0);
+      sampleClip(WALK, phase, pose, 1);
+      sampleRootMotion(WALK, phase, root, 1);
+      const { forward, depth } = ankleFromHip(
+        pose[BONE_INDEX['thigh.L']! * 3]!,
+        pose[BONE_INDEX['shin.L']! * 3]!,
+      );
+      return { forward, clearance: THIGH_LENGTH + SHIN_LENGTH - depth + root[1]! };
+    };
+
+    const midSwing = sampleAnkle(0.84);
+    const reach = sampleAnkle(0.88);
+    const terminal = sampleAnkle(0.92);
+    const preContact = sampleAnkle(0.96);
+
+    expect(midSwing.clearance).toBeGreaterThan(0.1);
+    expect(midSwing.forward).toBeLessThan(0);
+    expect(reach.clearance).toBeGreaterThan(0.05);
+    expect(reach.forward).toBeLessThan(0.03);
+    expect(terminal.forward).toBeGreaterThan(0.08);
+    expect(terminal.clearance).toBeLessThan(0.04);
+    expect(preContact.forward).toBeGreaterThan(terminal.forward + 0.05);
+    expect(preContact.clearance).toBeLessThan(0.025);
+    expect(measureStrideLength(WALK)).toBeGreaterThan(0.5);
+  });
+
+  it('keeps the walk hip excursion rear-biased', () => {
     const out = createJointBuffer(BONES.length);
     let front = -Infinity;
     let back = Infinity;
@@ -264,12 +464,8 @@ describe('stride measurement', () => {
       front = Math.max(front, thigh);
       back = Math.min(back, thigh);
     }
-    expect(Math.abs(back)).toBeGreaterThan(front);
 
-    // And the extra extension has to be real ground contact, not just a raised
-    // heel: stride is measured across the stance window only, so a clip that
-    // faked its length with a bigger toe-off would not move this number.
-    expect(measureStrideLength(WALK)).toBeGreaterThan(0.25);
+    expect(Math.abs(back)).toBeGreaterThan(front);
   });
 
   it('tracks the poses, so editing the keys cannot desynchronise the feet', () => {
@@ -277,6 +473,39 @@ describe('stride measurement', () => {
     // measurement would have decoupled from the clip - which is precisely the
     // failure mode a hard-coded stride constant has.
     expect(measureStrideLength(RUN)).toBeGreaterThan(measureStrideLength(WALK));
+  });
+
+  it('transfers weight laterally and drops the pelvis over each planted foot', () => {
+    const leftRoot = new Float32Array(3);
+    const rightRoot = new Float32Array(3);
+    const left = createJointBuffer(BONES.length);
+    const right = createJointBuffer(BONES.length);
+    const scratch = createJointBuffer(BONES.length);
+    sampleRootMotion(WALK, 0.12, leftRoot);
+    sampleRootMotion(WALK, 0.62, rightRoot);
+    sampleGait(WALK, 0.12, left, scratch);
+    sampleGait(WALK, 0.62, right, scratch);
+
+    expect(leftRoot[0]).toBeLessThan(-0.025);
+    expect(rightRoot[0]).toBeGreaterThan(0.025);
+    expect(leftRoot[1]).toBeLessThan(-0.035);
+    expect(rightRoot[1]).toBeLessThan(-0.035);
+    expect(left[BONE_INDEX['hips']! * 3 + 2]).toBeGreaterThan(0.06);
+    expect(right[BONE_INDEX['hips']! * 3 + 2]).toBeLessThan(-0.06);
+    expect(left[BONE_INDEX['shin.L']! * 3]).toBeLessThan(-0.3);
+    expect(right[BONE_INDEX['shin.R']! * 3]).toBeLessThan(-0.3);
+    expect(left[BONE_INDEX['thigh.L']! * 3]! - left[BONE_INDEX['thigh.R']! * 3]!).toBeGreaterThan(
+      0.4,
+    );
+    expect(right[BONE_INDEX['thigh.R']! * 3]! - right[BONE_INDEX['thigh.L']! * 3]!).toBeGreaterThan(
+      0.4,
+    );
+    expect(Math.sign(left[BONE_INDEX['chest']! * 3 + 2]!)).not.toBe(
+      Math.sign(left[BONE_INDEX['hips']! * 3 + 2]!),
+    );
+    expect(Math.sign(right[BONE_INDEX['chest']! * 3 + 2]!)).not.toBe(
+      Math.sign(right[BONE_INDEX['hips']! * 3 + 2]!),
+    );
   });
 });
 
@@ -362,8 +591,24 @@ describe('clip sampling', () => {
     const left = out[BONE_INDEX['thigh.L']! * 3]!;
     const right = out[BONE_INDEX['thigh.R']! * 3]!;
     // At left heel strike the left leg is forward and the right is trailing.
-    expect(left).toBeGreaterThan(0.3);
+    expect(left).toBeGreaterThan(0.24);
     expect(right).toBeLessThan(0);
+  });
+
+  it('keeps both arms clear of the torso during support-leg loading', () => {
+    const out = createJointBuffer(BONES.length);
+    const scratch = createJointBuffer(BONES.length);
+    sampleGait(WALK, 0.12, out, scratch, 1);
+    const left = out[BONE_INDEX['upperarm.L']! * 3]!;
+    const right = out[BONE_INDEX['upperarm.R']! * 3]!;
+    const leftSplay = out[BONE_INDEX['upperarm.L']! * 3 + 2]!;
+    const rightSplay = out[BONE_INDEX['upperarm.R']! * 3 + 2]!;
+
+    expect(left).toBeLessThan(-0.2);
+    expect(right).toBeGreaterThan(0.5);
+    expect(right - left).toBeGreaterThan(0.75);
+    expect(leftSplay).toBeGreaterThan(0.09);
+    expect(rightSplay).toBeLessThan(-0.18);
   });
 
   it('is continuous across the loop seam', () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TICK_SECONDS } from '@farmrise/shared';
 import { cowPose, createCowPose } from '@game/animals/cowMotion.js';
 
 describe('cow motion', () => {
@@ -25,6 +26,34 @@ describe('cow motion', () => {
     expect(later.x).toBeCloseTo(first.x, 6);
     expect(later.z).toBeCloseTo(first.z, 6);
     expect(later.gaitPhase).toBeCloseTo(first.gaitPhase, 6);
+  });
+
+  it('faces the elliptical path tangent instead of travelling broadside', () => {
+    const shelter = { x: 4, z: -2 };
+    for (let seconds = 0.4; seconds < 6.5; seconds += 0.2) {
+      const pose = cowPose(shelter, 1, 3, seconds, 1, createCowPose());
+      const next = cowPose(shelter, 1, 3, seconds + TICK_SECONDS, 1, createCowPose());
+      if (pose.motion < 0.1 || next.motion < 0.1) continue;
+      const dx = next.x - pose.x;
+      const dz = next.z - pose.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance < 1e-7) continue;
+      const alignment = (Math.sin(pose.yaw) * dx + Math.cos(pose.yaw) * dz) / distance;
+      expect(alignment).toBeGreaterThan(0.995);
+    }
+  });
+
+  it('eases pasture starts, stops and the grazing head transition', () => {
+    const shelter = { x: 4, z: -2 };
+    const start = cowPose(shelter, 0, 2, 0.05, 1, createCowPose());
+    const cruise = cowPose(shelter, 0, 2, 1.8, 1, createCowPose());
+    const settle = cowPose(shelter, 0, 2, 6.94, 1, createCowPose());
+    expect(start.motion).toBeLessThan(cruise.motion * 0.35);
+    expect(settle.motion).toBeLessThan(cruise.motion * 0.35);
+
+    const beforeGrazeEnd = cowPose(shelter, 0, 2, 11.42, 1, createCowPose());
+    const afterGrazeEnd = cowPose(shelter, 0, 2, 11.5, 1, createCowPose());
+    expect(Math.abs(afterGrazeEnd.graze - beforeGrazeEnd.graze)).toBeLessThan(0.08);
   });
 
   it('keeps purchase introduction scale uniform across all axes', () => {

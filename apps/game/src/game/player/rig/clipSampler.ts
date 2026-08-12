@@ -1,12 +1,12 @@
 /**
  * Samples authored clips, and measures what they imply about locomotion.
  *
- * Interpolation is Catmull-Rom rather than linear. Linear interpolation between
- * pose keys produces a visible corner at every key - the angular velocity jumps
- * discontinuously - and on a walk cycle that reads as a mechanical tick twice
- * per step. Catmull-Rom is C1 continuous, so velocity is smooth through keys
- * while the curve still passes exactly through every authored pose, which is
- * the property that makes a key an actual key rather than a suggestion.
+ * Interpolation is a time-aware monotone cubic rather than linear. Linear
+ * interpolation produces a visible velocity corner at every key, while a
+ * uniform Catmull-Rom assumes every key is equally spaced and overshoots when
+ * a contact sequence contains tightly packed heel-placement beats. Monotone
+ * Hermite tangents preserve C1 motion inside each directional run, pass exactly
+ * through authored poses, and cannot invent an extra reversal between them.
  */
 import { BONE_INDEX, SHIN_LENGTH, THIGH_LENGTH } from './skeletonDefinition.js';
 import type { Clip, Pose } from './poseClips.js';
@@ -18,15 +18,45 @@ export function createJointBuffer(boneCount: number): JointAngles {
   return new Float32Array(boneCount * 3);
 }
 
-function catmullRom(p0: number, p1: number, p2: number, p3: number, t: number): number {
-  const t2 = t * t;
-  const t3 = t2 * t;
+function monotoneTangent(
+  previousSlope: number,
+  nextSlope: number,
+  previousSpan: number,
+  nextSpan: number,
+): number {
+  if (previousSlope === 0 || nextSlope === 0 || previousSlope * nextSlope <= 0) return 0;
+  const previousWeight = 2 * nextSpan + previousSpan;
+  const nextWeight = nextSpan + 2 * previousSpan;
+  return (previousWeight + nextWeight) / (previousWeight / previousSlope + nextWeight / nextSlope);
+}
+
+function monotoneCubic(
+  p0: number,
+  p1: number,
+  p2: number,
+  p3: number,
+  t0: number,
+  t1: number,
+  t2: number,
+  t3: number,
+  time: number,
+): number {
+  const previousSpan = Math.max(1e-6, t1 - t0);
+  const span = Math.max(1e-6, t2 - t1);
+  const nextSpan = Math.max(1e-6, t3 - t2);
+  const previousSlope = (p1 - p0) / previousSpan;
+  const slope = (p2 - p1) / span;
+  const nextSlope = (p3 - p2) / nextSpan;
+  const tangent1 = monotoneTangent(previousSlope, slope, previousSpan, span);
+  const tangent2 = monotoneTangent(slope, nextSlope, span, nextSpan);
+  const u = Math.min(1, Math.max(0, (time - t1) / span));
+  const u2 = u * u;
+  const u3 = u2 * u;
   return (
-    0.5 *
-    (2 * p1 +
-      (-p0 + p2) * t +
-      (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
-      (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+    (2 * u3 - 3 * u2 + 1) * p1 +
+    (u3 - 2 * u2 + u) * span * tangent1 +
+    (-2 * u3 + 3 * u2) * p2 +
+    (u3 - u2) * span * tangent2
   );
 }
 
@@ -68,12 +98,20 @@ export function sampleClip(clip: Clip, t: number, out: JointAngles, weight = 1):
   const k0 = keys[wrap(i1 - 1)]!;
   const k3 = keys[wrap(i2 + 1)]!;
 
-  // Segment length, accounting for the wrap back to zero on a looping clip.
-  let span = k2.t - k1.t;
-  if (span <= 0) span = clip.loop ? 1 - k1.t + k2.t : 1;
-  let local = span > 0 ? (time - k1.t) / span : 0;
-  if (local < 0) local += 1 / span;
-  local = Math.min(1, Math.max(0, local));
+  const t1 = k1.t;
+  let t2 = k2.t;
+  let sampleTime = time;
+  if (clip.loop && i2 <= i1) t2 += 1;
+  if (clip.loop && sampleTime < t1) sampleTime += 1;
+  let t0 = k0.t;
+  let t3 = k3.t;
+  if (clip.loop) {
+    while (t0 >= t1) t0 -= 1;
+    while (t3 <= t2) t3 += 1;
+  } else {
+    if (i1 === 0) t0 = t1 - (t2 - t1);
+    if (i2 === count - 1) t3 = t2 + (t2 - t1);
+  }
 
   for (const [bone, index] of Object.entries(BONE_INDEX)) {
     // Only bones this clip actually mentions are written, so an upper-body clip
@@ -84,7 +122,7 @@ export function sampleClip(clip: Clip, t: number, out: JointAngles, weight = 1):
       const v2 = keyValue(k2.pose, bone, axis, 0);
       const v0 = keyValue(k0.pose, bone, axis, v1);
       const v3 = keyValue(k3.pose, bone, axis, v2);
-      const value = catmullRom(v0, v1, v2, v3, local);
+      const value = monotoneCubic(v0, v1, v2, v3, t0, t1, t2, t3, sampleTime);
       const slot = index * 3 + axis;
       out[slot] = out[slot]! + value * weight;
     }
@@ -122,18 +160,27 @@ export function sampleRootMotion(clip: Clip, t: number, out: Float32Array, weigh
   const k0 = keys[wrap(i1 - 1)]!;
   const k3 = keys[wrap(i2 + 1)]!;
 
-  let span = k2.t - k1.t;
-  if (span <= 0) span = clip.loop ? 1 - k1.t + k2.t : 1;
-  let local = span > 0 ? (time - k1.t) / span : 0;
-  if (local < 0) local += 1 / span;
-  local = Math.min(1, Math.max(0, local));
+  const t1 = k1.t;
+  let t2 = k2.t;
+  let sampleTime = time;
+  if (clip.loop && i2 <= i1) t2 += 1;
+  if (clip.loop && sampleTime < t1) sampleTime += 1;
+  let t0 = k0.t;
+  let t3 = k3.t;
+  if (clip.loop) {
+    while (t0 >= t1) t0 -= 1;
+    while (t3 <= t2) t3 += 1;
+  } else {
+    if (i1 === 0) t0 = t1 - (t2 - t1);
+    if (i2 === count - 1) t3 = t2 + (t2 - t1);
+  }
 
   for (let axis = 0; axis < 3; axis += 1) {
     const v1 = k1.root?.[axis] ?? 0;
     const v2 = k2.root?.[axis] ?? 0;
     const v0 = k0.root?.[axis] ?? v1;
     const v3 = k3.root?.[axis] ?? v2;
-    out[axis] = out[axis]! + catmullRom(v0, v1, v2, v3, local) * weight;
+    out[axis] = out[axis]! + monotoneCubic(v0, v1, v2, v3, t0, t1, t2, t3, sampleTime) * weight;
   }
 }
 
@@ -211,61 +258,84 @@ export function ankleFromHip(
 }
 
 /**
- * How far the body must travel per cycle for the stance foot to stay put.
+ * How far the body travels in one full cycle if the stance foot never slides.
  *
- * This is the number that stops feet sliding, and deriving it rather than
- * hard-coding it is the point: if someone edits the walk keys to take a longer
- * step, the stride length follows automatically and the feet stay planted. A
- * literal constant here would silently desynchronise the first time the pose
- * table changed, which is exactly the class of bug that produced the original
- * skating.
+ * Deriving it rather than hard-coding it is the point: if someone edits the
+ * walk keys to take a longer step, the stride length follows automatically and
+ * the feet stay planted. A literal constant here would silently desynchronise
+ * the first time the pose table changed, which is exactly the class of bug that
+ * produced the original skating.
  *
- * It is measured as the total forward travel of the ankle across the stance
- * window, since during stance the foot is fixed to the world and the body moves
- * over it by precisely that amount.
+ * ## The division, which is the whole correction
+ *
+ * The previous version returned the ankle's forward travel across the stance
+ * window and called that the per-cycle stride. It is not. It is the distance
+ * covered *during that window*, and one foot's stance is only part of a cycle -
+ * about 62% of it walking, 36% running. Dividing by the stance fraction
+ * converts "distance covered while this foot was down" into "distance covered
+ * per cycle", which is what cadence needs.
+ *
+ * Skipping that division understated the walk by 1.5x and the run by 2.8x, and
+ * the understatement went straight into `cadence = speed / stride`. The rig
+ * then demanded a cadence half again too fast, hit its ceiling far earlier than
+ * it needed to, and reported a stride mismatch that was mostly this arithmetic
+ * rather than the character's legs. It is the reason a foot lock that is
+ * correct in isolation was documented as only working below 0.7 m/s.
+ *
+ * Stance is detected by ground clearance, using the authored pelvis track: a
+ * clip that fakes its length by lifting the whole body cannot pass, because
+ * lifting the body raises the clearance and drops those samples out of the
+ * stance window. Samples where the ankle is still travelling *forward* are
+ * excluded too, since a foot moving with the direction of travel is swinging,
+ * not planted, however close to the floor it passes.
  */
 export function measureStrideLength(clip: Clip, requestedSamples = 240): number {
-  const samples = Math.min(requestedSamples, heights.length);
+  const samples = Math.max(1, Math.min(requestedSamples, 512));
   const scratch = createJointBuffer(Object.keys(BONE_INDEX).length);
+  const root = new Float32Array(3);
+  const heights = new Float64Array(samples);
+  const forwards = new Float64Array(samples);
   const thighSlot = BONE_INDEX['thigh.L']! * 3;
   const shinSlot = BONE_INDEX['shin.L']! * 3;
+  const legLength = THIGH_LENGTH + SHIN_LENGTH;
 
   for (let i = 0; i < samples; i += 1) {
     const phase = i / samples;
     scratch.fill(0);
+    root.fill(0);
     sampleClip(clip, phase, scratch, 1);
-    // Stance is where the foot is lowest, which with a positive-down depth
-    // means where depth is LARGEST. Sampling only the deepest 30% of the range
-    // isolates it without needing a separate authored flag.
+    sampleRootMotion(clip, phase, root, 1);
     const { forward, depth } = ankleFromHip(scratch[thighSlot]!, scratch[shinSlot]!);
-    heights[i] = depth;
+    // Positive = above the floor. The pelvis track moves the whole skeleton, so
+    // it belongs in the clearance rather than being ignored as decoration.
+    heights[i] = legLength - depth + root[1]!;
     forwards[i] = forward;
   }
 
-  let deepest = -Infinity;
-  let shallowest = Infinity;
-  for (let i = 0; i < samples; i += 1) {
-    if (heights[i]! > deepest) deepest = heights[i]!;
-    if (heights[i]! < shallowest) shallowest = heights[i]!;
-  }
-  const stanceCutoff = deepest - (deepest - shallowest) * 0.3;
-
   let stanceMax = -Infinity;
   let stanceMin = Infinity;
+  let stanceSamples = 0;
   for (let i = 0; i < samples; i += 1) {
-    if (heights[i]! < stanceCutoff) continue;
+    if (heights[i]! > STANCE_CLEARANCE) continue;
+    const next = forwards[(i + 1) % samples]!;
+    if (next > forwards[i]! + 1e-4) continue;
+    stanceSamples += 1;
     if (forwards[i]! > stanceMax) stanceMax = forwards[i]!;
     if (forwards[i]! < stanceMin) stanceMin = forwards[i]!;
   }
 
-  if (!Number.isFinite(stanceMax) || !Number.isFinite(stanceMin)) {
+  const stanceFraction = stanceSamples / samples;
+  if (!Number.isFinite(stanceMax) || !Number.isFinite(stanceMin) || stanceFraction < 0.05) {
     return clip.nominalStride ?? 0.6;
   }
-  return stanceMax - stanceMin;
+  return (stanceMax - stanceMin) / stanceFraction;
 }
 
-// Module-level scratch so measureStrideLength allocates nothing per call. It
-// runs once at startup, but it also runs in tests, and a helper that quietly
-// allocates three arrays per invocation is a bad habit to leave lying around.
-const heights = new Float64Array(512);
-const forwards = new Float64Array(512);
+/**
+ * Ground clearance under which a foot counts as planted, in metres.
+ *
+ * Shared with the rig's own plant threshold on purpose: a stride measured
+ * against one definition of contact and enforced against another is two
+ * systems that will disagree the first time a clip changes.
+ */
+export const STANCE_CLEARANCE = 0.035;

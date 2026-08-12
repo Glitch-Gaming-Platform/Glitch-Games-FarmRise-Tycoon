@@ -146,11 +146,17 @@ export const UI_STYLES = `
            calc(12px + env(safe-area-inset-bottom)) calc(12px + env(safe-area-inset-left));
   font-family: "Trebuchet MS", ui-rounded, system-ui, sans-serif; color: var(--fr-ink);
 }
+.fr-hud__top {
+  position: absolute; top: calc(12px + env(safe-area-inset-top));
+  left: calc(12px + env(safe-area-inset-left)); right: calc(12px + env(safe-area-inset-right));
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 360px) minmax(0, 1fr);
+  align-items: start; gap: 8px 12px;
+}
 .fr-hud__bar {
-  position: absolute; top: calc(12px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+  position: static; grid-column: 3; justify-self: stretch;
   display: flex; gap: 7px; align-items: center; padding: 7px 10px; border: 3px solid var(--fr-timber-dark);
   border-radius: 12px; background: rgba(245, 241, 229, 0.93); box-shadow: 0 3px 0 rgba(110, 74, 42, 0.72);
-  font-variant-numeric: tabular-nums; font-size: 13px;
+  flex-wrap: wrap; justify-content: flex-end; min-width: 0; font-variant-numeric: tabular-nums; font-size: 13px;
 }
 .fr-hud__bar > span { padding: 3px 7px; border-radius: 7px; background: rgba(131, 196, 209, 0.18); }
 .fr-hud__prompt, .fr-placing {
@@ -161,7 +167,7 @@ export const UI_STYLES = `
 }
 .fr-placing--blocked { border-color: var(--fr-red); color: var(--fr-red); box-shadow: 0 3px 0 var(--fr-red); }
 .fr-hud__toasts {
-  position: absolute; left: 50%; top: calc(16px + env(safe-area-inset-top)); transform: translateX(-50%);
+  position: static; grid-column: 1 / -1; justify-self: center;
   display: flex; flex-direction: column; gap: 6px; align-items: center;
 }
 .fr-toast {
@@ -174,7 +180,7 @@ export const UI_STYLES = `
 @keyframes fr-fade { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; } }
 
 .fr-objective {
-  position: absolute; top: calc(12px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+  position: static; grid-column: 2; justify-self: stretch;
   min-width: 230px; padding: 7px 14px; border: 3px solid var(--fr-timber-dark); border-radius: 12px;
   background: rgba(245, 241, 229, 0.93); box-shadow: 0 3px 0 rgba(110, 74, 42, 0.72); text-align: center;
 }
@@ -283,10 +289,20 @@ export const UI_STYLES = `
   left: calc(12px + env(safe-area-inset-left));
   right: auto; bottom: auto; max-width: 183px;
 }
+#app[data-mobile-optimized="true"] .fr-hud__top { display: contents; }
+#app[data-mobile-optimized="true"] .fr-hud__bar {
+  position: absolute; top: calc(12px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right)); max-width: 62vw;
+}
+#app[data-mobile-optimized="true"] .fr-hud__toasts {
+  position: absolute; left: 50%; top: calc(122px + env(safe-area-inset-top));
+  transform: translateX(-50%);
+}
 #app[data-mobile-optimized="true"]:has([data-testid="debug-overlay"]) .fr-menu-shortcuts {
   top: calc(98px + env(safe-area-inset-top));
 }
 #app[data-mobile-optimized="true"] .fr-objective {
+  position: absolute;
   top: calc(66px + env(safe-area-inset-top));
   left: auto; right: calc(12px + env(safe-area-inset-right));
   transform: none; max-width: 45vw;
@@ -402,8 +418,9 @@ export const UI_STYLES = `
   .fr-market__icon { width: 56px; height: 56px; }
   .fr-market__actions, .fr-market__row > .fr-btn { grid-column: 1 / -1; justify-self: stretch; }
   .fr-market__actions .fr-btn { flex: 1; }
-  .fr-hud__bar { max-width: 70vw; flex-wrap: wrap; justify-content: flex-end; }
-  .fr-objective { left: 12px; transform: none; min-width: 0; max-width: 45vw; }
+  .fr-hud__top { grid-template-columns: minmax(0, 1fr); }
+  .fr-hud__bar { grid-column: 1; justify-self: end; max-width: 70vw; }
+  .fr-objective { grid-column: 1; justify-self: start; min-width: 0; max-width: 45vw; }
   .fr-menu-shortcut { grid-template-columns: 38px 26px; min-width: 76px; padding: 5px; }
   .fr-menu-shortcut__icon { width: 38px; height: 38px; }
   .fr-menu-shortcut__name { display: none; }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
+import { RenderPipeline } from '../../src/engine/render/RenderPipeline.js';
 import {
   createChickenMotionMaterial,
   createCowMotionMaterial,
@@ -9,14 +10,16 @@ import {
 } from '../../src/game/world/view/animationMaterials.js';
 
 interface FakeShader {
-  uniforms: Record<string, { value: number }>;
+  uniforms: Record<string, { value: unknown }>;
   vertexShader: string;
+  fragmentShader: string;
 }
 
 function compile(material: THREE.Material): FakeShader {
   const shader: FakeShader = {
     uniforms: {},
-    vertexShader: 'void main() {\n#include <begin_vertex>\n}',
+    vertexShader: 'void main() {\n#include <beginnormal_vertex>\n#include <begin_vertex>\n}',
+    fragmentShader: 'void main() {\n#include <color_fragment>\n#include <opaque_fragment>\n}',
   };
   const hook = material.onBeforeCompile as unknown as (source: FakeShader) => void;
   hook(shader);
@@ -60,6 +63,28 @@ describe('procedural animation materials', () => {
 
     expect(shader.vertexShader).toContain('farmWindWeight * 0.0');
     expect(shader.vertexShader).not.toContain('farmWindWeight * 0;');
+    wind.dispose();
+  });
+
+  it('keeps trunked vegetation rooted while varying branch phase and tip flutter', () => {
+    const wind = createWindMaterial(new THREE.MeshStandardMaterial(), {
+      key: 'test-eucalyptus',
+      strength: 0.12,
+      speed: 0.82,
+      baseHeight: 0.72,
+      fullHeight: 2.35,
+      cantilever: true,
+      tipFlutter: 0.7,
+      torsion: 0.01,
+      lateralRatio: 0.34,
+    });
+    const shader = compile(wind.material);
+
+    expect(shader.vertexShader).toContain('farmWindWeight *= farmWindWeight');
+    expect(shader.vertexShader).toContain('float farmBranchBearing');
+    expect(shader.vertexShader).toContain('float farmFlutter');
+    expect(shader.vertexShader).toContain('instanceMatrix[3].z');
+    expect(wind.material.customProgramCacheKey()).toContain('tree');
     wind.dispose();
   });
 
@@ -117,10 +142,39 @@ describe('procedural animation materials', () => {
 
     expect(ripples.material.name).toBe('M_FarmRise_RippleWater');
     expect(stream.material.name).toBe('M_FarmRise_RunningWater');
-    expect(ripples.material.uniforms['uTime']?.value).toBe(4.5);
-    expect(stream.material.uniforms['uTime']?.value).toBe(7.25);
-    expect(stream.material.fragmentShader).toContain('- uTime * 7.5');
+    expect(ripples.responsive).toBe(false);
+    expect(stream.responsive).toBe(false);
+    expect((ripples.material as THREE.ShaderMaterial).uniforms['uTime']?.value).toBe(4.5);
+    expect((stream.material as THREE.ShaderMaterial).uniforms['uTime']?.value).toBe(7.25);
+    expect((stream.material as THREE.ShaderMaterial).fragmentShader).toContain('- uTime * 7.5');
     ripples.dispose();
     stream.dispose();
+  });
+
+  it('adds contained displacement, flow direction, edge foam and fresnel on Ultra water', () => {
+    const pipeline = new RenderPipeline({ tier: 'ultra' });
+    const standing = createWaterMaterial(false, pipeline);
+    const flowing = createWaterMaterial(true, pipeline);
+    const standingShader = compile(standing.material);
+    const flowingShader = compile(flowing.material);
+
+    expect(standing.responsive).toBe(true);
+    expect(flowing.responsive).toBe(true);
+    expect(standing.material).toBeInstanceOf(THREE.MeshPhysicalMaterial);
+    expect(standingShader.vertexShader).toContain('farmWaterContainment');
+    expect(standingShader.vertexShader).toContain('farmWaterNormalContainment');
+    expect(standingShader.fragmentShader).toContain('farmWaterEdgeFoam');
+    expect(standingShader.fragmentShader).toContain('farmWaterFresnel');
+    expect(flowingShader.vertexShader).toContain('farmWaterEndContainment');
+    expect(flowingShader.fragmentShader).toContain('farmWaterDirection');
+    expect(flowingShader.fragmentShader).toContain('farmWaterEndFoam');
+    standing.setTime(5.25);
+    flowing.setTime(8.5);
+    expect(standingShader.uniforms['uFarmWaterTime']?.value).toBe(5.25);
+    expect(flowingShader.uniforms['uFarmWaterTime']?.value).toBe(8.5);
+
+    standing.dispose();
+    flowing.dispose();
+    pipeline.dispose();
   });
 });

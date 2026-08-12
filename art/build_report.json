@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-08-11T02:29:53",
+  "generated_at": "2026-08-12T07:03:03",
   "blender": "5.2.0 LTS",
-  "duration_seconds": 2.58,
+  "duration_seconds": 2.43,
   "palette_entries": 101,
   "palette_contrast_failures": [],
   "budgets": {
@@ -51,8 +51,8 @@
     {
       "name": "SM_crop_corn_s3",
       "asset": "crop_corn_s3",
-      "triangles": 336,
-      "vertices": 360
+      "triangles": 444,
+      "vertices": 468
     },
     {
       "name": "SM_crop_corn_s4",
@@ -99,8 +99,8 @@
     {
       "name": "SM_crop_clover_s3",
       "asset": "crop_clover_s3",
-      "triangles": 270,
-      "vertices": 261
+      "triangles": 306,
+      "vertices": 285
     },
     {
       "name": "SM_crop_clover_s4",
@@ -117,44 +117,44 @@
     {
       "name": "SM_crop_radish_s2",
       "asset": "crop_radish_s2",
-      "triangles": 140,
-      "vertices": 210
+      "triangles": 112,
+      "vertices": 168
     },
     {
       "name": "SM_crop_radish_s3",
       "asset": "crop_radish_s3",
-      "triangles": 544,
-      "vertices": 464
+      "triangles": 320,
+      "vertices": 304
     },
     {
       "name": "SM_crop_radish_s4",
       "asset": "crop_radish_s4",
-      "triangles": 544,
-      "vertices": 464
+      "triangles": 352,
+      "vertices": 352
     },
     {
       "name": "SM_crop_pea_s1",
       "asset": "crop_pea_s1",
-      "triangles": 160,
-      "vertices": 152
+      "triangles": 132,
+      "vertices": 112
     },
     {
       "name": "SM_crop_pea_s2",
       "asset": "crop_pea_s2",
-      "triangles": 260,
-      "vertices": 260
+      "triangles": 284,
+      "vertices": 240
     },
     {
       "name": "SM_crop_pea_s3",
       "asset": "crop_pea_s3",
-      "triangles": 500,
-      "vertices": 430
+      "triangles": 436,
+      "vertices": 360
     },
     {
       "name": "SM_crop_pea_s4",
       "asset": "crop_pea_s4",
-      "triangles": 680,
-      "vertices": 530
+      "triangles": 540,
+      "vertices": 424
     },
     {
       "name": "SM_crop_strawberry_s1",
@@ -165,20 +165,20 @@
     {
       "name": "SM_crop_strawberry_s2",
       "asset": "crop_strawberry_s2",
-      "triangles": 510,
-      "vertices": 391
+      "triangles": 210,
+      "vertices": 209
     },
     {
       "name": "SM_crop_strawberry_s3",
       "asset": "crop_strawberry_s3",
-      "triangles": 380,
-      "vertices": 330
+      "triangles": 456,
+      "vertices": 396
     },
     {
       "name": "SM_crop_strawberry_s4",
       "asset": "crop_strawberry_s4",
-      "triangles": 610,
-      "vertices": 485
+      "triangles": 594,
+      "vertices": 489
     },
     {
       "name": "SM_crop_sunflower_s1",
@@ -213,26 +213,26 @@
     {
       "name": "SM_crop_tomato_s2",
       "asset": "crop_tomato_s2",
-      "triangles": 416,
-      "vertices": 344
+      "triangles": 328,
+      "vertices": 268
     },
     {
       "name": "SM_crop_tomato_s3",
       "asset": "crop_tomato_s3",
-      "triangles": 704,
-      "vertices": 504
+      "triangles": 488,
+      "vertices": 364
     },
     {
       "name": "SM_crop_tomato_s4",
       "asset": "crop_tomato_s4",
-      "triangles": 848,
-      "vertices": 584
+      "triangles": 528,
+      "vertices": 388
     },
     {
       "name": "SM_crop_avocado_s1",
       "asset": "crop_avocado_s1",
-      "triangles": 276,
-      "vertices": 168
+      "triangles": 64,
+      "vertices": 60
     },
     {
       "name": "SM_crop_avocado_s2",
@@ -243,14 +243,14 @@
     {
       "name": "SM_crop_avocado_s3",
       "asset": "crop_avocado_s3",
-      "triangles": 328,
-      "vertices": 200
+      "triangles": 296,
+      "vertices": 180
     },
     {
       "name": "SM_crop_avocado_s4",
       "asset": "crop_avocado_s4",
-      "triangles": 760,
-      "vertices": 440
+      "triangles": 472,
+      "vertices": 276
     },
     {
       "name": "SM_crop_beetroot_s1",
@@ -261,20 +261,20 @@
     {
       "name": "SM_crop_beetroot_s2",
       "asset": "crop_beetroot_s2",
-      "triangles": 140,
-      "vertices": 210
+      "triangles": 112,
+      "vertices": 168
     },
     {
       "name": "SM_crop_beetroot_s3",
       "asset": "crop_beetroot_s3",
-      "triangles": 544,
-      "vertices": 464
+      "triangles": 352,
+      "vertices": 352
     },
     {
       "name": "SM_crop_beetroot_s4",
       "asset": "crop_beetroot_s4",
-      "triangles": 544,
-      "vertices": 464
+      "triangles": 352,
+      "vertices": 352
     },
     {
       "name": "SM_crop_cranberry_s1",
@@ -291,38 +291,38 @@
     {
       "name": "SM_crop_cranberry_s3",
       "asset": "crop_cranberry_s3",
-      "triangles": 620,
-      "vertices": 540
+      "triangles": 460,
+      "vertices": 460
     },
     {
       "name": "SM_crop_cranberry_s4",
       "asset": "crop_cranberry_s4",
-      "triangles": 640,
-      "vertices": 512
+      "triangles": 528,
+      "vertices": 464
     },
     {
       "name": "SM_crop_grape_s1",
       "asset": "crop_grape_s1",
-      "triangles": 180,
-      "vertices": 144
+      "triangles": 108,
+      "vertices": 88
     },
     {
       "name": "SM_crop_grape_s2",
       "asset": "crop_grape_s2",
-      "triangles": 180,
-      "vertices": 144
+      "triangles": 200,
+      "vertices": 148
     },
     {
       "name": "SM_crop_grape_s3",
       "asset": "crop_grape_s3",
-      "triangles": 678,
-      "vertices": 441
+      "triangles": 396,
+      "vertices": 288
     },
     {
       "name": "SM_crop_grape_s4",
       "asset": "crop_grape_s4",
-      "triangles": 894,
-      "vertices": 561
+      "triangles": 712,
+      "vertices": 480
     },
     {
       "name": "SM_crop_carrot_s1",
@@ -357,20 +357,20 @@
     {
       "name": "SM_crop_cabbage_s2",
       "asset": "crop_cabbage_s2",
-      "triangles": 240,
-      "vertices": 264
+      "triangles": 200,
+      "vertices": 220
     },
     {
       "name": "SM_crop_cabbage_s3",
       "asset": "crop_cabbage_s3",
-      "triangles": 336,
-      "vertices": 320
+      "triangles": 240,
+      "vertices": 264
     },
     {
       "name": "SM_crop_cabbage_s4",
       "asset": "crop_cabbage_s4",
-      "triangles": 336,
-      "vertices": 320
+      "triangles": 256,
+      "vertices": 232
     },
     {
       "name": "SM_crop_garlic_s1",
@@ -405,14 +405,14 @@
     {
       "name": "SM_building_barn",
       "asset": "building_barn",
-      "triangles": 892,
-      "vertices": 488
+      "triangles": 776,
+      "vertices": 422
     },
     {
       "name": "SM_building_irrigation",
       "asset": "building_irrigation",
-      "triangles": 688,
-      "vertices": 366
+      "triangles": 844,
+      "vertices": 450
     },
     {
       "name": "SM_building_road",
@@ -423,14 +423,14 @@
     {
       "name": "SM_building_fence",
       "asset": "building_fence",
-      "triangles": 352,
-      "vertices": 192
+      "triangles": 484,
+      "vertices": 264
     },
     {
       "name": "SM_building_coop",
       "asset": "building_coop",
-      "triangles": 760,
-      "vertices": 416
+      "triangles": 768,
+      "vertices": 430
     },
     {
       "name": "SM_building_loading_pad",
@@ -441,26 +441,26 @@
     {
       "name": "SM_building_cold_store",
       "asset": "building_cold_store",
-      "triangles": 580,
-      "vertices": 320
+      "triangles": 844,
+      "vertices": 464
     },
     {
       "name": "SM_building_worker_hut",
       "asset": "building_worker_hut",
-      "triangles": 716,
-      "vertices": 392
+      "triangles": 848,
+      "vertices": 464
     },
     {
       "name": "SM_building_well",
       "asset": "building_well",
-      "triangles": 292,
-      "vertices": 162
+      "triangles": 476,
+      "vertices": 280
     },
     {
       "name": "SM_building_mill",
       "asset": "building_mill",
-      "triangles": 632,
-      "vertices": 344
+      "triangles": 840,
+      "vertices": 454
     },
     {
       "name": "SM_building_creamery",
@@ -507,32 +507,32 @@
     {
       "name": "SM_char_farmer",
       "asset": "char_farmer",
-      "triangles": 2310,
-      "vertices": 1281
+      "triangles": 2390,
+      "vertices": 1329
     },
     {
       "name": "SM_animal_chicken",
       "asset": "animal_chicken",
-      "triangles": 502,
-      "vertices": 320
+      "triangles": 566,
+      "vertices": 354
     },
     {
       "name": "SM_animal_cow",
       "asset": "animal_cow",
       "triangles": 678,
-      "vertices": 395
+      "vertices": 399
     },
     {
       "name": "SM_animal_fox",
       "asset": "animal_fox",
-      "triangles": 682,
-      "vertices": 393
+      "triangles": 624,
+      "vertices": 358
     },
     {
       "name": "SM_prop_rock",
       "asset": "prop_rock",
-      "triangles": 66,
-      "vertices": 37
+      "triangles": 78,
+      "vertices": 45
     },
     {
       "name": "SM_prop_grass_tuft",
@@ -555,32 +555,32 @@
     {
       "name": "SM_prop_bush",
       "asset": "prop_bush",
-      "triangles": 114,
-      "vertices": 63
+      "triangles": 164,
+      "vertices": 100
     },
     {
       "name": "SM_prop_eucalyptus",
       "asset": "prop_eucalyptus",
-      "triangles": 280,
-      "vertices": 346
+      "triangles": 263,
+      "vertices": 158
     },
     {
       "name": "SM_prop_eucalyptus_tall",
       "asset": "prop_eucalyptus_tall",
-      "triangles": 236,
-      "vertices": 294
+      "triangles": 263,
+      "vertices": 158
     },
     {
       "name": "SM_prop_eucalyptus_wide",
       "asset": "prop_eucalyptus_wide",
-      "triangles": 296,
-      "vertices": 356
+      "triangles": 291,
+      "vertices": 178
     },
     {
       "name": "SM_prop_dead_tree",
       "asset": "prop_dead_tree",
-      "triangles": 100,
-      "vertices": 62
+      "triangles": 245,
+      "vertices": 168
     },
     {
       "name": "SM_prop_rock_cluster",
@@ -603,8 +603,8 @@
     {
       "name": "SM_prop_water_trough",
       "asset": "prop_water_trough",
-      "triangles": 220,
-      "vertices": 120
+      "triangles": 256,
+      "vertices": 144
     },
     {
       "name": "SM_tool_watering_can",
@@ -625,47 +625,47 @@
       "vertices": 48
     }
   ],
-  "total_triangles": 37712,
+  "total_triangles": 35694,
   "family_bytes": {
     "crops": {
-      "raw": 594980,
-      "raw_gzip": 192491,
-      "draco": 207372,
-      "draco_gzip": 168663,
-      "meshopt": 346976,
-      "meshopt_gzip": 155897
+      "raw": 607128,
+      "raw_gzip": 197563,
+      "draco": 211256,
+      "draco_gzip": 172663,
+      "meshopt": 353740,
+      "meshopt_gzip": 159726
     },
     "crops-spring": {
-      "raw": 469812,
-      "raw_gzip": 140810,
-      "draco": 157368,
-      "draco_gzip": 132496,
-      "meshopt": 272784,
-      "meshopt_gzip": 124094
+      "raw": 377792,
+      "raw_gzip": 113390,
+      "draco": 132208,
+      "draco_gzip": 107774,
+      "meshopt": 223252,
+      "meshopt_gzip": 97683
     },
     "crops-summer": {
-      "raw": 467408,
-      "raw_gzip": 134358,
-      "draco": 157348,
-      "draco_gzip": 129150,
-      "meshopt": 278812,
-      "meshopt_gzip": 136443
+      "raw": 351176,
+      "raw_gzip": 109476,
+      "draco": 123568,
+      "draco_gzip": 99526,
+      "meshopt": 215204,
+      "meshopt_gzip": 105837
     },
     "crops-autumn": {
-      "raw": 443560,
-      "raw_gzip": 111217,
-      "draco": 140868,
-      "draco_gzip": 111464,
-      "meshopt": 261916,
-      "meshopt_gzip": 105921
+      "raw": 334172,
+      "raw_gzip": 89486,
+      "draco": 115428,
+      "draco_gzip": 89304,
+      "meshopt": 204016,
+      "meshopt_gzip": 84933
     },
     "crops-winter": {
-      "raw": 369684,
-      "raw_gzip": 107130,
-      "draco": 126308,
-      "draco_gzip": 99605,
-      "meshopt": 216088,
-      "meshopt_gzip": 83627
+      "raw": 342452,
+      "raw_gzip": 100454,
+      "draco": 116620,
+      "draco_gzip": 92626,
+      "meshopt": 201044,
+      "meshopt_gzip": 78118
     },
     "ground": {
       "raw": 28248,
@@ -676,36 +676,36 @@
       "meshopt_gzip": 8992
     },
     "buildings": {
-      "raw": 672932,
-      "raw_gzip": 126410,
-      "draco": 182964,
-      "draco_gzip": 148244,
-      "meshopt": 382832,
-      "meshopt_gzip": 115529
+      "raw": 758656,
+      "raw_gzip": 142520,
+      "draco": 205664,
+      "draco_gzip": 167748,
+      "meshopt": 428524,
+      "meshopt_gzip": 133979
     },
     "characters": {
-      "raw": 150164,
-      "raw_gzip": 41582,
-      "draco": 44440,
-      "draco_gzip": 39053,
-      "meshopt": 87568,
-      "meshopt_gzip": 47045
+      "raw": 156804,
+      "raw_gzip": 43399,
+      "draco": 46716,
+      "draco_gzip": 41178,
+      "meshopt": 91388,
+      "meshopt_gzip": 49251
     },
     "animals": {
-      "raw": 138816,
-      "raw_gzip": 41023,
-      "draco": 46976,
-      "draco_gzip": 39949,
-      "meshopt": 86548,
-      "meshopt_gzip": 47379
+      "raw": 140928,
+      "raw_gzip": 42477,
+      "draco": 46452,
+      "draco_gzip": 39495,
+      "meshopt": 88592,
+      "meshopt_gzip": 49459
     },
     "props": {
-      "raw": 219636,
-      "raw_gzip": 75416,
-      "draco": 79920,
-      "draco_gzip": 61416,
-      "meshopt": 144224,
-      "meshopt_gzip": 69494
+      "raw": 257868,
+      "raw_gzip": 85616,
+      "draco": 94692,
+      "draco_gzip": 76115,
+      "meshopt": 167824,
+      "meshopt_gzip": 84764
     }
   },
   "blend": "art/source/farmrise_assets.blend"

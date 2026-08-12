@@ -22,6 +22,9 @@ export interface EnemyDirectorEvents extends Record<string, unknown> {
   'enemy:raid-succeeded': { losses: number };
 }
 
+/** Fox travel speed, in m/s. See the call site for why it is not 4. */
+const FOX_SPEED = 1.3;
+
 export class EnemyDirector {
   readonly events = new EventBus<EnemyDirectorEvents>();
   readonly #foxes: Fox[] = [];
@@ -92,7 +95,11 @@ export class EnemyDirector {
           Math.cos(angle) * halfWidth * 0.95,
           Math.sin(angle) * halfWidth * 0.95,
           shelter,
-          4,
+          // Scaled with the player's movement speed (see Player.ts). A fox at
+          // 38% of a sprint is the same chase it has always been; leaving it at
+          // 4 m/s after the player slowed down would have made a raid
+          // impossible to intercept.
+          FOX_SPEED,
           180,
           `fox-${this.#nextFoxId++}`,
         ),

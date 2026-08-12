@@ -7,6 +7,8 @@ import { PlayerController } from '@game/player/PlayerController.js';
 import { InteractionController } from '@game/systems/InteractionController.js';
 import { plant } from '@game/world/FarmCommands.js';
 import { shelterDoorPoint } from '@game/world/collisionProfiles.js';
+import { chickenPose, createChickenPose } from '@game/animals/chickenMotion.js';
+import { cowPose, createCowPose } from '@game/animals/cowMotion.js';
 import type { GameAction } from '@game/GameActions.js';
 import { makeCareer } from '../helpers/career.js';
 
@@ -251,6 +253,40 @@ describe('InteractionController prompts', () => {
     expect(labels).toEqual(['Pick up 5 Peas']);
     expect(world.carry.items.pea).toBe(5);
     expect(incidents.mostUrgent?.responseProgress).toBe(0);
+  });
+
+  it('warns once on entering a pickup range with a full pack and resets after space is freed', () => {
+    const career = makeCareer();
+    const world = career.world;
+    const drop = world.level.animalProductDrop;
+    world.dropAt(drop.tileX, drop.tileZ, 'eggs', 3, 1);
+    world.carry.pickUp('wheat', world.carry.capacity);
+    const at = world.grid.tileToWorld(drop.tileX, drop.tileZ);
+    const player = new Player(at.x, at.z);
+    const input = {
+      wasPressed: () => false,
+      isDown: () => false,
+      axis: () => 0,
+    } as unknown as InputSystem<GameAction>;
+    const interaction = new InteractionController(
+      career,
+      player,
+      new PlayerController(player, world, world.physics, input),
+      new IncidentDirector(career),
+      input,
+    );
+    const messages: string[] = [];
+    interaction.events.on('interaction:refused', ({ reason }) => messages.push(reason));
+
+    interaction.fixedUpdate(STEP);
+    interaction.fixedUpdate(STEP);
+    expect(messages).toEqual(["You can't carry anymore. Store some items first."]);
+
+    world.carry.drain();
+    interaction.fixedUpdate(STEP);
+    world.carry.pickUp('wheat', world.carry.capacity);
+    interaction.fixedUpdate(STEP);
+    expect(messages).toHaveLength(2);
   });
 
   it('shelters animals when the response completes and removes the stale prompt', () => {
@@ -505,5 +541,53 @@ describe('proximity meters', () => {
 
     expect(labels).toEqual(['Water the marked beds']);
     expect(interaction.proximityMeters().map((meter) => meter.kind)).toEqual(['water', 'growth']);
+  });
+
+  it('explains hen feed and egg output when the player walks beside a chicken', () => {
+    const { career, world, player, interaction } = setUp();
+    world.stores.withdrawStoredAnywhere('corn', world.stores.storedTotalOf('corn'));
+    const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
+    const pose = chickenPose(
+      shelter,
+      0,
+      world.livestock.countOf('chicken'),
+      0,
+      0,
+      1,
+      createChickenPose(),
+    );
+    player.position.x = pose.x;
+    player.position.z = pose.z;
+
+    const animal = interaction.proximityMeters().find((meter) => meter.kind === 'animal');
+    expect(animal?.label).toBe('2 Hens make 8 Eggs');
+    expect(animal?.detail).toBe('Store 2 Corn each cycle · 0/2 stored');
+    expect(animal?.urgent).toBe(true);
+    expect(animal?.target.kind).toBe('animal');
+    void career;
+  });
+
+  it('explains cow feed and milk output when the player walks beside a cow', () => {
+    const { world, player, interaction } = setUp();
+    world.livestock.hydrate([
+      {
+        id: 'animals-cows',
+        species: 'cow',
+        count: 1,
+        cycleTicks: 0,
+        tileX: world.level.shelter.tileX,
+        tileZ: world.level.shelter.tileZ,
+        sheltered: false,
+      },
+    ]);
+    const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
+    const pose = cowPose(shelter, 0, 1, 0, 1, createCowPose());
+    player.position.x = pose.x;
+    player.position.z = pose.z;
+
+    const animal = interaction.proximityMeters().find((meter) => meter.kind === 'animal');
+    expect(animal?.label).toBe('1 Dairy cow makes 6 Milk');
+    expect(animal?.detail).toBe('Store 3 Clover each cycle · 0/3 stored');
+    expect(animal?.urgent).toBe(true);
   });
 });

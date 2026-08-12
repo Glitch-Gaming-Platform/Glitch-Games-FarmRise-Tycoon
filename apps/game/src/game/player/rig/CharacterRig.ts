@@ -31,7 +31,7 @@
 import * as THREE from 'three';
 import { BONE_INDEX, BONES, FOREARM_LENGTH, SHIN_LENGTH, THIGH_LENGTH, UPPERARM_LENGTH } from './skeletonDefinition.js'; // prettier-ignore
 import { HARVEST, IDLE, PLANT, RUN, TEND, WALK, WAVE, type Clip } from './poseClips.js';
-import { ankleFromHip, createJointBuffer, measureStrideLength, sampleClip, sampleGait, sampleRootMotion, type JointAngles } from './clipSampler.js'; // prettier-ignore
+import { ankleFromHip, createJointBuffer, measureStrideLength, sampleClip, sampleGait, sampleRootMotion, STANCE_CLEARANCE, type JointAngles } from './clipSampler.js'; // prettier-ignore
 import { blendAngle, solveTwoBone } from './ikSolver.js';
 import type { WorkAction } from '../Player.js';
 
@@ -42,22 +42,17 @@ const IDLE_SPEED = 0.12;
  * The speed window over which the walk clip gives way to the run clip.
  *
  * These are keyed to what the *player* is doing, not to an abstract speed
- * ramp. `Player.walkSpeed` is 6.5 m/s and `sprintMultiplier` is 1.6, so held-W
- * walking is 6.5 and Shift+W sprinting is 10.4. The previous window started
- * blending at 3.4 and finished at 7.4, which put an ordinary walk at 78% of
- * the RUN clip - the farmer was running whenever they moved at all, and the
- * run's much larger hip flexion (0.56 rad against the walk's 0.24) is most of
- * what read as feet kicking out in front.
- *
- * Anchoring the window to the two speeds the game can actually produce means
- * walking plays the walk and sprinting plays the run, which is what the clips
- * were authored for.
+ * ramp. `Player.walkSpeed` is 1.4 m/s and `sprintMultiplier` is 2.45, so held-W
+ * walking is 1.4 and Shift+W sprinting is 3.43. Both numbers are what the
+ * clips can cover honestly - see the note on `MAX_CADENCE_WALK` - so the walk
+ * clip plays at walking speed, the run clip plays at sprinting speed, and the
+ * window in between is crossed only while accelerating.
  */
-const RUN_BLEND_START = 6.9;
-const RUN_SPEED = 10.4;
+const RUN_BLEND_START = 1.8;
+const RUN_SPEED = 3.43;
 
 /** Ground clearance under which a foot counts as planted, in metres. */
-const PLANT_HEIGHT = 0.035;
+const PLANT_HEIGHT = STANCE_CLEARANCE;
 
 /**
  * Clearance at which a planted foot is released again, in metres.
@@ -81,6 +76,20 @@ const RELEASE_HEIGHT = 0.055;
 const LOCK_RELEASE_SECONDS = 0.09;
 
 /**
+ * Seconds over which the foot lock fades in when a foot plants.
+ *
+ * Shorter than the release, but not instantaneous. A release is the foot
+ * leaving, which is gradual; a plant is the foot arriving, which is firm. The
+ * 30 ms attack removed slide but pulled the thigh into one extra direction
+ * change at heel strike. Fifty milliseconds still reaches full authority in
+ * roughly three frames while keeping that correction below the pop threshold.
+ */
+const LOCK_ATTACK_SECONDS = 0.05;
+
+/** Knee extension beyond which a trailing lock yields to toe-off. */
+const LOCK_RELEASE_KNEE_ANGLE = -0.7;
+
+/**
  * Stride mismatch at which the foot lock has faded out entirely.
  *
  * The lock exists to remove the last centimetre of slip from a gait that
@@ -102,26 +111,34 @@ const LOCK_FADE_STRIDE_SCALE = 1.9;
 /**
  * Cadence ceiling, in gait cycles per second, for walking and for running.
  *
- * There is a scale conflict in this game that no amount of animation can
- * dissolve, and it is worth stating plainly rather than hiding behind a magic
- * number. The farmer is 1.60 m tall with 0.385 m legs, and the authored walk
- * moves each foot about 0.30 m per cycle. The player's walk speed is 6.5 m/s.
- * Tying cadence strictly to distance at that speed demands about 21 gait cycles
- * per second, which is not an animation, it is a strobe.
+ * ## What this used to be, and why it is now only a safety net
  *
- * (The rest of the codebase already assumes an arcade stride: the footstep
- * audio in PlayerController fires every 1.35 m, four and a half times the
- * distance this character's legs can actually cover in a step.)
+ * This game had a scale conflict that two animation passes documented and
+ * neither could dissolve: a 1.60 m farmer with 0.4 m legs moving at 6.5 m/s.
+ * Cadence saturated at these caps, the rig widened the swing to cover part of
+ * the shortfall, and the rest came out as sliding feet. The docs called the
+ * remainder a gameplay decision, which it was.
  *
- * So cadence is capped at a rate a human eye reads as walking or running, and
- * the leg swing is widened to cover as much of the shortfall as the leg's reach
- * allows. Beyond that the feet do slide, and this is the one place in the rig
- * where that is a deliberate trade rather than a defect. The alternative is
- * halving the player's movement speed, which is a gameplay decision and not
- * one the renderer should make on its own.
+ * That decision has now been taken. Three numbers moved together, and none of
+ * them works without the other two:
+ *
+ *   1. `measureStrideLength` was understating the stride by the stance
+ *      fraction, so every cadence demand was ~1.5x too high to begin with.
+ *   2. The walk and run clips were re-solved against the leg's actual reach:
+ *      0.60 m of ground per walk cycle and 1.10 m per run cycle, against 0.37
+ *      and 0.38 before.
+ *   3. `Player.walkSpeed` came down from 6.5 m/s to 1.4, and the sprint
+ *      multiplier up from 1.6 to 2.45, giving 1.4 and 3.43 m/s.
+ *
+ * The result is that ordinary walking asks for 2.3 cycles/s and sprinting for
+ * 3.1, both under these ceilings, so `strideScale` stays at 1, the swing is
+ * never widened, and the foot lock runs at full authority. The caps remain as a
+ * guard: if someone raises the movement speed again, the character strides
+ * faster up to here and then starts sliding rather than strobing, and
+ * `strideScale` says so out loud.
  */
-const MAX_CADENCE_WALK = 2.7;
-const MAX_CADENCE_RUN = 3.0;
+const MAX_CADENCE_WALK = 2.9;
+const MAX_CADENCE_RUN = 3.5;
 
 /** Bones whose X swing may be widened modestly by visual stride warping. */
 const LEG_SWING_BONES = ['thigh.L', 'thigh.R', 'shin.L', 'shin.R'] as const;
@@ -148,6 +165,7 @@ const MAX_VISUAL_ARM_SCALE = 1.2;
  * forward excursion.
  */
 const MAX_FORWARD_LEG_SCALE = 1.1;
+const WALK_TERMINAL_ROOT_LIFT = 0.04;
 
 export interface RigInput {
   readonly deltaSeconds: number;
@@ -172,6 +190,21 @@ interface FootState {
   travelSincePlant: number;
   /** Current lock strength, 0..1, ramped rather than switched. */
   lock: number;
+  /**
+   * The clip's own ankle position last frame, before any lock was applied.
+   *
+   * Used to tell a landing foot from a swinging one. A long stride passes low
+   * over the ground during terminal swing, so height alone plants the foot
+   * several frames early - and the lock then insists that a foot which is
+   * still travelling forward hold still, which is a hard correction every
+   * frame until it releases. A foot that is not advancing is a foot that has
+   * arrived.
+   */
+  clipForward: number;
+  hasClipForward: boolean;
+  /** Last corrective offset from the clip, held through the release ramp. */
+  thighOffset: number;
+  shinOffset: number;
 }
 
 export class CharacterRig {
@@ -195,14 +228,21 @@ export class CharacterRig {
   readonly rootOffset = new THREE.Vector3();
   #phase = 0;
   #blendedSpeed = 0;
+  #transitionLoad = 0;
+  #transitionVelocity = 0;
   readonly #feet: Record<'L' | 'R', FootState> = {
-    L: { plantedOffset: 0, planted: false, travelSincePlant: 0, lock: 0 },
-    R: { plantedOffset: 0, planted: false, travelSincePlant: 0, lock: 0 },
+    L: { plantedOffset: 0, planted: false, travelSincePlant: 0, lock: 0, clipForward: 0, hasClipForward: false, thighOffset: 0, shinOffset: 0 }, // prettier-ignore
+    R: { plantedOffset: 0, planted: false, travelSincePlant: 0, lock: 0, clipForward: 0, hasClipForward: false, thighOffset: 0, shinOffset: 0 }, // prettier-ignore
   };
   /** Leg swing widening currently in effect, so the foot lock can account for it. */
   #visualLegScale = 1;
   /** World matrix of the right hand, for tool attachment. */
   readonly handMatrix = new THREE.Matrix4();
+  /** Value/velocity pairs for ponytail pitch/roll and satchel pitch/roll. */
+  readonly #secondarySprings = new Float32Array(8);
+  readonly #ikTarget = new THREE.Vector3();
+  readonly #ikLocal = new THREE.Vector3();
+  readonly #ikInverse = new THREE.Matrix4();
 
   constructor(bones: THREE.Bone[]) {
     this.bones = bones;
@@ -219,6 +259,23 @@ export class CharacterRig {
     return this.#phase;
   }
 
+  /** Signed start/stop load: positive accelerates, negative decelerates. */
+  get transitionLoad(): number {
+    return this.#transitionLoad;
+  }
+
+  /**
+   * How strongly one foot is currently locked to the ground, 0..1.
+   *
+   * Exposed so that "the planted foot does not slide" can be tested against
+   * the frames the rig actually claims are planted. Measuring slip over every
+   * frame where the ankle happens to pass near the floor instead measures the
+   * swing leg skimming the ground, which is not slip and cannot be fixed.
+   */
+  footLock(side: 'L' | 'R'): number {
+    return THREE.MathUtils.smoothstep(this.#feet[side].lock, 0, 1);
+  }
+
   update(input: RigInput): void {
     const dt = Math.min(input.deltaSeconds, 0.05);
 
@@ -227,6 +284,10 @@ export class CharacterRig {
     // how far the feet have carried the body and must stay honest.
     const blendRate = 1 - Math.exp(-dt * 11);
     this.#blendedSpeed += (input.speed - this.#blendedSpeed) * blendRate;
+    const transitionTarget = input.working
+      ? 0
+      : THREE.MathUtils.clamp((input.speed - this.#blendedSpeed) / RUN_BLEND_START, -1, 1);
+    this.#stepTransitionLoad(transitionTarget, dt);
 
     const moving = !input.working && input.speed > IDLE_SPEED;
     const runBlend = THREE.MathUtils.clamp(
@@ -261,7 +322,6 @@ export class CharacterRig {
     // with the pose it is correcting. Below the cadence cap this is *exactly*
     // `speed * dt`, because cadence is then `speed / stride` by definition, so
     // genuine foot planting at honest speeds is unchanged.
-    const gaitDistance = moving ? cadence * dt * baseStride * this.#visualLegScale : 0;
     if (moving) {
       this.#phase += cadence * dt;
       this.#phase -= Math.floor(this.#phase);
@@ -282,7 +342,11 @@ export class CharacterRig {
       }
       this.#resetFeet();
     } else {
-      locomotionWeight = THREE.MathUtils.clamp((this.#blendedSpeed - IDLE_SPEED) / 1.1, 0, 1);
+      // Contact correction advances by actual ground distance, so the gait must
+      // be fully visible before the speeds at which feet are expected to lock.
+      // Blending half a gait over idle while advancing a full-speed lock makes
+      // the target outrun the rendered leg and repeatedly replant.
+      locomotionWeight = THREE.MathUtils.clamp((this.#blendedSpeed - IDLE_SPEED) / 0.45, 0, 1);
       if (locomotionWeight < 1) {
         // Idle breathes on its own slow clock. This is the one place a
         // time-driven phase is correct: breathing is not tied to distance.
@@ -300,16 +364,31 @@ export class CharacterRig {
           sampleGait(RUN, this.#phase, this.#angles, this.#scratch, locomotionWeight * runBlend);
           this.#sampleRoot(RUN, this.#phase, locomotionWeight * runBlend);
         }
+        // The mirrored leg reaches terminal swing half a cycle from the
+        // authored root keys. A short pelvis vault keeps either heel clear
+        // until its final descent instead of letting the low root turn two
+        // adjacent samples into a near-ground teleport.
+        this.rootOffset.y +=
+          terminalSwingLift(this.#phase) *
+          locomotionWeight *
+          (1 - runBlend) *
+          WALK_TERMINAL_ROOT_LIFT;
         this.#widenSwing();
+        const gaitDistance = moving ? cadence * dt * baseStride * this.#visualLegScale : 0;
         const lockAuthority =
           1 - THREE.MathUtils.smoothstep(this.strideScale, 1, LOCK_FADE_STRIDE_SCALE);
-        this.#applyFootLock(gaitDistance, locomotionWeight * lockAuthority, dt);
+        // Once locomotion is visible, contact correction needs full authority.
+        // Multiplying by the pose blend made a foot report a full lock at slow
+        // walking speeds while only applying half of the correction, leaving a
+        // visible residual skate precisely when the camera can read it best.
+        this.#applyFootLock(gaitDistance, lockAuthority, dt);
       } else {
         this.#resetFeet();
       }
     }
 
-    this.#applySecondaryMotion(input, locomotionWeight, runBlend);
+    if (!input.working) this.#applyLocomotionDynamics(input, locomotionWeight, runBlend);
+    this.#applySecondaryMotion(input, locomotionWeight, runBlend, dt);
 
     if (input.waveProgress > 0) {
       // Layered, not exclusive: the wave only writes arm and spine bones, so
@@ -337,33 +416,213 @@ export class CharacterRig {
     this.rootOffset.z += this.#rootScratch[2]!;
   }
 
+  #stepTransitionLoad(target: number, dt: number): void {
+    const omega = 3.8 * Math.PI * 2;
+    const displacement = this.#transitionLoad - target;
+    const decay = Math.exp(-omega * dt);
+    const timeTerm = (this.#transitionVelocity + omega * displacement) * dt;
+    this.#transitionLoad = target + (displacement + timeTerm) * decay;
+    this.#transitionVelocity = (this.#transitionVelocity - omega * timeTerm) * decay;
+  }
+
+  /**
+   * Layers inertial starts/stops and directional commitment over the gait.
+   * These offsets are intentionally small: the authored feet remain the
+   * authority, while the pelvis/ribs explain why the body is accelerating or
+   * turning instead of rotating like a signpost above them.
+   */
+  #applyLocomotionDynamics(input: RigInput, locomotion: number, runBlend: number): void {
+    const load = this.#transitionLoad;
+    const brace = Math.abs(load);
+    const turn = input.turn * locomotion;
+    const walkWeight = locomotion * (1 - runBlend);
+    const cycle = this.#phase * Math.PI * 2;
+    const strideOpposition = Math.cos(cycle);
+    const lateralTransfer = Math.sin(cycle);
+    const leftPhase = this.#phase;
+    const rightPhase = (this.#phase + 0.5) % 1;
+    const loadingResponse = Math.max(loadingPulse(leftPhase), loadingPulse(rightPhase));
+    const hips = BONE_INDEX['hips']! * 3;
+    const spine = BONE_INDEX['spine']! * 3;
+    const chest = BONE_INDEX['chest']! * 3;
+    const neck = BONE_INDEX['neck']! * 3;
+    const head = BONE_INDEX['head']! * 3;
+    const leftShoulder = BONE_INDEX['shoulder.L']! * 3;
+    const rightShoulder = BONE_INDEX['shoulder.R']! * 3;
+    const leftUpperArm = BONE_INDEX['upperarm.L']! * 3;
+    const rightUpperArm = BONE_INDEX['upperarm.R']! * 3;
+    const leftForearm = BONE_INDEX['forearm.L']! * 3;
+    const rightForearm = BONE_INDEX['forearm.R']! * 3;
+    const leftShin = BONE_INDEX['shin.L']! * 3;
+    const rightShin = BONE_INDEX['shin.R']! * 3;
+
+    // A start pitches the ribs forward over flexed knees while the root stays
+    // a fraction behind; a stop reverses that relationship and then settles.
+    this.rootOffset.y -= brace * 0.018;
+    this.rootOffset.z -= load * 0.012;
+    this.#angles[hips] = this.#angles[hips]! + load * 0.055;
+    this.#angles[spine] = this.#angles[spine]! + load * 0.11;
+    this.#angles[chest] = this.#angles[chest]! + load * 0.075;
+    this.#angles[neck] = this.#angles[neck]! - load * 0.035;
+    this.#angles[leftShin] = this.#angles[leftShin]! - brace * 0.08;
+    this.#angles[rightShin] = this.#angles[rightShin]! - brace * 0.08;
+
+    // The authored clip owns the ankle path; this layer supplies the mass that
+    // travels over it. Loading lands low, the pelvis commits over the support
+    // side, and the ribs/shoulders rotate against the hips. The small vertical
+    // drop is re-solved against any locked ankle so it bends the support knee
+    // without moving the planted boot.
+    const supportDrop = -loadingResponse * walkWeight * 0.012;
+    this.rootOffset.y += supportDrop;
+    this.#preserveLockedFootHeight(supportDrop);
+    this.rootOffset.x -= lateralTransfer * walkWeight * 0.012;
+    this.#angles[hips + 1] = this.#angles[hips + 1]! - strideOpposition * walkWeight * 0.038;
+    this.#angles[hips + 2] = this.#angles[hips + 2]! + lateralTransfer * walkWeight * 0.028;
+    this.#angles[spine + 1] = this.#angles[spine + 1]! + strideOpposition * walkWeight * 0.025;
+    this.#angles[chest + 1] = this.#angles[chest + 1]! + strideOpposition * walkWeight * 0.048;
+    this.#angles[chest + 2] = this.#angles[chest + 2]! - lateralTransfer * walkWeight * 0.02;
+
+    // Arms balance the stride rather than hanging beside it. A modest elbow
+    // fold at the back of each swing keeps the hand clear of the thigh, while
+    // the delayed neck/head counter-motion prevents the hat reading as welded
+    // to the torso.
+    const armDrive = strideOpposition * walkWeight;
+    this.#angles[rightShoulder] = this.#angles[rightShoulder]! + armDrive * 0.024;
+    this.#angles[leftShoulder] = this.#angles[leftShoulder]! - armDrive * 0.024;
+    this.#angles[rightUpperArm] = this.#angles[rightUpperArm]! + armDrive * 0.095;
+    this.#angles[leftUpperArm] = this.#angles[leftUpperArm]! - armDrive * 0.095;
+    this.#angles[rightForearm] = this.#angles[rightForearm]! - Math.max(0, -armDrive) * 0.085;
+    this.#angles[leftForearm] = this.#angles[leftForearm]! - Math.max(0, armDrive) * 0.085;
+    const delayedHead = Math.cos(cycle - 0.28) * walkWeight;
+    this.#angles[neck + 1] = this.#angles[neck + 1]! - delayedHead * 0.018;
+    this.#angles[head + 1] = this.#angles[head + 1]! - delayedHead * 0.028;
+    this.#angles[neck + 2] = this.#angles[neck + 2]! - Math.sin(cycle - 0.18) * walkWeight * 0.012;
+    this.#angles[head + 2] = this.#angles[head + 2]! - Math.sin(cycle - 0.3) * walkWeight * 0.018;
+
+    this.#applyWalkLegFinish('L', leftPhase, walkWeight);
+    this.#applyWalkLegFinish('R', rightPhase, walkWeight);
+
+    // Steering begins in the eyes and shoulders, then crosses the ribs into a
+    // modest pelvis bank. The actor yaw is smoothed separately in PlayerView;
+    // this layer gives that turn an internal lead/counter-rotation.
+    this.rootOffset.x -= turn * 0.012;
+    this.#angles[hips + 1] = this.#angles[hips + 1]! - turn * 0.05;
+    this.#angles[hips + 2] = this.#angles[hips + 2]! - turn * (0.026 + runBlend * 0.012);
+    this.#angles[spine + 1] = this.#angles[spine + 1]! + turn * 0.065;
+    this.#angles[chest + 1] = this.#angles[chest + 1]! + turn * 0.11;
+    this.#angles[leftShoulder + 1] = this.#angles[leftShoulder + 1]! + turn * 0.035;
+    this.#angles[rightShoulder + 1] = this.#angles[rightShoulder + 1]! + turn * 0.035;
+    this.#angles[neck + 1] = this.#angles[neck + 1]! + turn * 0.06;
+    this.#angles[head + 1] = this.#angles[head + 1]! + turn * 0.115;
+  }
+
+  /**
+   * Keeps a locked ankle at the same world height while the pelvis compresses.
+   * Moving the root alone would push a planted boot through the floor; bending
+   * the support chain by the same amount creates visible loading response with
+   * no change to the foot-lock target or forward position.
+   */
+  #preserveLockedFootHeight(rootShift: number): void {
+    if (rootShift === 0) return;
+    for (const side of ['L', 'R'] as const) {
+      const lock = this.footLock(side);
+      if (lock <= 0.01) continue;
+      const thighSlot = BONE_INDEX[`thigh.${side}`]! * 3;
+      const shinSlot = BONE_INDEX[`shin.${side}`]! * 3;
+      const thigh = this.#angles[thighSlot]!;
+      const shin = this.#angles[shinSlot]!;
+      const ankle = ankleFromHip(thigh, shin);
+      const solution = solveTwoBone(
+        ankle.forward,
+        ankle.depth + rootShift,
+        THIGH_LENGTH,
+        SHIN_LENGTH,
+        1,
+      );
+      if (solution.clamped) continue;
+      const weight = THREE.MathUtils.smoothstep(lock, 0, 1);
+      this.#angles[thighSlot] = THREE.MathUtils.lerp(thigh, solution.upper, weight);
+      this.#angles[shinSlot] = THREE.MathUtils.lerp(shin, solution.lower, weight);
+    }
+  }
+
+  /** Adds swing separation and a readable heel-to-toe boot roll. */
+  #applyWalkLegFinish(side: 'L' | 'R', phase: number, weight: number): void {
+    if (weight <= 0) return;
+    const thigh = BONE_INDEX[`thigh.${side}`]! * 3;
+    const shin = BONE_INDEX[`shin.${side}`]! * 3;
+    const foot = BONE_INDEX[`foot.${side}`]! * 3;
+    const toe = BONE_INDEX[`toe.${side}`]! * 3;
+    const swingAuthority = 1 - THREE.MathUtils.smoothstep(this.footLock(side), 0, 0.45);
+    // Finish before terminal swing so the extra knee fold cannot pull a low
+    // descending heel forward across the soil-contact band.
+    const passing = phasePulse(phase, 0.8, 0.105) * swingAuthority * weight;
+    const heelStrike = phasePulse(phase, 0.015, 0.11) * weight;
+    const toeOff = phasePulse(phase, 0.54, 0.2) * weight;
+
+    this.#angles[shin] = this.#angles[shin]! - passing * 0.11;
+    this.#angles[thigh + 2] = this.#angles[thigh + 2]! + passing * (side === 'L' ? -0.032 : 0.032);
+    this.#angles[foot] = this.#angles[foot]! + heelStrike * 0.075 - toeOff * 0.1 + passing * 0.045;
+    this.#angles[toe] = this.#angles[toe]! - heelStrike * 0.025 + toeOff * 0.13;
+  }
+
   /**
    * Gives the disconnected ponytail and satchel the lag that makes primary
    * motion feel weighted. These are bones, not object-level squash, so the
    * body and contact points remain rigid while only the secondary pieces trail.
    */
-  #applySecondaryMotion(input: RigInput, locomotion: number, runBlend: number): void {
+  #applySecondaryMotion(input: RigInput, locomotion: number, runBlend: number, dt: number): void {
     const cycle = this.#phase * Math.PI * 2;
     const ponytail = BONE_INDEX['ponytail']! * 3;
     const satchel = BONE_INDEX['satchel']! * 3;
-    const speedSwing = locomotion * (0.1 + runBlend * 0.1);
-
-    this.#angles[ponytail] = this.#angles[ponytail]! - Math.sin(cycle + 0.55) * speedSwing;
-    this.#angles[ponytail + 2] =
-      this.#angles[ponytail + 2]! - input.turn * (0.12 + locomotion * 0.1);
-    this.#angles[satchel] = this.#angles[satchel]! + Math.sin(cycle + Math.PI) * speedSwing * 0.82;
-    this.#angles[satchel + 2] = this.#angles[satchel + 2]! + input.turn * (0.1 + locomotion * 0.08);
+    const speedSwing = locomotion * (0.072 + runBlend * 0.075);
+    const idleTail = locomotion < 0.01 ? Math.sin(this.#idleTime * 1.15) * 0.016 : 0;
+    const idleBag = locomotion < 0.01 ? Math.sin(this.#idleTime * 0.92 + 1.3) * 0.01 : 0;
+    let ponytailPitchTarget =
+      -Math.sin(cycle + 0.55) * speedSwing - this.#transitionLoad * 0.032 + idleTail;
+    let ponytailRollTarget = -input.turn * (0.1 + locomotion * 0.08);
+    let satchelPitchTarget =
+      Math.sin(cycle + Math.PI) * speedSwing * 0.78 + this.#transitionLoad * 0.045 + idleBag;
+    let satchelRollTarget = input.turn * (0.09 + locomotion * 0.065);
 
     if (input.working) {
       const effort = Math.sin(input.workProgress * Math.PI);
       if (input.workAction === 'harvest') {
-        this.#angles[ponytail + 2] = this.#angles[ponytail + 2]! + effort * 0.18;
-        this.#angles[satchel + 2] = this.#angles[satchel + 2]! - effort * 0.15;
+        ponytailRollTarget += effort * 0.18;
+        satchelRollTarget -= effort * 0.15;
       } else if (input.workAction === 'plant') {
-        this.#angles[ponytail] = this.#angles[ponytail]! - effort * 0.1;
-        this.#angles[satchel] = this.#angles[satchel]! + effort * 0.08;
+        ponytailPitchTarget -= effort * 0.075;
+        satchelPitchTarget += effort * 0.06;
       }
     }
+
+    // Exact critically-damped springs carry momentum through starts, turns and
+    // stops without becoming frame-rate dependent. Directly writing a sine to
+    // the bones made the hair and bag reverse on the same frame as the torso;
+    // they now arrive later and settle at different rates because they have
+    // visibly different mass.
+    this.#angles[ponytail] =
+      this.#angles[ponytail]! + this.#springSecondary(0, ponytailPitchTarget, 5.8, dt);
+    this.#angles[ponytail + 2] =
+      this.#angles[ponytail + 2]! + this.#springSecondary(2, ponytailRollTarget, 5.1, dt);
+    this.#angles[satchel] =
+      this.#angles[satchel]! + this.#springSecondary(4, satchelPitchTarget, 4.2, dt);
+    this.#angles[satchel + 2] =
+      this.#angles[satchel + 2]! + this.#springSecondary(6, satchelRollTarget, 3.7, dt);
+  }
+
+  #springSecondary(slot: number, target: number, frequency: number, dt: number): number {
+    const value = this.#secondarySprings[slot]!;
+    const velocity = this.#secondarySprings[slot + 1]!;
+    const omega = frequency * Math.PI * 2;
+    const displacement = value - target;
+    const decay = Math.exp(-omega * dt);
+    const timeTerm = (velocity + omega * displacement) * dt;
+    const next = target + (displacement + timeTerm) * decay;
+    const nextVelocity = (velocity - omega * timeTerm) * decay;
+    this.#secondarySprings[slot] = next;
+    this.#secondarySprings[slot + 1] = nextVelocity;
+    return next;
   }
 
   /**
@@ -404,12 +663,15 @@ export class CharacterRig {
   }
 
   #resetFeet(): void {
-    this.#feet.L.planted = false;
-    this.#feet.R.planted = false;
-    this.#feet.L.travelSincePlant = 0;
-    this.#feet.R.travelSincePlant = 0;
-    this.#feet.L.lock = 0;
-    this.#feet.R.lock = 0;
+    for (const side of ['L', 'R'] as const) {
+      const foot = this.#feet[side];
+      foot.planted = false;
+      foot.travelSincePlant = 0;
+      foot.lock = 0;
+      foot.hasClipForward = false;
+      foot.thighOffset = 0;
+      foot.shinOffset = 0;
+    }
   }
 
   /**
@@ -422,6 +684,7 @@ export class CharacterRig {
    */
   #applyFootLock(distance: number, weight: number, dt: number): void {
     const releaseStep = dt / LOCK_RELEASE_SECONDS;
+    const attackStep = dt / LOCK_ATTACK_SECONDS;
 
     for (const side of ['L', 'R'] as const) {
       const thighSlot = BONE_INDEX[`thigh.${side}`]! * 3;
@@ -433,17 +696,23 @@ export class CharacterRig {
       const { forward, depth } = ankleFromHip(thigh, shin);
       // Depth is measured down from the hip; the rest-pose ankle sits at
       // THIGH_LENGTH + SHIN_LENGTH below it, so anything shallower is lifted.
-      const clearance = THIGH_LENGTH + SHIN_LENGTH - depth;
+      // The authored pelvis track raises and lowers the whole skeleton, so it
+      // is part of how far the foot is off the floor, not a separate effect.
+      const clearance = THIGH_LENGTH + SHIN_LENGTH - depth + this.rootOffset.y;
+      const advancing = foot.hasClipForward && forward > foot.clipForward + 1e-4;
+      foot.clipForward = forward;
+      foot.hasClipForward = true;
 
       // Two thresholds, not one. Planting at PLANT_HEIGHT but only releasing
       // once the foot is clearly airborne stops the state flipping every frame
-      // while the clearance hovers on the boundary.
+      // while the clearance hovers on the boundary. The extra `advancing` term
+      // is what stops a long stride's terminal swing - which passes low over
+      // the ground with the foot still travelling forward - being mistaken for
+      // a landing several frames early.
       const threshold = foot.planted ? RELEASE_HEIGHT : PLANT_HEIGHT;
-      if (clearance > threshold) {
-        foot.planted = false;
-        foot.lock = Math.max(0, foot.lock - releaseStep);
-        if (foot.lock <= 0) continue;
-      } else {
+      let releasing = clearance > threshold || (!foot.planted && advancing);
+
+      if (!releasing) {
         if (!foot.planted) {
           foot.planted = true;
           foot.plantedOffset = forward;
@@ -451,33 +720,64 @@ export class CharacterRig {
           foot.lock = 0;
         }
         foot.travelSincePlant += distance;
+
+        // Where the ankle must be, in hip space, for it to have stayed put in
+        // the world: the position it planted at, minus how far the body has
+        // since travelled over it.
+        const targetForward = foot.plantedOffset - foot.travelSincePlant;
+        const solution = solveTwoBone(targetForward, depth, THIGH_LENGTH, SHIN_LENGTH, 1);
+        const targetDistance = Math.hypot(targetForward, depth);
+        const mildReachClamp =
+          solution.clamped && targetDistance <= THIGH_LENGTH + SHIN_LENGTH + 0.012;
+        const overextendedToeOff = targetForward < 0 && solution.lower > LOCK_RELEASE_KNEE_ANGLE;
+        if ((solution.clamped && !mildReachClamp) || overextendedToeOff) {
+          // Out of reach means the lock has overstayed - the clip has already
+          // moved on to swing. Yield before the trailing knee reaches the
+          // straight-leg singularity for the same reason: another locked frame
+          // would turn ordinary ground travel into a large hip-angle jump.
+          releasing = true;
+        } else {
+          // Ease in over the first 2 cm of travel so heel strike does not snap.
+          // `travelSincePlant` is gait distance, so the ramp spans the same
+          // fraction of a step at every speed.
+          const easeIn = THREE.MathUtils.smoothstep(foot.travelSincePlant, 0, 0.02);
+          foot.lock = Math.min(easeIn, foot.lock + attackStep);
+          // Remember the correction as an offset from the clip, not as an
+          // absolute pose. That is what makes the release harmless: see below.
+          foot.thighOffset = solution.upper - thigh;
+          foot.shinOffset = solution.lower - shin;
+        }
       }
 
-      // Where the ankle must be, in hip space, for it to have stayed put in the
-      // world: the position it planted at, minus how far the body has since
-      // travelled over it.
-      const targetForward = foot.plantedOffset - foot.travelSincePlant;
-      const solution = solveTwoBone(targetForward, depth, THIGH_LENGTH, SHIN_LENGTH, 1);
-      if (solution.clamped) {
-        // Out of reach means the lock has overstayed - the clip has already
-        // moved on to swing. Fade out rather than tear the leg straight, and
-        // rather than dropping two joint angles to their clip values in one
-        // frame, which is a visible tick even when it is the right answer.
+      if (releasing) {
         foot.planted = false;
         foot.lock = Math.max(0, foot.lock - releaseStep);
         if (foot.lock <= 0) continue;
-      } else if (foot.planted) {
-        // Ease the lock in over the first 4 cm of travel so heel strike does
-        // not snap. `travelSincePlant` is gait distance, so this ramp spans the
-        // same fraction of a step at every speed.
-        const easeIn = THREE.MathUtils.smoothstep(foot.travelSincePlant, 0, 0.04);
-        foot.lock = Math.min(easeIn, foot.lock + releaseStep);
       }
 
-      const lockWeight = weight * foot.lock;
+      // The lock is applied as a *decaying offset* from the clip rather than as
+      // a target the solver keeps chasing.
+      //
+      // Chasing was the second source of leg snap, and it only showed up once
+      // the strides were long enough to matter. A release takes a fixed 0.09 s;
+      // at a run's cadence that is a quarter of the whole cycle, during which
+      // the clip folds the knee up hard for the swing while the lock is still
+      // solving for a foot on the floor. The two disagree by more every frame,
+      // and when the lock finally reaches zero the leg jumps to the clip - 0.31
+      // rad in one frame, which is exactly the "single snapped IK correction"
+      // the jitter test was written to catch.
+      //
+      // Holding the offset instead means the released leg follows the clip's
+      // shape immediately and only the residual correction fades out, so there
+      // is nothing left to snap back from.
+      // Smooth the authority envelope, not the authored pose. The raw progress
+      // remains linear in seconds, while zero slope at both ends prevents the
+      // contact correction from adding a direction change as it enters or
+      // leaves the gait.
+      const lockWeight = weight * THREE.MathUtils.smoothstep(foot.lock, 0, 1);
       if (lockWeight <= 0) continue;
-      this.#angles[thighSlot] = blendAngle(thigh, solution.upper, lockWeight);
-      this.#angles[shinSlot] = blendAngle(shin, solution.lower, lockWeight);
+      this.#angles[thighSlot] = thigh + foot.thighOffset * lockWeight;
+      this.#angles[shinSlot] = shin + foot.shinOffset * lockWeight;
     }
   }
 
@@ -486,23 +786,102 @@ export class CharacterRig {
    * supposed to meet. Called after `update`, because it overrides the clip.
    */
   reachRightHandTo(localForward: number, localDown: number, weight: number): void {
-    if (weight <= 0) return;
-    const upperSlot = BONE_INDEX['upperarm.R']! * 3;
-    const foreSlot = BONE_INDEX['forearm.R']! * 3;
-    const solution = solveTwoBone(localForward, localDown, UPPERARM_LENGTH, FOREARM_LENGTH, -1);
-    this.#angles[upperSlot] = blendAngle(this.#angles[upperSlot]!, solution.upper, weight);
-    this.#angles[foreSlot] = blendAngle(this.#angles[foreSlot]!, solution.lower, weight);
-    this.#writeToBones();
+    this.#reachHandSagittal('R', localForward, localDown, weight);
   }
 
   /** Steadies a two-handed tool without disturbing the right-hand grip solve. */
   reachLeftHandTo(localForward: number, localDown: number, weight: number): void {
+    this.#reachHandSagittal('L', localForward, localDown, weight);
+  }
+
+  /** Plant-only solve that accounts for the already-animated torso and shoulder. */
+  reachRightHandToPoint(localX: number, localY: number, localZ: number, weight: number): void {
+    this.#reachHandToPoint('R', localX, localY, localZ, weight);
+  }
+
+  #reachHandSagittal(
+    side: 'L' | 'R',
+    localForward: number,
+    localDown: number,
+    weight: number,
+  ): void {
     if (weight <= 0) return;
-    const upperSlot = BONE_INDEX['upperarm.L']! * 3;
-    const foreSlot = BONE_INDEX['forearm.L']! * 3;
-    const solution = solveTwoBone(localForward, localDown, UPPERARM_LENGTH, FOREARM_LENGTH, -1);
-    this.#angles[upperSlot] = blendAngle(this.#angles[upperSlot]!, solution.upper, weight);
-    this.#angles[foreSlot] = blendAngle(this.#angles[foreSlot]!, solution.lower, weight);
+    const upperSlot = BONE_INDEX[`upperarm.${side}`]! * 3;
+    const foreSlot = BONE_INDEX[`forearm.${side}`]! * 3;
+    const solution = solveTwoBone(localForward, localDown, UPPERARM_LENGTH, FOREARM_LENGTH, 1);
+    // Links are authored down -Y: positive solver-forward maps to negative
+    // Three.js X rotation. Feeding the leg-space signs through unchanged made
+    // both watering arms reach behind the torso while the can remained ahead.
+    this.#angles[upperSlot] = blendAngle(this.#angles[upperSlot]!, -solution.upper, weight);
+    this.#angles[foreSlot] = blendAngle(this.#angles[foreSlot]!, -solution.lower, weight);
+    this.#writeToBones();
+  }
+
+  #reachHandToPoint(
+    side: 'L' | 'R',
+    localX: number,
+    localY: number,
+    localZ: number,
+    weight: number,
+  ): void {
+    if (weight <= 0) return;
+    const upperBone = this.bones[BONE_INDEX[`upperarm.${side}`]!]!;
+    const parent = upperBone.parent;
+    if (!parent) return;
+
+    // The body clip has already pitched and twisted the shoulder. Solve in
+    // that animated parent's space rather than from a hard-coded rest-height
+    // shoulder, otherwise the arm reaches past a tool the torso already moved
+    // toward. The actor transform is applied to both points and cancels out,
+    // keeping the solve valid whether the rig is unit-tested alone or parented
+    // under PlayerView.
+    const actor = this.bones[0]!.parent;
+    const locateTarget = (): void => {
+      actor?.updateMatrixWorld(true);
+      parent.updateMatrixWorld(true);
+      this.#ikTarget.set(localX, localY, localZ);
+      if (actor) this.#ikTarget.applyMatrix4(actor.matrixWorld);
+      this.#ikInverse.copy(parent.matrixWorld).invert();
+      this.#ikLocal.copy(this.#ikTarget).applyMatrix4(this.#ikInverse).sub(upperBone.position);
+    };
+    locateTarget();
+
+    // The plant tool sits below and beyond the relaxed arm's reach. Solving a
+    // clamped elbow alone leaves the hand visibly detached, while authoring the
+    // entire reach into every clip key folds the farmer under the hat. Let the
+    // body contribute only the shortfall: a small hip/rib hinge moves the
+    // shoulder behind the trowel, then the arm solve supplies the remaining
+    // reach. This keeps the force line continuous without changing the tool's
+    // authored path or the action timing.
+    const armReach = UPPERARM_LENGTH + FOREARM_LENGTH;
+    const planarDistance = Math.hypot(this.#ikLocal.z, this.#ikLocal.y);
+    const reachShortfall = Math.max(0, planarDistance - (armReach - 0.012));
+    if (reachShortfall > 0) {
+      const hinge = THREE.MathUtils.clamp(reachShortfall * 1.9, 0, 0.22) * weight;
+      this.#angles[BONE_INDEX['hips']! * 3] = this.#angles[BONE_INDEX['hips']! * 3]! + hinge * 0.32;
+      this.#angles[BONE_INDEX['spine']! * 3] =
+        this.#angles[BONE_INDEX['spine']! * 3]! + hinge * 0.43;
+      this.#angles[BONE_INDEX['chest']! * 3] =
+        this.#angles[BONE_INDEX['chest']! * 3]! + hinge * 0.25;
+      this.#writeToBones();
+      locateTarget();
+    }
+
+    const upperSlot = BONE_INDEX[`upperarm.${side}`]! * 3;
+    const foreSlot = BONE_INDEX[`forearm.${side}`]! * 3;
+    const solution = solveTwoBone(
+      this.#ikLocal.z,
+      -this.#ikLocal.y,
+      UPPERARM_LENGTH,
+      FOREARM_LENGTH,
+      1,
+    );
+    // The analytic solver treats positive pitch as +Z-forward. Three.js bone
+    // rotations act on links authored down -Y, where positive X carries the
+    // link toward -Z, so the solved angles enter the skeleton with both signs
+    // inverted.
+    this.#angles[upperSlot] = blendAngle(this.#angles[upperSlot]!, -solution.upper, weight);
+    this.#angles[foreSlot] = blendAngle(this.#angles[foreSlot]!, -solution.lower, weight);
     this.#writeToBones();
   }
 
@@ -524,4 +903,27 @@ function workClip(action: WorkAction | null): Clip | null {
   if (action === 'shoo') return WAVE;
   if (action === 'repair') return TEND;
   return null;
+}
+
+function terminalSwingLift(phase: number): number {
+  const sidePhase = phase - Math.floor(phase);
+  const mirroredPhase = (sidePhase + 0.5) % 1;
+  const pulse = (value: number): number => {
+    if (value < 0.86) return 0;
+    return Math.sin(((value - 0.86) / 0.14) * Math.PI);
+  };
+  return Math.max(pulse(sidePhase), pulse(mirroredPhase));
+}
+
+/** Smooth cyclic pulse centred on `centre`, with `width` measured in phase. */
+function phasePulse(phase: number, centre: number, width: number): number {
+  const wrapped = Math.abs(((phase - centre + 0.5) % 1) - 0.5);
+  if (wrapped >= width) return 0;
+  return 0.5 + 0.5 * Math.cos((wrapped / width) * Math.PI);
+}
+
+/** Loading begins at heel contact; it must not wrap into terminal swing. */
+function loadingPulse(phase: number): number {
+  if (phase < 0 || phase > 0.22) return 0;
+  return Math.sin((phase / 0.22) * Math.PI);
 }

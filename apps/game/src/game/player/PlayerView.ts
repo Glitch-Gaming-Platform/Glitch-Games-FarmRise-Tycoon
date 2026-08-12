@@ -42,6 +42,9 @@ export class PlayerView {
   readonly #actor = new THREE.Group();
   readonly #body: THREE.Mesh;
   readonly #contactShadow: THREE.Mesh;
+  readonly #contactShadowMaterial: THREE.MeshBasicMaterial;
+  readonly #contactShadowTexture: THREE.DataTexture | null;
+  readonly #advancedAvatarEffects: boolean;
   readonly #dust: THREE.InstancedMesh;
   readonly #dustParticles: DustParticle[];
   readonly #actionEffects = new PlayerActionEffects();
@@ -49,42 +52,53 @@ export class PlayerView {
   #expression: PlayerExpressionView | null = null;
   #rig: CharacterRig | null = null;
   readonly #ownedGeometry: THREE.BufferGeometry[] = [];
+  readonly #ownedMaterials: THREE.Material[] = [];
   readonly #toolGrip = new THREE.Vector3();
   readonly #toolSupport = new THREE.Vector3();
   #outline: THREE.Mesh | null = null;
+  #outlineScale = LOW_AVATAR_OUTLINE_SCALE;
   #dustCursor = 0;
   #dustAccumulator = 0;
   #visualLocomotion = 0;
   #visualTurn = 0;
   #lastPlayerX: number;
   #lastPlayerZ: number;
-  #lastFacing: number;
+  #visualFacing: number;
   #lastWorkAction: WorkAction | null = null;
   #actionEffectTriggered = false;
   #scareReactionSeconds = 0;
   /** True when running on procedural primitives rather than authored art. */
   #procedural = true;
 
-  constructor(player: Player, library: ModelLibrary | null = null) {
+  constructor(player: Player, library: ModelLibrary | null = null, advancedToolEffects = true) {
     this.object = new THREE.Group();
-    this.#tools = new PlayerToolView(library);
+    this.#advancedAvatarEffects = advancedToolEffects;
+    this.#tools = new PlayerToolView(library, advancedToolEffects);
     this.#actor.add(this.#tools.object);
     this.#lastPlayerX = player.position.x;
     this.#lastPlayerZ = player.position.z;
-    this.#lastFacing = player.facing;
-    const shadowGeometry = new THREE.CircleGeometry(0.42, 20);
+    this.#visualFacing = player.facing;
+    const shadowGeometry = new THREE.CircleGeometry(advancedToolEffects ? 0.4 : 0.42, 20);
+    this.#contactShadowTexture = advancedToolEffects ? createContactShadowTexture() : null;
     const shadowMaterial = new THREE.MeshBasicMaterial({
       // palette.py: eye_dark. A soft local contact mark is the documented
       // player-only exception used to preserve findability on every surface.
       color: 0x2a2420,
+      alphaMap: this.#contactShadowTexture,
       transparent: true,
-      opacity: 0.18,
+      opacity: advancedToolEffects ? ULTRA_CONTACT_SHADOW_OPACITY : LOW_CONTACT_SHADOW_OPACITY,
       depthWrite: false,
       toneMapped: false,
     });
+    this.#contactShadowMaterial = shadowMaterial;
     this.#contactShadow = new THREE.Mesh(shadowGeometry, shadowMaterial);
+    this.#contactShadow.name = 'FarmAvatar_ContactShadow';
     this.#contactShadow.rotation.x = -Math.PI / 2;
-    this.#contactShadow.scale.set(1, 1.28, 1);
+    this.#contactShadow.scale.set(
+      advancedToolEffects ? 0.94 : 1,
+      advancedToolEffects ? 1.18 : 1.28,
+      1,
+    );
     this.#contactShadow.position.y = 0.012;
     this.object.add(this.#contactShadow, this.#actor);
 
@@ -128,27 +142,42 @@ export class PlayerView {
       this.#rig = new CharacterRig(bones);
 
       const outlineMaterial = new THREE.MeshBasicMaterial({
-        // palette.py: roof_grey_light. Back faces of the expanded shell create a
-        // narrow rim without a post-processing or whole-world outline pass.
-        color: 0xaebac1,
+        // Low keeps the original pale readability rim. Ultra narrows and
+        // neutralises it so clothing still separates without looking selected.
+        color: advancedToolEffects ? 0x87979f : 0xaebac1,
         side: THREE.BackSide,
         transparent: true,
-        opacity: 0.62,
+        opacity: advancedToolEffects ? 0.54 : 0.62,
         depthWrite: false,
         toneMapped: false,
       });
+      this.#ownedMaterials.push(outlineMaterial);
       const outline = new THREE.SkinnedMesh(geometry, outlineMaterial);
-      outline.scale.setScalar(1.04);
+      outline.name = 'FarmAvatar_Outline';
+      this.#outlineScale = advancedToolEffects
+        ? ULTRA_AVATAR_OUTLINE_SCALE
+        : LOW_AVATAR_OUTLINE_SCALE;
+      outline.scale.setScalar(this.#outlineScale);
       outline.renderOrder = 0;
       this.#outline = outline;
 
       const bodyMaterial = library.material.clone();
       bodyMaterial.name = 'M_FarmRise_SkinnedFarmer';
+      // The hat brim and shoulder strap contain thin authored planes. Keeping
+      // both sides prevents close work poses from exposing the outline shell
+      // through an otherwise invisible accessory underside.
+      if (advancedToolEffects) {
+        bodyMaterial.side = THREE.DoubleSide;
+        bodyMaterial.roughness = 0.82;
+      }
+      this.#ownedMaterials.push(bodyMaterial);
       const mesh = new THREE.SkinnedMesh(geometry, bodyMaterial);
+      mesh.name = 'FarmAvatar_Body';
       mesh.castShadow = true;
+      mesh.receiveShadow = advancedToolEffects;
       mesh.renderOrder = 1;
       this.#body = mesh;
-      this.#expression = new PlayerExpressionView();
+      this.#expression = new PlayerExpressionView(advancedToolEffects);
       // Parented to the head bone, so the face follows head turns instead of
       // sliding around on a skull that has moved out from under it.
       bones[BONE_INDEX['head']!]!.add(this.#expression.object);
@@ -211,19 +240,23 @@ export class PlayerView {
     this.#actionEffects.update(context, deltaX, deltaZ);
 
     this.object.position.set(player.position.x, 0, player.position.z);
-    const turnDelta = Math.atan2(
-      Math.sin(player.facing - this.#lastFacing),
-      Math.cos(player.facing - this.#lastFacing),
+    const turnDt = Math.min(context.deltaSeconds, 0.05);
+    const facingError = Math.atan2(
+      Math.sin(player.facing - this.#visualFacing),
+      Math.cos(player.facing - this.#visualFacing),
     );
-    this.#lastFacing = player.facing;
-    const turnTarget = THREE.MathUtils.clamp(
-      turnDelta / Math.max(0.008, context.deltaSeconds),
-      -1,
-      1,
+    const desiredTurnStep = facingError * (1 - Math.exp(-turnDt * 11.5));
+    const maxTurnStep = MAX_VISUAL_TURN_RATE * turnDt;
+    const turnStep = THREE.MathUtils.clamp(desiredTurnStep, -maxTurnStep, maxTurnStep);
+    this.#visualFacing = Math.atan2(
+      Math.sin(this.#visualFacing + turnStep),
+      Math.cos(this.#visualFacing + turnStep),
     );
-    const turnBlend = 1 - Math.exp(-Math.min(context.deltaSeconds, 0.05) * 12);
+    const turnTarget =
+      turnDt > 0 ? THREE.MathUtils.clamp(turnStep / (turnDt * MAX_VISUAL_TURN_RATE), -1, 1) : 0;
+    const turnBlend = 1 - Math.exp(-turnDt * 15);
     this.#visualTurn += (turnTarget - this.#visualTurn) * turnBlend;
-    this.#actor.rotation.y = player.facing;
+    this.#actor.rotation.y = this.#visualFacing;
     // A small whole-body animation gives the static authored mesh weight and
     // personality without changing the simulation or requiring a skeletal
     // runtime. Motion stays deliberately subtle at the gameplay camera.
@@ -244,7 +277,9 @@ export class PlayerView {
           ? scareProgress
           : 0;
     this.#tools.sync(workAction, workProgress, now);
-    this.#expression?.sync(now, workAction, workProgress);
+    const expressionAction =
+      workAction ?? (this.#scareReactionSeconds > 0 ? ('shoo' as const) : null);
+    this.#expression?.sync(now, expressionAction, workProgress);
     const stepPhase = now * (8.0 + locomotion * 1.7) + context.alpha;
 
     if (this.#rig) {
@@ -278,7 +313,12 @@ export class PlayerView {
         const shoulderY = 1.06;
         const grip = this.#tools.gripPosition(this.#toolGrip);
         if (grip) {
-          this.#rig.reachRightHandTo(grip.z, shoulderY - grip.y, 0.85);
+          if (workAction === 'plant') {
+            const gripWeight = 0.82 + Math.sin(workProgress * Math.PI) * 0.16;
+            this.#rig.reachRightHandToPoint(grip.x, grip.y, grip.z, gripWeight);
+          } else {
+            this.#rig.reachRightHandTo(grip.z, shoulderY - grip.y, 0.85);
+          }
         }
         const support = this.#tools.supportPosition(this.#toolSupport);
         if (support && workAction === 'tend') {
@@ -296,8 +336,8 @@ export class PlayerView {
       // faked weight, and against a real skeleton it fights the pose: the legs
       // say the character is at the top of a step while the scale says the body
       // is compressing, and the two together read as rubber.
-      const cosFacing = Math.cos(player.facing);
-      const sinFacing = Math.sin(player.facing);
+      const cosFacing = Math.cos(this.#visualFacing);
+      const sinFacing = Math.sin(this.#visualFacing);
       const root = this.#rig.rootOffset;
       // Root tracks are authored in character-local space. Rotate the lateral
       // and forward offsets into the actor's facing so the body, tools and
@@ -308,15 +348,15 @@ export class PlayerView {
         -root.x * sinFacing + root.z * cosFacing,
       );
       this.#body.position.set(0, 0, 0);
-      this.#body.rotation.set(0, 0, this.#visualTurn * -0.09);
+      this.#body.rotation.set(0, 0, this.#visualTurn * -0.07);
       this.#body.scale.set(1, 1, 1);
       this.#syncOutline();
-      const contactPulseRigged = Math.min(1, locomotion);
-      this.#contactShadow.scale.set(
-        1 + contactPulseRigged * 0.06,
-        1.28 - contactPulseRigged * 0.05,
-        1,
-      );
+      const contactPulseRigged = this.#advancedAvatarEffects
+        ? locomotion > 0.002
+          ? Math.abs(Math.sin(this.#rig.phase * Math.PI * 2))
+          : 0
+        : Math.min(1, locomotion);
+      this.#syncContactShadow(root.y, contactPulseRigged, locomotion, true);
       return;
     }
 
@@ -371,8 +411,39 @@ export class PlayerView {
     this.#body.rotation.z += this.#visualTurn * (player.activity === 'walking' ? 0.055 : 0.022);
 
     const contactPulse = locomotion > 0.002 ? Math.abs(Math.sin(stepPhase)) : 0;
-    this.#contactShadow.scale.set(1 + contactPulse * 0.09, 1.28 - contactPulse * 0.08, 1);
+    this.#syncContactShadow(bob, contactPulse, locomotion);
     this.#syncOutline();
+  }
+
+  #syncContactShadow(
+    rootHeight: number,
+    contactPulse: number,
+    locomotion: number,
+    rigged = false,
+  ): void {
+    if (!this.#advancedAvatarEffects) {
+      this.#contactShadow.scale.set(
+        1 + contactPulse * (rigged ? 0.06 : 0.09),
+        1.28 - contactPulse * (rigged ? 0.05 : 0.08),
+        1,
+      );
+      this.#contactShadowMaterial.opacity = LOW_CONTACT_SHADOW_OPACITY;
+      return;
+    }
+    const airborne = THREE.MathUtils.clamp(rootHeight / 0.075, 0, 1);
+    const crouch = THREE.MathUtils.clamp(-rootHeight / 0.13, 0, 1);
+    this.#contactShadow.scale.set(
+      0.94 + contactPulse * 0.055 - airborne * 0.075 + crouch * 0.03,
+      1.08 - contactPulse * 0.05 - airborne * 0.1 + crouch * 0.022,
+      1,
+    );
+    // A running flight phase separates the body from the ground, so the local
+    // mark contracts and lightens. Deep work poses do the opposite. Keeping
+    // that response in the actor view preserves collision/render separation.
+    this.#contactShadowMaterial.opacity =
+      ULTRA_CONTACT_SHADOW_OPACITY * (1 - airborne * 0.5) +
+      crouch * 0.028 +
+      Math.min(0.01, locomotion * 0.0035);
   }
 
   #syncOutline(): void {
@@ -380,9 +451,9 @@ export class PlayerView {
     this.#outline.position.copy(this.#body.position);
     this.#outline.rotation.copy(this.#body.rotation);
     this.#outline.scale.set(
-      this.#body.scale.x * 1.04,
-      this.#body.scale.y * 1.04,
-      this.#body.scale.z * 1.04,
+      this.#body.scale.x * this.#outlineScale,
+      this.#body.scale.y * this.#outlineScale,
+      this.#body.scale.z * this.#outlineScale,
     );
   }
 
@@ -394,6 +465,7 @@ export class PlayerView {
   dispose(): void {
     this.#contactShadow.geometry.dispose();
     (this.#contactShadow.material as THREE.Material).dispose();
+    this.#contactShadowTexture?.dispose();
     this.#contactShadow.removeFromParent();
     if (this.#outline) {
       this.#outline.removeFromParent();
@@ -401,6 +473,8 @@ export class PlayerView {
     }
     for (const geometry of this.#ownedGeometry) geometry.dispose();
     this.#ownedGeometry.length = 0;
+    for (const material of this.#ownedMaterials) material.dispose();
+    this.#ownedMaterials.length = 0;
     this.#rig = null;
     this.#dust.geometry.dispose();
     (this.#dust.material as THREE.Material).dispose();
@@ -508,3 +582,35 @@ export class PlayerView {
 }
 
 const SCARE_REACTION_SECONDS = 0.58;
+const MAX_VISUAL_TURN_RATE = 6.2;
+const LOW_AVATAR_OUTLINE_SCALE = 1.04;
+const ULTRA_AVATAR_OUTLINE_SCALE = 1.032;
+const LOW_CONTACT_SHADOW_OPACITY = 0.18;
+const ULTRA_CONTACT_SHADOW_OPACITY = 0.19;
+
+function createContactShadowTexture(): THREE.DataTexture {
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const nx = (x + 0.5) / size - 0.5;
+      const ny = (y + 0.5) / size - 0.5;
+      const radius = Math.hypot(nx, ny) * 2;
+      const falloff = Math.max(0, 1 - radius);
+      const alpha = Math.round(255 * falloff * falloff * (3 - 2 * falloff));
+      const offset = (y * size + x) * 4;
+      data[offset] = alpha;
+      data[offset + 1] = alpha;
+      data[offset + 2] = alpha;
+      data[offset + 3] = 255;
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  texture.name = 'FarmAvatar_ContactShadowFalloff';
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}

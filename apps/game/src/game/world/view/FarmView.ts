@@ -5,7 +5,8 @@
  */
 import * as THREE from 'three';
 import type { RenderContext } from '@engine/core/types.js';
-import { createFarmMaterials, type FarmMaterials } from './materials.js';
+import type { RenderPipeline } from '@engine/render/RenderPipeline.js';
+import { createFarmMaterials, GROUND_BASE_COLOUR, type FarmMaterials } from './materials.js';
 import { PlotView } from './PlotView.js';
 import { StructureView } from './StructureView.js';
 import {
@@ -17,9 +18,16 @@ import {
   type TimeMaterial,
 } from './animationMaterials.js';
 import { createGroundGeometry, type GroundGeometryOptions } from './groundGeometry.js';
+import {
+  createTerrainMaterial,
+  resolveTerrainLayers,
+  type TerrainMaterialHandle,
+} from './terrainMaterial.js';
+import { createBedContactDecals, type BedContactDecals } from './contactDecals.js';
 import type { ModelLibrary } from '@assets/registries/ModelLibrary.js';
+import type { SurfaceLibrary } from '@assets/registries/SurfaceLibrary.js';
 import type { FarmWorld } from '../FarmWorld.js';
-import type { Fox } from '../../enemies/Fox.js';
+import type { Fox, FoxState } from '../../enemies/Fox.js';
 import type { IncidentInstance } from '@farmrise/shared';
 import { ticksToSeconds } from '@farmrise/shared';
 import { chickenPose, createChickenPose } from '../../animals/chickenMotion.js';
@@ -31,6 +39,8 @@ import { ConstructionProgressView } from './ConstructionProgressView.js';
 import { ProximityStatusView } from './ProximityStatusView.js';
 import { ParcelView } from './ParcelView.js';
 import { WorkerView } from './WorkerView.js';
+import { FarmLightingResponse } from './FarmLightingResponse.js';
+import { FarmImpactEffects } from './FarmImpactEffects.js';
 import type { ProximityMeter } from '../../systems/InteractionController.js';
 import {
   createFarmGroundOptions,
@@ -60,6 +70,17 @@ const SCENIC_FIELD_MESHES = ['SM_crop_wheat_s4', 'SM_crop_corn_s4', 'SM_crop_pum
 
 export interface FarmViewOptions {
   readonly shadowMapSize?: number;
+  /**
+   * Ultra-tier pipeline. Absent on `low`, and every use of it below is guarded,
+   * so the low path executes the identical statements it did before.
+   */
+  readonly pipeline?: RenderPipeline;
+  /**
+   * Procedural PBR surfaces. Present only on Ultra, where FarmScene has loaded
+   * them; absent everywhere else, in which case the ground keeps exactly the
+   * vertex-coloured material it always had.
+   */
+  readonly surfaces?: SurfaceLibrary;
 }
 
 export class FarmView {
@@ -74,6 +95,7 @@ export class FarmView {
   readonly #groundGoods = new GroundGoodsView();
   readonly #constructionProgress = new ConstructionProgressView();
   readonly #proximityStatus = new ProximityStatusView();
+  readonly #impactEffects: FarmImpactEffects;
   readonly #foxMeshes: THREE.Mesh[] = [];
   readonly #foxMotionMaterials: (FoxMotionMaterial | null)[] = [];
   readonly #foxGeometry: THREE.BufferGeometry;
@@ -86,17 +108,26 @@ export class FarmView {
   readonly #cowMotion: TimeMaterial | null;
   readonly #foxPrevious = new WeakMap<Fox, { x: number; z: number }>();
   readonly #foxFacing = new WeakMap<Fox, number>();
+  readonly #foxStates = new WeakMap<Fox, FoxState>();
   #chickens: THREE.InstancedMesh | null = null;
   readonly #chickenGeometry: THREE.BufferGeometry;
   #cows: THREE.InstancedMesh | null = null;
   readonly #cowGeometry: THREE.BufferGeometry;
   readonly #ground: THREE.Mesh;
+  readonly #terrainMaterial: TerrainMaterialHandle | null = null;
+  readonly #bedContact: BedContactDecals | null = null;
   readonly #groundOptions: GroundGeometryOptions;
   readonly #lights: THREE.Object3D[] = [];
   readonly #unsubscribes: (() => void)[] = [];
   #sun: THREE.DirectionalLight | null = null;
-  #hemisphere: THREE.HemisphereLight | null = null;
-  #weatherBlend = 0;
+  #sunTarget: THREE.Object3D | null = null;
+  #baseSunIntensity = 2.18;
+  /** Absolute intensity added at full drought. 0.42 on the flat path, kept exactly. */
+  #droughtSunBoost = 0.42;
+  readonly #normalSun = NORMAL_SUN.clone();
+  #shadowTexelWorld = 0;
+  readonly #shadowDirection = new THREE.Vector3();
+  #lightingResponse: FarmLightingResponse | null = null;
   #animalPulse: { kind: 'purchase' | 'produce'; startedAt: number | null } | null = null;
 
   constructor(
@@ -105,6 +136,7 @@ export class FarmView {
     private readonly options: FarmViewOptions = {},
   ) {
     this.#materials = createFarmMaterials();
+    this.#impactEffects = new FarmImpactEffects(options.pipeline ?? null);
     this.#fieldWind = library
       ? createWindMaterial(library.material, {
           key: 'field',
@@ -155,12 +187,38 @@ export class FarmView {
     // The plane is subdivided and vertex-coloured rather than flat: see
     // groundGeometry.ts for why the largest surface in the frame could not stay
     // a single uniform value. The playable rectangle is still exactly flat.
-    const groundGeometry = createGroundGeometry(this.#groundOptions);
-    this.#ground = new THREE.Mesh(groundGeometry, this.#materials.ground);
+    //
+    // On Ultra the same fields additionally drive a layered PBR material; see
+    // terrainMaterial.ts. `terrain` is null unless every one of its three
+    // surfaces arrived, because a two-layer blend with a missing layer looks
+    // worse than no blend at all.
+    const terrain = resolveTerrainLayers(options.surfaces ?? null);
+    const groundGeometry = createGroundGeometry({
+      ...this.#groundOptions,
+      ...(terrain ? { surfaceWeights: true } : {}),
+    });
+    if (terrain) {
+      this.#terrainMaterial = createTerrainMaterial(
+        terrain,
+        options.pipeline ?? null,
+        GROUND_BASE_COLOUR,
+      );
+    }
+    this.#ground = new THREE.Mesh(
+      groundGeometry,
+      this.#terrainMaterial?.material ?? this.#materials.ground,
+    );
     this.#ground.receiveShadow = true;
 
     this.#plots = new PlotView(world, this.#materials, library);
-    this.#structures = new StructureView(world, this.#materials, library);
+    // Soil beds are authored slabs that sit ON the ground rather than in it.
+    // A soft soil decal under each one is what turns "a bar laid on a surface"
+    // into "a bed dug into the ground"; see contactDecals.ts.
+    const tilled = options.surfaces?.get('soil_tilled') ?? null;
+    this.#bedContact = tilled
+      ? createBedContactDecals(world, tilled, options.pipeline ?? null)
+      : null;
+    this.#structures = new StructureView(world, this.#materials, library, options.pipeline ?? null);
     this.#parcels = new ParcelView(world);
     this.#foxGeometry = library?.has(FOX_MESH)
       ? library.require(FOX_MESH)
@@ -177,6 +235,7 @@ export class FarmView {
 
     this.object.add(
       this.#ground,
+      ...(this.#bedContact ? [this.#bedContact.object] : []),
       this.#parcels.object,
       this.#plots.object,
       this.#structures.object,
@@ -185,6 +244,7 @@ export class FarmView {
       this.#carry.object,
       this.#constructionProgress.object,
       this.#proximityStatus.object,
+      this.#impactEffects.object,
     );
     this.#addLighting(worldWidth);
     this.#addScatter(world, this.#groundOptions);
@@ -219,19 +279,27 @@ export class FarmView {
     if (this.#animalPulse?.startedAt === null) {
       this.#animalPulse.startedAt = context.elapsedSeconds;
     }
-    this.#updateWeather(incident, context);
+    this.#lightingResponse?.update(incident, context);
+    if (player) this.#fitShadowCascade(player.position.x, player.position.z);
     this.#plots.animate(context.elapsedSeconds);
-    this.#structures.animate(context.elapsedSeconds);
+    this.#structures.animate(
+      context.elapsedSeconds,
+      context.deltaSeconds,
+      player?.activity === 'working' ? player.workAction : null,
+      player?.activity === 'working' ? player.workProgress : 0,
+    );
     this.#plots.sync(world);
     this.#structures.sync(world);
     this.#parcels.sync(world);
     this.#workers.sync(world, context.elapsedSeconds);
     this.#groundGoods.sync(world);
+    this.#bedContact?.sync(world);
     this.#carry.sync(world, player, context.elapsedSeconds);
     this.#constructionProgress.sync(world);
     this.#proximityStatus.sync(world, proximityMeters);
     this.#structures.animatePreview(this.#elapsed);
     this.#syncFoxes(foxes, context);
+    this.#impactEffects.syncIncident(world, incident, player, context);
     this.#syncChickens(world, context);
     this.#syncCows(world, context);
     const pulseStartedAt = this.#animalPulse?.startedAt;
@@ -265,6 +333,13 @@ export class FarmView {
     return terrainSurfaceAt(world, this.#groundOptions, x, z);
   }
 
+  /** Exact world-space loss beat for a fox that completed its shelter raid. */
+  triggerFoxRaidResult(world: FarmWorld): void {
+    const x = (world.level.shelter.tileX - world.grid.width / 2 + 0.5) * world.grid.tileSize;
+    const z = (world.level.shelter.tileZ - world.grid.depth / 2 + 0.5) * world.grid.tileSize;
+    this.#impactEffects.triggerFoxImpact(x, z, 'loss');
+  }
+
   dispose(): void {
     this.#plots.dispose();
     this.#structures.dispose();
@@ -274,7 +349,10 @@ export class FarmView {
     this.#carry.dispose();
     this.#constructionProgress.dispose();
     this.#proximityStatus.dispose();
+    this.#impactEffects.dispose();
     this.#ground.geometry.dispose();
+    this.#terrainMaterial?.dispose();
+    this.#bedContact?.dispose();
     if (this.#ownsFoxGeometry) this.#foxGeometry.dispose();
     this.#chickenGeometry.dispose();
     this.#cowGeometry.dispose();
@@ -298,57 +376,147 @@ export class FarmView {
   }
 
   #addLighting(worldWidth: number): void {
+    const pipeline = this.options.pipeline ?? null;
+
     // Hemisphere light for cheap ambient bounce; a single directional light for
     // the sun and the only shadow-casting source. More shadow casters is the
     // fastest way to lose a mid-range mobile GPU.
-    const hemisphere = new THREE.HemisphereLight(0xc7e4ff, 0xb06a32, 1.24);
+    //
+    // On Ultra the ambient term comes from the PMREM sky instead, so the
+    // hemisphere light drops to a token value. It is not removed: it still
+    // catches the handful of materials that ignore `scene.environment`, and
+    // deleting a light on one tier and not the other is how the two paths start
+    // needing different art.
+    const hemisphere = new THREE.HemisphereLight(
+      0xc7e4ff,
+      0xb06a32,
+      pipeline?.active ? ULTRA_HEMISPHERE_INTENSITY : 1.24,
+    );
 
-    const sun = new THREE.DirectionalLight(0xfff0cf, 2.18);
-    sun.position.set(worldWidth * 0.35, worldWidth * 0.9, worldWidth * 0.25);
+    const sunIntensity = pipeline?.sun?.intensity ?? 2.18;
+    const sun = new THREE.DirectionalLight(0xfff0cf, sunIntensity);
+    if (pipeline?.sun) {
+      // The light that shades the world is placed from the same vector the sky
+      // dome drew its sun disc at, so a screenshot cannot disagree with itself.
+      sun.color.copy(pipeline.sun.color);
+      sun.position.copy(pipeline.sun.direction).multiplyScalar(pipeline.shadow.depth * 0.42);
+    } else {
+      sun.position.set(worldWidth * 0.35, worldWidth * 0.9, worldWidth * 0.25);
+    }
     sun.castShadow = true;
-    const shadowMapSize = this.options.shadowMapSize ?? 1024;
-    sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
-    const extent = worldWidth * 0.75;
-    sun.shadow.camera.left = -extent;
-    sun.shadow.camera.right = extent;
-    sun.shadow.camera.top = extent;
-    sun.shadow.camera.bottom = -extent;
-    sun.shadow.camera.far = worldWidth * 2.5;
-    // Without a bias, large shadow-camera extents produce acne on flat ground.
-    sun.shadow.bias = -0.0008;
-    sun.shadow.normalBias = 0.012;
-    sun.shadow.radius = 2;
+
+    if (pipeline?.active) {
+      // One fitted cascade rather than a farm-sized frustum. 4096 texels over
+      // ~96 metres is ~43 texels/metre, which is what makes the PCSS blocker
+      // search resolve a fence post instead of a smudge. The price is that
+      // casters beyond `extent` from the focus stop casting - acceptable,
+      // because those are the border trees the fog is already eating.
+      const { mapSize, extent, depth, radius } = pipeline.shadow;
+      sun.shadow.mapSize.set(mapSize, mapSize);
+      sun.shadow.camera.left = -extent;
+      sun.shadow.camera.right = extent;
+      sun.shadow.camera.top = extent;
+      sun.shadow.camera.bottom = -extent;
+      sun.shadow.camera.near = 0.5;
+      sun.shadow.camera.far = depth;
+      // Dense texels need far less bias than the old wide frustum did; leaving
+      // the old value would detach every shadow from its caster by ~20 cm.
+      sun.shadow.bias = -0.00012;
+      sun.shadow.normalBias = 0.022;
+      // Not a blur radius here: pcss.ts reads this as the penumbra growth rate.
+      sun.shadow.radius = radius;
+      sun.target.position.set(0, 0, 0);
+      this.object.add(sun.target);
+      this.#sunTarget = sun.target;
+      this.#shadowTexelWorld = (extent * 2) / mapSize;
+    } else {
+      const shadowMapSize = this.options.shadowMapSize ?? 1024;
+      sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
+      const extent = worldWidth * 0.75;
+      sun.shadow.camera.left = -extent;
+      sun.shadow.camera.right = extent;
+      sun.shadow.camera.top = extent;
+      sun.shadow.camera.bottom = -extent;
+      sun.shadow.camera.far = worldWidth * 2.5;
+      // Without a bias, large shadow-camera extents produce acne on flat ground.
+      sun.shadow.bias = -0.0008;
+      sun.shadow.normalBias = 0.012;
+      sun.shadow.radius = 2;
+    }
 
     this.#lights.push(hemisphere, sun);
-    this.#hemisphere = hemisphere;
     this.#sun = sun;
+    this.#baseSunIntensity = sunIntensity;
+    if (pipeline?.sun) {
+      this.#normalSun.copy(pipeline.sun.color);
+      this.#droughtSunBoost = sunIntensity * 0.19;
+    }
+    this.#lightingResponse = new FarmLightingResponse(sun, hemisphere, {
+      baseSunIntensity: this.#baseSunIntensity,
+      droughtSunBoost: this.#droughtSunBoost,
+      normalSun: this.#normalSun,
+      ultra: Boolean(pipeline?.active),
+    });
     this.object.add(hemisphere, sun);
+
+    if (pipeline?.active) this.#registerMaterials(pipeline);
   }
 
-  #updateWeather(incident: IncidentInstance | null, context: RenderContext): void {
-    const drought = incident?.definitionId === 'incident-drought' ? incident : null;
-    // Partial mitigation reads as partial weather: a player who watered half
-    // the marked beds should be able to see that it worked, from the sky.
-    const mitigation = drought ? Math.min(1, drought.responseProgress / 3) : 0;
-    const target = drought
-      ? context.elapsedSeconds >= 0 && drought.appliedMultiplier === null
-        ? 0.18
-        : 1 - 0.62 * mitigation
-      : 0;
-    const response = 1 - Math.exp(-context.deltaSeconds * 1.8);
-    this.#weatherBlend += (target - this.#weatherBlend) * response;
-    if (this.#sun) {
-      this.#sun.color.lerpColors(NORMAL_SUN, DROUGHT_SUN, this.#weatherBlend);
-      this.#sun.intensity = 2.18 + this.#weatherBlend * 0.42;
+  /**
+   * Hands every material this view owns to the pipeline for tier-appropriate
+   * treatment (envMapIntensity, roughness floor).
+   *
+   * Called once at construction. `registerMaterial` is idempotent, so the
+   * seasonal-art reload path can call it again without cost.
+   */
+  #registerMaterials(pipeline: RenderPipeline): void {
+    pipeline.registerMaterial(this.#materials.ground, 'terrain');
+    pipeline.registerMaterial(this.#materials.soil, 'terrain');
+    pipeline.registerMaterial(this.#materials.road, 'terrain');
+    pipeline.registerMaterial(this.#materials.rock, 'terrain');
+    pipeline.registerMaterial(this.#materials.cropYoung, 'foliage');
+    pipeline.registerMaterial(this.#materials.cropReady, 'foliage');
+    pipeline.registerMaterial(this.#materials.cropDiseased, 'foliage');
+    pipeline.registerMaterial(this.#materials.barn, 'structure');
+    pipeline.registerMaterial(this.#materials.shelter, 'structure');
+    pipeline.registerMaterial(this.#materials.fence, 'structure');
+    pipeline.registerMaterial(this.#materials.irrigation, 'metal');
+    pipeline.registerMaterial(this.#materials.animal, 'skin');
+    pipeline.registerMaterial(this.#materials.fox, 'skin');
+    // The authored art is one shared vertex-colour material covering crops,
+    // buildings, characters and animals, so it gets the neutral structure
+    // treatment - the compromise that comes with a single-material atlas.
+    if (this.library) pipeline.registerMaterial(this.library.material, 'structure');
+    for (const wind of [this.#fieldWind, this.#treeWind, this.#deadTreeWind]) {
+      if (wind) pipeline.registerMaterial(wind.material, 'foliage');
     }
-    if (this.#hemisphere) {
-      this.#hemisphere.color.lerpColors(NORMAL_SKY_FILL, DROUGHT_SKY_FILL, this.#weatherBlend);
-      this.#hemisphere.groundColor.lerpColors(
-        NORMAL_GROUND_FILL,
-        DROUGHT_GROUND_FILL,
-        this.#weatherBlend,
-      );
+    for (const motion of [this.#chickenMotion, this.#cowMotion]) {
+      if (motion) pipeline.registerMaterial(motion.material, 'skin');
     }
+  }
+
+  /**
+   * Keeps the fitted shadow cascade centred on the player.
+   *
+   * Snapped to whole shadow-map texels. Without the snap the shadow map
+   * resamples on a sub-texel grid every frame and every shadow edge crawls -
+   * the single most obvious artefact of a moving cascade, and the reason people
+   * conclude that fitted shadows "shimmer".
+   */
+  #fitShadowCascade(focusX: number, focusZ: number): void {
+    const sun = this.#sun;
+    const target = this.#sunTarget;
+    const texel = this.#shadowTexelWorld;
+    if (!sun || !target || texel <= 0) return;
+
+    const snappedX = Math.round(focusX / texel) * texel;
+    const snappedZ = Math.round(focusZ / texel) * texel;
+    if (snappedX === target.position.x && snappedZ === target.position.z) return;
+
+    const direction = this.#shadowDirection.copy(sun.position).sub(target.position);
+    target.position.set(snappedX, 0, snappedZ);
+    target.updateMatrixWorld();
+    sun.position.copy(target.position).add(direction);
   }
 
   /**
@@ -750,6 +918,15 @@ export class FarmView {
       const fox = foxes[index];
       mesh.visible = Boolean(fox);
       if (fox) {
+        const previousState = this.#foxStates.get(fox);
+        if (previousState !== fox.state) {
+          if (fox.state === 'raiding') {
+            this.#impactEffects.triggerFoxImpact(fox.position.x, fox.position.z, 'raid');
+          } else if (fox.state === 'fleeing') {
+            this.#impactEffects.triggerFoxImpact(fox.position.x, fox.position.z, 'flee');
+          }
+          this.#foxStates.set(fox, fox.state);
+        }
         const previous = this.#foxPrevious.get(fox) ?? fox.position;
         const dx = fox.position.x - previous.x;
         const dz = fox.position.z - previous.z;
@@ -798,12 +975,17 @@ export class FarmView {
   }
 }
 
+/**
+ * Ultra keeps a token hemisphere term rather than deleting the light.
+ *
+ * The PMREM sky supplies ambient to every `MeshStandardMaterial`, but not to
+ * anything that opts out of `scene.environment`, and a value near zero is a
+ * cheap insurance policy against a future material rendering pitch black on one
+ * tier only.
+ */
+const ULTRA_HEMISPHERE_INTENSITY = 0.12;
+
 const NORMAL_SUN = new THREE.Color(0xfff0cf);
-const DROUGHT_SUN = new THREE.Color(0xe6c85d); // ground_scrub_sun
-const NORMAL_SKY_FILL = new THREE.Color(0xc7e4ff);
-const DROUGHT_SKY_FILL = new THREE.Color(0xa7d7e8); // sky_haze
-const NORMAL_GROUND_FILL = new THREE.Color(0xb06a32);
-const DROUGHT_GROUND_FILL = new THREE.Color(0xb9603a); // soil_dry
 
 function lerpAngle(from: number, to: number, amount: number): number {
   const difference = Math.atan2(Math.sin(to - from), Math.cos(to - from));

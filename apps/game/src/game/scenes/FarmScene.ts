@@ -28,6 +28,8 @@ import type { FixedUpdateContext, RenderContext } from '@engine/core/types.js';
 import { CameraRigToken } from '@engine/camera/CameraRig.js';
 import { FollowController } from '@engine/camera/FollowController.js';
 import { InputToken, type InputSystem } from '@engine/input/InputSystem.js';
+import type { ReviewCameraOverride } from '@engine/debug/DebugFlags.js';
+import type { RenderPipeline } from '@engine/render/RenderPipeline.js';
 import { disposeObject3D } from '@engine/scene/disposeObject3D.js';
 import { EventBus } from '@engine/core/EventBus.js';
 import type { AssetLoader } from '@assets/loaders/AssetLoader.js';
@@ -40,6 +42,7 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Career } from '../career/Career.js';
 import { CareerDirector } from '../career/CareerDirector.js';
 import { FarmView } from '../world/view/FarmView.js';
+import { SurfaceLibrary } from '@assets/registries/SurfaceLibrary.js';
 import { Player } from '../player/Player.js';
 import { PlayerController } from '../player/PlayerController.js';
 import { PlayerView } from '../player/PlayerView.js';
@@ -85,10 +88,26 @@ export interface FarmSceneOptions {
   readonly assets?: AssetLoader;
   /** Rendering quality chosen by bootstrap from device capabilities. */
   readonly shadowMapSize?: number;
+  /**
+   * Ultra-tier render pipeline, if one exists.
+   *
+   * Passed in rather than resolved here so the scene stays constructible in
+   * tests, and so the "no pipeline means the previous behaviour" rule is
+   * visible at the call site instead of hidden in a service lookup.
+   */
+  readonly pipeline?: RenderPipeline;
   /** Debug-only: start within interaction range of the first crop bed. */
   readonly reviewActions?: boolean;
   /** Debug-only: start at a specific tile for a focused acceptance fixture. */
   readonly reviewSpawnTile?: { readonly tileX: number; readonly tileZ: number };
+  /**
+   * Debug-only: replaces the shipping follow-camera framing.
+   *
+   * Used to judge the character rig, which is a few dozen pixels tall at the
+   * 13.25 m gameplay distance. Nothing else in the scene reads it, so a review
+   * capture still exercises the shipping views, materials and clips.
+   */
+  readonly reviewCamera?: ReviewCameraOverride;
 }
 
 export class FarmScene implements GameScene {
@@ -108,7 +127,9 @@ export class FarmScene implements GameScene {
   #cameraController: FollowController | null = null;
   #session: SessionController | null = null;
   #library: ModelLibrary | null = null;
+  #surfaces: SurfaceLibrary | null = null;
   #unbindScareReaction: (() => void) | null = null;
+  #unbindRaidResult: (() => void) | null = null;
   #unbindSeasonArt: (() => void) | null = null;
   readonly #loadedSeasonPacks = new Set<Season>();
   readonly #loadingSeasonPacks = new Set<Season>();
@@ -176,6 +197,11 @@ export class FarmScene implements GameScene {
 
     const library = await this.#loadArt(context, [...requiredCropSeasons]);
     this.#library = library;
+    // Ultra only, and gated on the pipeline rather than on a tier string, so a
+    // reviewer who disables the pipeline gets a farm that behaves as if the
+    // texture library was never built. On `low` this line never runs, so not
+    // one of its ~960 KiB is requested.
+    this.#surfaces = this.options.pipeline?.active ? await this.#loadSurfaces(context) : null;
     if (context.signal.aborted) {
       library?.dispose();
       return;
@@ -185,6 +211,29 @@ export class FarmScene implements GameScene {
     const world = career.world;
     const level = world.level;
     const reviewPlot = this.options.reviewActions ? world.fields.placements[0] : undefined;
+    if (this.options.reviewActions) {
+      // Keep the authored action fixture deterministic even when the browser
+      // restores an older debug save. Incident responses take interaction
+      // priority over crop care, which otherwise swaps the watering pose for
+      // a shoo/repair gesture midway through a matched review sequence.
+      career.setIncidents([]);
+    }
+    if (reviewPlot && !world.structures.get(ACTION_REVIEW_IRRIGATION_ID)) {
+      // Visual-review fixture only: one completed irrigation point keeps the
+      // basin and directional stream beside the action target, so standing and
+      // running water are judged from the real gameplay camera instead of a
+      // close-up or a separately art-directed scene.
+      world.structures.add({
+        id: ACTION_REVIEW_IRRIGATION_ID,
+        kind: 'irrigation',
+        tileX: reviewPlot.tileX,
+        tileZ: reviewPlot.tileZ - 1,
+        rotation: 0,
+        remainingBuildTicks: 0,
+        broken: false,
+      });
+      world.refreshIrrigation();
+    }
     const reviewSpawn = this.options.reviewSpawnTile ?? reviewPlot;
     const spawn = reviewSpawn
       ? world.grid.tileToWorld(reviewSpawn.tileX, reviewSpawn.tileZ)
@@ -192,8 +241,12 @@ export class FarmScene implements GameScene {
     const player = new Player(spawn.x, spawn.z);
 
     context.reportProgress(0.55, 'Turning the soil');
-    const farmView = new FarmView(world, library, { shadowMapSize: this.options.shadowMapSize });
-    const playerView = new PlayerView(player, library);
+    const farmView = new FarmView(world, library, {
+      shadowMapSize: this.options.shadowMapSize,
+      ...(this.options.pipeline ? { pipeline: this.options.pipeline } : {}),
+      ...(this.#surfaces ? { surfaces: this.#surfaces } : {}),
+    });
+    const playerView = new PlayerView(player, library, Boolean(this.options.pipeline?.active));
     this.root.add(farmView.object, playerView.object);
 
     context.reportProgress(0.7, 'Waking the animals');
@@ -216,11 +269,17 @@ export class FarmScene implements GameScene {
       input,
     );
 
+    const review = this.options.reviewCamera;
+    const anchor = new THREE.Vector3(spawn.x, review?.targetY ?? 1, spawn.z);
     const cameraController = new FollowController({
-      getTarget: () => new THREE.Vector3(player.position.x, 1, player.position.z),
-      distance: GAMEPLAY_CAMERA.distance,
-      pitch: GAMEPLAY_CAMERA_PITCH_RADIANS,
-      yaw: GAMEPLAY_CAMERA_YAW_RADIANS,
+      getTarget: () =>
+        review && !review.follow
+          ? anchor
+          : new THREE.Vector3(player.position.x, review?.targetY ?? 1, player.position.z),
+      distance: review?.distance ?? GAMEPLAY_CAMERA.distance,
+      pitch: review ? (review.pitchDegrees * Math.PI) / 180 : GAMEPLAY_CAMERA_PITCH_RADIANS,
+      yaw: review ? (review.yawDegrees * Math.PI) / 180 : GAMEPLAY_CAMERA_YAW_RADIANS,
+      ...(review ? { minDistance: 1, smoothingSeconds: 0.06 } : {}),
     });
     const cameraRig = context.services.tryResolve(CameraRigToken);
     cameraRig?.setController(cameraController);
@@ -236,8 +295,19 @@ export class FarmScene implements GameScene {
       careerDirector,
       input,
       cameraRig?.camera ?? new THREE.PerspectiveCamera(),
-      { skipOnboarding: this.options.skipOnboarding },
+      {
+        // The action-review fixture exists to judge the authored pose and VFX
+        // at the shipping camera. Tutorial panels would cover the actor, so the
+        // fixture alone starts with onboarding complete; normal sessions keep
+        // the exact option supplied by bootstrap.
+        skipOnboarding: this.options.reviewActions ? true : this.options.skipOnboarding,
+      },
     );
+    // SessionController normally re-enables random scheduling when onboarding
+    // is already complete. Apply the review override after construction so a
+    // fox/drought prompt cannot steal the crop-care interaction between two
+    // matched action frames.
+    if (this.options.reviewActions) incidents.setRandomSchedulingEnabled(false);
 
     if (context.signal.aborted) {
       farmView.dispose();
@@ -258,6 +328,9 @@ export class FarmScene implements GameScene {
     this.#session = session;
     this.#unbindScareReaction = enemyDirector.events.on('enemy:scared-off', () =>
       playerView.triggerScareReaction(),
+    );
+    this.#unbindRaidResult = enemyDirector.events.on('enemy:raid-succeeded', () =>
+      farmView.triggerFoxRaidResult(world),
     );
     this.#unbindSeasonArt = career.events.on('career:season-changed', ({ season }) => {
       void this.#loadSeasonCropArt(season, farmView);
@@ -330,7 +403,10 @@ export class FarmScene implements GameScene {
       this.#incidents?.mostUrgent ?? null,
       context,
       this.#player,
-      this.#interaction?.proximityMeters() ?? [],
+      // Camera-facing plot gauges overlap the hands, can and impact point when
+      // the review fixture intentionally stands on the bed. They remain live
+      // in gameplay; only the deterministic visual-review path omits them.
+      this.options.reviewActions ? [] : (this.#interaction?.proximityMeters() ?? []),
     );
     if (this.#player) {
       const surface = this.#farmView?.surfaceAt(
@@ -483,6 +559,39 @@ export class FarmScene implements GameScene {
     return library;
   }
 
+  /**
+   * Loads the procedural PBR surfaces the terrain needs.
+   *
+   * Only the three ground layers and the tilled soil used by the bed decals are
+   * requested. The other six materials in the library are declared in the
+   * manifest and generated on disk, but nothing consumes them yet, and
+   * downloading half a megabyte for a future stage would be a payload
+   * regression dressed up as preparation.
+   *
+   * Failure is not fatal, exactly as for the GLBs: the ground falls back to the
+   * vertex-coloured material and the decals simply do not exist.
+   */
+  async #loadSurfaces(context: SceneLoadContext): Promise<SurfaceLibrary | null> {
+    const loader = this.options.assets;
+    if (!loader) return null;
+    context.reportProgress(0.52, 'Weathering the ground');
+    try {
+      const library = await SurfaceLibrary.load(
+        loader,
+        ['scrub_gravel', 'grass_dry', 'soil_dry_cracked', 'soil_tilled'],
+        context.signal,
+        // The ground is seen at 34 degrees above the horizon, which is where
+        // anisotropic filtering stops being a nicety. 16 is the cap on every
+        // desktop GPU this tier targets, and the pipeline is desktop-only.
+        16,
+      );
+      return library.loaded.length > 0 ? library : null;
+    } catch (error) {
+      console.warn('[FarmScene] procedural surfaces unavailable, falling back', error);
+      return null;
+    }
+  }
+
   async #loadSeasonCropArt(season: Season, farmView: FarmView): Promise<void> {
     const loader = this.options.assets;
     const library = this.#library;
@@ -517,10 +626,14 @@ export class FarmScene implements GameScene {
     this.#playerView?.dispose();
     this.#unbindScareReaction?.();
     this.#unbindScareReaction = null;
+    this.#unbindRaidResult?.();
+    this.#unbindRaidResult = null;
     this.#unbindSeasonArt?.();
     this.#unbindSeasonArt = null;
     this.#seasonArtAbort.abort();
     this.#library?.dispose();
+    this.#surfaces?.dispose();
+    this.#surfaces = null;
     this.#library = null;
     disposeObject3D(this.root);
     this.events.clear();
@@ -528,3 +641,5 @@ export class FarmScene implements GameScene {
     this.#player = null;
   }
 }
+
+const ACTION_REVIEW_IRRIGATION_ID = 'review-irrigation';

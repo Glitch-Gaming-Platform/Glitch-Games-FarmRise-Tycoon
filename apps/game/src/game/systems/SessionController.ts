@@ -48,6 +48,7 @@ import type { PlayerController } from '../player/PlayerController.js';
 import type { IncidentDirector } from '../events/IncidentDirector.js';
 import { PlacementController } from './PlacementController.js';
 import { OnboardingDirector, hasOnboardedBefore } from '../onboarding/OnboardingDirector.js';
+import { OnboardingAnimalBoost } from '../onboarding/OnboardingAnimalBoost.js';
 import { OnboardingCropBoost } from '../onboarding/OnboardingCropBoost.js';
 import type { OnboardingContext } from '../onboarding/beats.js';
 import type { GameAction } from '../GameActions.js';
@@ -75,6 +76,7 @@ export class SessionController {
   readonly placement: PlacementController;
   readonly board: ContractBoard;
   readonly #onboardingCropBoost: OnboardingCropBoost;
+  readonly #onboardingAnimalBoost: OnboardingAnimalBoost;
   readonly #startingBuildingCount: number;
 
   #panel: PanelName = 'none';
@@ -107,6 +109,7 @@ export class SessionController {
       incidents.setRandomSchedulingEnabled(true);
     });
     this.#onboardingCropBoost = new OnboardingCropBoost(career);
+    this.#onboardingAnimalBoost = new OnboardingAnimalBoost(career);
     this.#startingBuildingCount = career.world.buildings.length;
     this.placement = new PlacementController(career, input, camera, player);
     this.board = new ContractBoard(career);
@@ -360,16 +363,20 @@ export class SessionController {
     this.board.fixedUpdate();
 
     this.#onboardingCropBoost.update(this.onboarding.currentBeat?.id === 'tend');
+    this.#onboardingAnimalBoost.update(
+      this.onboarding.currentBeat?.id === 'eggs',
+      this.career.world.stores.totalOf('eggs') + (this.career.world.carry.items['eggs'] ?? 0),
+    );
     let onboardingContext = this.#onboardingContext();
     // Once the player has completed the production/egg loop, guarantee one
-    // fresh warning before advancing into the incident lesson. This keeps the
-    // lesson inside onboarding and prevents it from resurfacing after Finish.
+    // fresh warning before the land purchase and final community-project
+    // lesson. This keeps the incident lesson inside onboarding without putting
+    // another required task after the project the player was just taught.
     if (
       this.onboarding.active &&
       onboardingContext.reinvestments > 0 &&
       onboardingContext.eggsHandled &&
-      onboardingContext.starterExtensionOwned &&
-      (this.onboarding.currentBeat?.id === 'eggs' || this.onboarding.currentBeat?.id === 'expand')
+      (this.onboarding.currentBeat?.id === 'eggs' || this.onboarding.currentBeat?.id === 'setback')
     ) {
       this.incidents.ensureOnboardingWarning();
       onboardingContext = this.#onboardingContext();
@@ -452,6 +459,8 @@ export class SessionController {
       eggsCollected,
       eggsHandled: eggsHandled || eggsCollected > 0,
       starterExtensionOwned: world.parcels.owns(STARTER_EXTENSION_PARCEL_ID),
+      communityProjectHandled:
+        this.career.town.activeProject !== null || this.career.town.completedProjectIds.length > 0,
       warningActive: this.incidents.active.some(
         (instance) => this.career.tick < instance.impactTick && !isMitigated(instance as never),
       ),

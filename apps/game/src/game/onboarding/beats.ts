@@ -34,6 +34,7 @@ export interface OnboardingContext {
   readonly eggsCollected: number;
   readonly eggsHandled: boolean;
   readonly starterExtensionOwned: boolean;
+  readonly communityProjectHandled: boolean;
   readonly warningActive: boolean;
   readonly eventsResolved: number;
   readonly marketOpen: boolean;
@@ -201,23 +202,6 @@ export const BEATS: readonly Beat[] = [
     },
   },
   {
-    id: 'expand',
-    title: 'Open three more beds',
-    body: 'Press B, then buy the $20 Starter Extension. Its gate opens three new crop beds nearby.',
-    key: 'B',
-    touch: {
-      body: 'Tap Build, then buy the $20 Starter Extension. Its gate opens three new crop beds nearby.',
-      key: 'BUILD',
-      hintBody: 'Open Build and choose Starter Extension in the Expand section.',
-    },
-    reveals: ['objective'],
-    isDone: (c) => c.starterExtensionOwned,
-    hint: {
-      afterMs: 18_000,
-      body: 'Press B and choose Starter Extension in the Expand section.',
-    },
-  },
-  {
     id: 'setback',
     title: 'Something is coming',
     body: 'You have a moment before it lands. Pay to prevent it, or take the hit.',
@@ -239,22 +223,37 @@ export const BEATS: readonly Beat[] = [
     },
   },
   {
-    id: 'goal',
-    title: 'The North Field is next',
-    body: 'Keep growing and selling. At $75, press B or click Build to buy the larger North Field.',
+    id: 'expand',
+    title: 'Open three more beds',
+    body: 'Press B, then buy the $20 Starter Extension. Its gate opens three new crop beds nearby.',
+    key: 'B',
     touch: {
-      body: 'Keep growing and selling. At $75, tap Build to buy the larger North Field.',
+      body: 'Tap Build, then buy the $20 Starter Extension. Its gate opens three new crop beds nearby.',
       key: 'BUILD',
+      hintBody: 'Open Build and choose Starter Extension in the Expand section.',
     },
     reveals: ['objective'],
-    // Completes on the next tick: this beat is a hand-off, not a task, so
-    // onboarding ends with the player already inside the repeatable loop.
-    isDone: () => true,
-    // Explicitly never skipped for mastery. Without this the adaptive check
-    // would see isDone() === true and skip the one beat whose entire job is
-    // to state the goal - leaving the player with no idea what they are
-    // playing toward.
-    alreadySatisfied: () => false,
+    isDone: (c) => c.starterExtensionOwned,
+    hint: {
+      afterMs: 18_000,
+      body: 'Press B and choose Starter Extension in the Expand section.',
+    },
+  },
+  {
+    id: 'community',
+    title: 'Help Millbrook together',
+    body: 'Press T or click Town. Choose Millbrook Seed Box, then Fund to start the community project.',
+    key: 'T',
+    touch: {
+      body: 'Tap Town. Choose Millbrook Seed Box, then Fund to start the community project.',
+      key: 'TOWN',
+      hintBody: 'Open Town and fund the council-paid Millbrook Seed Box project.',
+    },
+    isDone: (c) => c.communityProjectHandled,
+    hint: {
+      afterMs: 18_000,
+      body: 'Press T, choose Millbrook Seed Box, then select Fund.',
+    },
   },
 ];
 

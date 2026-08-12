@@ -15,6 +15,13 @@ import {
   MUSIC_TRACKS,
   type MusicId,
 } from '@assets/audio/musicIds.js';
+import {
+  isQualityTier,
+  persistQualityTier,
+  readStoredQuality,
+  resolveQualityTier,
+  type QualityTier,
+} from '@engine/render/quality/QualityTier.js';
 
 export interface SettingsValues {
   master: number;
@@ -60,13 +67,27 @@ export interface SettingsCallbacks {
   readonly onMusicTrackEnabledChange: (trackId: MusicId, enabled: boolean) => void;
   readonly onDebugToggle: (enabled: boolean) => void;
   readonly onClose: () => void;
+  /**
+   * Optional: fired after the new tier is persisted.
+   *
+   * Optional because the setting is meaningful without a listener - it is read
+   * at boot by `resolveQualityTier`, so persisting it is the whole mechanism.
+   * A host that wants to offer "reload now" can subscribe.
+   */
+  readonly onQualityChange?: (tier: QualityTier) => void;
 }
+
+const QUALITY_LABELS: Readonly<Record<QualityTier, string>> = {
+  low: 'Standard (fastest)',
+  ultra: 'Ultra (desktop)',
+};
 
 export class SettingsPanel implements Screen {
   readonly id = 'settings';
   readonly root: HTMLElement;
   #values: SettingsValues;
   readonly #songSelect: HTMLSelectElement;
+  readonly #qualitySelect: HTMLSelectElement;
   readonly #songToggles = new Map<MusicId, HTMLInputElement>();
 
   constructor(callbacks: SettingsCallbacks) {
@@ -104,6 +125,33 @@ export class SettingsPanel implements Screen {
       callbacks.onDebugToggle(debugToggle.checked);
       saveSettings(this.#values);
     });
+
+    // Quality is not part of SettingsValues: it is read at boot by the render
+    // pipeline before any UI exists, so localStorage is its home and this
+    // control is a view onto that. Changing it needs a reload, because the tier
+    // decides renderer construction flags and a global shader chunk.
+    const activeQuality = resolveQualityTier();
+    const qualitySelect = el('select', {
+      attrs: { 'aria-label': 'Graphics quality' },
+      testId: 'quality-select',
+    }) as HTMLSelectElement;
+    for (const [tier, label] of Object.entries(QUALITY_LABELS)) {
+      qualitySelect.append(el('option', { attrs: { value: tier }, text: label }));
+    }
+    qualitySelect.value = activeQuality;
+    const qualityNote = el('p', {
+      class: 'fr-field__note',
+      text: '',
+    });
+    qualitySelect.addEventListener('change', () => {
+      const tier = qualitySelect.value;
+      if (!isQualityTier(tier)) return;
+      persistQualityTier(tier);
+      qualityNote.textContent =
+        tier === activeQuality ? '' : 'Reload the page to apply the new quality level.';
+      callbacks.onQualityChange?.(tier);
+    });
+    this.#qualitySelect = qualitySelect;
 
     this.#songSelect = el('select', {
       attrs: { 'aria-label': 'Current song' },
@@ -184,6 +232,8 @@ export class SettingsPanel implements Screen {
         ),
         songList,
         slider('Effects', 'sfx'),
+        el('label', { class: 'fr-field' }, el('span', { text: 'Graphics quality' }), qualitySelect),
+        qualityNote,
         el(
           'label',
           { class: 'fr-field' },
@@ -197,6 +247,17 @@ export class SettingsPanel implements Screen {
 
   get values(): SettingsValues {
     return this.#values;
+  }
+
+  /** The tier the player has chosen, or the auto-detected one if they have not. */
+  get quality(): QualityTier {
+    const stored = readStoredQuality();
+    return isQualityTier(stored) ? stored : resolveQualityTier();
+  }
+
+  set quality(tier: QualityTier) {
+    persistQualityTier(tier);
+    this.#qualitySelect.value = tier;
   }
 
   setMusicTrack(trackId: MusicId): void {

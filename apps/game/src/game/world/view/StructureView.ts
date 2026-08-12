@@ -13,13 +13,17 @@
 import * as THREE from 'three';
 import { BUILDINGS, type BuildingKind } from '@farmrise/shared';
 import type { ModelLibrary } from '@assets/registries/ModelLibrary.js';
+import type { RenderPipeline } from '@engine/render/RenderPipeline.js';
 import type { FarmWorld, PlacedBuilding } from '../FarmWorld.js';
-import {
-  createWaterMaterial,
-  createWindMaterial,
-  type TimeMaterial,
-} from './animationMaterials.js';
+import type { WorkAction } from '../../player/Player.js';
+import { createWindMaterial, type TimeMaterial } from './animationMaterials.js';
+import { createWaterMaterial, type AnimatedWater } from './waterMaterials.js';
 import type { FarmMaterials } from './materials.js';
+import {
+  buildingOperationalMotion,
+  StructureEffectsView,
+  type BuildingOperationalMotion,
+} from './StructureEffectsView.js';
 import {
   createRoadGeometry,
   roadConnectionMask,
@@ -78,40 +82,11 @@ const TROUGH_MESH = 'SM_prop_water_trough';
 const MILL_WHEEL_MESH = 'SM_building_mill_wheel';
 const VENT_FAN_MESH = 'SM_building_vent_fan';
 const WELL_CRANK_MESH = 'SM_building_well_crank';
-const STEAM_PUFF_MESH = 'SM_building_steam_puff';
-const DUST_PUFF_MESH = 'SM_building_dust_puff';
 
 type BuildingMotionPart =
-  | 'mill-wheel'
-  | 'vent-fan'
-  | 'well-crank'
-  | 'steam'
-  | 'water-stream'
-  | 'water-splash'
-  | 'completion-dust';
+  'mill-wheel' | 'vent-fan' | 'well-crank' | 'water-stream' | 'water-splash';
 
-export interface BuildingOperationalMotion {
-  readonly active: boolean;
-  readonly rotorAngle: number;
-  readonly shake: number;
-}
-
-/** Deterministic presentation state shared by the runtime and unit tests. */
-export function buildingOperationalMotion(
-  kind: BuildingKind,
-  elapsedSeconds: number,
-  busy: boolean,
-  broken: boolean,
-): BuildingOperationalMotion {
-  const active = !broken && (busy || kind === 'cold_store' || kind === 'well');
-  const speed =
-    kind === 'mill' ? 1.9 : kind === 'creamery' ? 4.4 : kind === 'cold_store' ? 3.2 : 0.78;
-  return {
-    active,
-    rotorAngle: active ? elapsedSeconds * speed : 0,
-    shake: broken ? Math.sin(elapsedSeconds * 22.0) * 0.009 : 0,
-  };
-}
+export { buildingOperationalMotion, type BuildingOperationalMotion };
 
 export class StructureView {
   readonly object = new THREE.Group();
@@ -129,8 +104,9 @@ export class StructureView {
   #previewValid = true;
   #previewMaterials: THREE.MeshStandardMaterial[] = [];
   readonly #owned: (THREE.BufferGeometry | THREE.Material)[] = [];
-  readonly #water = createWaterMaterial(false);
-  readonly #runningWater = createWaterMaterial(true);
+  readonly #water: AnimatedWater;
+  readonly #runningWater: AnimatedWater;
+  readonly #effects: StructureEffectsView;
   readonly #treeWind: TimeMaterial | null;
   readonly #deadTreeWind: TimeMaterial | null;
   readonly #waterPlane = createWaterPlaneGeometry();
@@ -145,7 +121,11 @@ export class StructureView {
     private readonly world: FarmWorld,
     private readonly materials: FarmMaterials,
     private readonly library: ModelLibrary | null = null,
+    pipeline: RenderPipeline | null = null,
   ) {
+    this.#water = createWaterMaterial(false, pipeline);
+    this.#runningWater = createWaterMaterial(true, pipeline);
+    this.#effects = new StructureEffectsView(world, pipeline);
     this.#treeWind = library
       ? createWindMaterial(library.material, {
           key: 'blocked-trees',
@@ -174,6 +154,7 @@ export class StructureView {
         })
       : null;
     this.#owned.push(this.#waterPlane, this.#waterStream, this.#waterSplash);
+    this.object.add(this.#effects.object);
     this.#buildStatic(world);
     this.sync(world);
   }
@@ -241,7 +222,6 @@ export class StructureView {
       visual.rotation.y = building.rotation * (Math.PI / 2);
       if (completedNow.has(buildingKey(building))) {
         visual.userData['completionStartedAt'] = this.#elapsedSeconds;
-        this.#attachCompletionDust(visual, definition.footprint.width, definition.footprint.depth);
       }
       visual.traverse((node) => {
         node.castShadow = building.kind !== 'road';
@@ -273,10 +253,16 @@ export class StructureView {
     }
   }
 
-  animate(elapsedSeconds: number): void {
+  animate(
+    elapsedSeconds: number,
+    deltaSeconds = 1 / 60,
+    workAction: WorkAction | null = null,
+    workProgress = 0,
+  ): void {
     this.#elapsedSeconds = elapsedSeconds;
     this.#water.setTime(elapsedSeconds);
     this.#runningWater.setTime(elapsedSeconds);
+    this.#effects.update(elapsedSeconds, deltaSeconds, workAction, workProgress);
     this.#treeWind?.setTime(elapsedSeconds);
     this.#deadTreeWind?.setTime(elapsedSeconds);
     for (let index = 0; index < this.#waterSplashes.length; index += 1) {
@@ -321,17 +307,6 @@ export class StructureView {
         } else if (part === 'vent-fan') {
           node.visible = true;
           node.rotation.z = -operational.rotorAngle + phase;
-        } else if (part === 'steam') {
-          const steamActive = operational.active && busy;
-          const cycle = (elapsedSeconds * 0.38 + phase) % 1;
-          const basePosition = node.userData['basePosition'] as [number, number, number];
-          node.visible = steamActive;
-          node.position.set(
-            basePosition[0] + Math.sin(cycle * Math.PI) * 0.08,
-            basePosition[1] + cycle * 0.78,
-            basePosition[2] + Math.cos(cycle * Math.PI) * 0.04,
-          );
-          node.scale.setScalar(0.48 + cycle * 0.78);
         } else if (part === 'water-stream' || part === 'water-splash') {
           node.visible = !building.broken;
         }
@@ -343,26 +318,9 @@ export class StructureView {
         const pulse = Math.sin(Math.min(1, age / 0.72) * Math.PI);
         visual.scale.set(1 + pulse * 0.075, 1 + pulse * 0.11, 1 + pulse * 0.075);
         visual.position.y = baseY + pulse * 0.035;
-        visual.traverse((node) => {
-          if (node.userData['motionPart'] !== 'completion-dust') return;
-          const phase = Number(node.userData['phase'] ?? 0);
-          const dustAge = Math.min(1, Math.max(0, age / 0.72));
-          const basePosition = node.userData['basePosition'] as [number, number, number];
-          const outward = 1 + dustAge * 0.34;
-          node.visible = true;
-          node.position.set(
-            basePosition[0] * outward,
-            basePosition[1] + Math.sin(dustAge * Math.PI) * (0.1 + phase * 0.05),
-            basePosition[2] * outward,
-          );
-          node.scale.setScalar(Math.sin(dustAge * Math.PI) * (0.55 + phase * 0.28));
-        });
       } else {
         visual.scale.set(1, 1, 1);
         visual.position.y = baseY;
-        visual.traverse((node) => {
-          if (node.userData['motionPart'] === 'completion-dust') node.visible = false;
-        });
         delete visual.userData['completionStartedAt'];
       }
     }
@@ -477,6 +435,7 @@ export class StructureView {
     this.#ghostMaterial?.dispose();
     this.#water.dispose();
     this.#runningWater.dispose();
+    this.#effects.dispose();
     this.#treeWind?.dispose();
     this.#deadTreeWind?.dispose();
     for (const resource of this.#owned) resource.dispose();
@@ -550,15 +509,12 @@ export class StructureView {
 
       if (kind === 'mill') {
         this.#addPart(group, MILL_WHEEL_MESH, [1.92, 1.04, 0], 'mill-wheel');
-        this.#addSteam(group, [-1.12, 2.58, -0.35]);
       } else if (kind === 'cold_store') {
         this.#addPart(group, VENT_FAN_MESH, [1.08, 0.64, 1.95], 'vent-fan');
       } else if (kind === 'creamery') {
         this.#addPart(group, VENT_FAN_MESH, [0.78, 0.58, 1.91], 'vent-fan');
       } else if (kind === 'well') {
         this.#addPart(group, WELL_CRANK_MESH, [0.74, 1.3, 0], 'well-crank');
-      } else if (kind === 'preserve_kitchen') {
-        this.#addSteam(group, [1.18, 2.44, -0.16]);
       }
 
       if (kind !== 'irrigation') return group;
@@ -615,34 +571,6 @@ export class StructureView {
     mesh.userData['basePosition'] = position;
     group.add(mesh);
     return mesh;
-  }
-
-  #addSteam(group: THREE.Group, position: [number, number, number]): void {
-    for (let index = 0; index < 3; index += 1) {
-      this.#addPart(group, STEAM_PUFF_MESH, position, 'steam', index / 3);
-    }
-  }
-
-  #attachCompletionDust(visual: THREE.Object3D, width: number, depth: number): void {
-    if (!this.library?.has(DUST_PUFF_MESH)) return;
-    const tile = this.world.grid.tileSize;
-    const x = width * tile * 0.34;
-    const z = depth * tile * 0.34;
-    const positions: [number, number, number][] = [
-      [-x, 0.06, -z],
-      [x, 0.06, -z],
-      [-x, 0.06, z],
-      [x, 0.06, z],
-    ];
-    positions.forEach((position, index) => {
-      const puff = new THREE.Mesh(this.library!.require(DUST_PUFF_MESH), this.library!.material);
-      puff.position.set(...position);
-      puff.visible = false;
-      puff.userData['motionPart'] = 'completion-dust' satisfies BuildingMotionPart;
-      puff.userData['phase'] = index / positions.length;
-      puff.userData['basePosition'] = position;
-      visual.add(puff);
-    });
   }
 
   #ghost(): THREE.Material {

@@ -17,7 +17,13 @@ import {
   plotStage,
   requireCrop,
 } from '@farmrise/shared';
-import { cropMeshName, cropStress, stagePopScale, visualStage } from '@game/world/view/PlotView.js';
+import {
+  CROP_WIND,
+  cropMeshName,
+  cropStress,
+  stagePopScale,
+  visualStage,
+} from '@game/world/view/PlotView.js';
 import { PlotView } from '@game/world/view/PlotView.js';
 import { createFarmMaterials } from '@game/world/view/materials.js';
 import { makeCareer } from '../helpers/career.js';
@@ -29,16 +35,18 @@ describe('visualStage', () => {
     expect(visualStage(plant('wheat'))).toBe(1);
   });
 
-  it('advances through all four stages as the crop grows', () => {
-    const crop = requireCrop('wheat');
-    const seen = new Set<number>();
-    let plot = { ...plant('wheat'), irrigated: true };
-    for (let i = 0; i < crop.growthTicks * 1.2; i += 30) {
+  it('advances every crop through all four authored stages', () => {
+    for (const cropId of CROP_IDS) {
+      const crop = requireCrop(cropId);
+      const seen = new Set<number>();
+      let plot = { ...plant(cropId), irrigated: true };
+      for (let i = 0; i < crop.growthTicks * 1.2; i += 30) {
+        seen.add(visualStage(plot));
+        plot = advancePlot(plot, 30);
+      }
       seen.add(visualStage(plot));
-      plot = advancePlot(plot, 30);
+      expect([...seen].sort(), cropId).toEqual([1, 2, 3, 4]);
     }
-    seen.add(visualStage(plot));
-    expect([...seen].sort()).toEqual([1, 2, 3, 4]);
   });
 
   it('never skips a stage', () => {
@@ -53,18 +61,20 @@ describe('visualStage', () => {
     }
   });
 
-  it('reserves stage 4 strictly for harvestable crops', () => {
+  it('reserves every crop stage 4 strictly for harvestable crops', () => {
     // The whole art direction rests on this: the gold/orange colour flip is
     // a promise, and a stage-4 mesh on an unharvestable plot would break it.
-    const crop = requireCrop('pumpkin');
-    let plot = { ...plant('pumpkin'), irrigated: true };
-    for (let i = 0; i < crop.growthTicks * 1.3; i += 10) {
-      plot = advancePlot(plot, 10);
-      if (visualStage(plot) === 4) {
-        expect(plotStage(plot)).toBe('ready');
-      }
-      if (plotStage(plot) === 'ready') {
-        expect(visualStage(plot)).toBe(4);
+    for (const cropId of CROP_IDS) {
+      const crop = requireCrop(cropId);
+      let plot = { ...plant(cropId), irrigated: true };
+      for (let i = 0; i < crop.growthTicks * 1.3; i += 10) {
+        plot = advancePlot(plot, 10);
+        if (visualStage(plot) === 4) {
+          expect(plotStage(plot), cropId).toBe('ready');
+        }
+        if (plotStage(plot) === 'ready') {
+          expect(visualStage(plot), cropId).toBe(4);
+        }
       }
     }
   });
@@ -86,6 +96,21 @@ describe('cropMeshName', () => {
 });
 
 describe('crop animation presentation', () => {
+  it('keeps every crop rooted with a species-scale wind profile', () => {
+    expect(Object.keys(CROP_WIND).sort()).toEqual([...CROP_IDS].sort());
+    for (const profile of Object.values(CROP_WIND)) {
+      expect(profile.baseHeight).toBeGreaterThanOrEqual(0);
+      expect(profile.fullHeight).toBeGreaterThan(profile.baseHeight);
+      expect(profile.strength).toBeLessThanOrEqual(0.08);
+      expect(profile.speed).toBeGreaterThan(0);
+    }
+
+    expect(CROP_WIND.radish.speed).toBeGreaterThan(CROP_WIND.beetroot.speed);
+    expect(CROP_WIND.radish.torsion).toBeLessThan(CROP_WIND.beetroot.torsion);
+    expect(CROP_WIND.cranberry.fullHeight).toBeLessThan(CROP_WIND.grape.fullHeight);
+    expect(CROP_WIND.avocado.cantilever).toBe(true);
+  });
+
   it('settles a new growth stage from a rooted pop to full scale', () => {
     const start = stagePopScale(0);
     const middle = stagePopScale(0.24);

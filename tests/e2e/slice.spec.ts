@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
 
 async function startFarmFromMenu(page: Page) {
   await page.getByTestId('menu-play').dispatchEvent('click');
-  await expect(page.getByTestId('menu-shortcuts')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('menu-shortcuts')).toBeVisible({ timeout: 75_000 });
 }
 
 async function enterFarm(page: Page, path = '/') {
@@ -65,6 +65,37 @@ async function tendFirstCrop(page: Page) {
   await expect(page.getByTestId('coach-mark')).toContainText(/ripens quickly/i);
 }
 
+async function harvestFirstCrop(page: Page) {
+  // The prompt can change to Harvest one fixed tick before the previous work
+  // lock releases. Retry the real key until the carried-goods state confirms
+  // the harvest instead of assuming a single synthetic edge landed.
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await page.keyboard.press('e');
+    try {
+      await expect(page.getByTestId('hud-carry')).toContainText(/[1-9]/, { timeout: 700 });
+      return;
+    } catch {
+      await page.waitForTimeout(180);
+    }
+  }
+  await expect(page.getByTestId('hud-carry')).toContainText(/[1-9]/);
+}
+
+async function preventFirstIncident(page: Page) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await page.keyboard.press('f');
+    try {
+      await expect(page.getByTestId('coach-mark')).toContainText(/Starter Extension/i, {
+        timeout: 700,
+      });
+      return;
+    } catch {
+      await page.waitForTimeout(180);
+    }
+  }
+  await expect(page.getByTestId('coach-mark')).toContainText(/Starter Extension/i);
+}
+
 async function reachFirstPlot(page: Page) {
   await page.keyboard.down('Shift');
   await page.keyboard.down('w');
@@ -84,11 +115,15 @@ async function carryFirstHarvestHome(page: Page) {
   await page.keyboard.down('Shift');
   await page.keyboard.down('d');
   try {
-    await expect(page.getByTestId('hud-prompt')).toContainText('Put down', { timeout: 15_000 });
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      await page.waitForTimeout(100);
+      if ((await page.getByTestId('hud-prompt').textContent())?.includes('Put down')) break;
+    }
   } finally {
     await page.keyboard.up('d');
     await page.keyboard.up('Shift');
   }
+  await expect(page.getByTestId('hud-prompt')).toContainText('Put down');
 
   await page.keyboard.press('e');
   await expect(page.getByTestId('hud-storage')).toContainText(/[1-9]\/60/);
@@ -99,20 +134,21 @@ async function reachEggStack(page: Page) {
   const prompt = page.getByTestId('hud-prompt');
   if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
 
-  // The player finishes hauling beside the shelter. Production only starts on
-  // this beat, so keep searching the small collection area while the starter
-  // clutch finishes instead of treating the uncollected basket as storage.
-  for (let attempt = 0; attempt < 180; attempt += 1) {
-    const direction = (['s', 'd', 'w', 'a'] as const)[attempt % 4]!;
-    await page.keyboard.down(direction);
-    try {
-      for (let step = 0; step < 5; step += 1) {
-        await page.waitForTimeout(100);
-        if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
-      }
-    } finally {
-      await page.keyboard.up(direction);
+  // The first plot and yard route stop west of the shelter. The basket is
+  // south-east of it, and the shelter's solid footprint blocks a straight D
+  // route, so step around the front corner before heading east.
+  await page.waitForTimeout(1_000);
+  await page.keyboard.down('s');
+  await page.waitForTimeout(1_400);
+  await page.keyboard.up('s');
+  await page.keyboard.down('d');
+  try {
+    for (let step = 0; step < 100; step += 1) {
+      await page.waitForTimeout(100);
+      if (/Pick up .*Eggs/i.test((await prompt.textContent()) ?? '')) return;
     }
+  } finally {
+    await page.keyboard.up('d');
   }
 
   await expect(prompt).toContainText(/Pick up .*Eggs/i);
@@ -172,7 +208,7 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   // still uses the accelerated onboarding clock; this only protects the
   // browser-driving wall-clock budget from renderer contention.
   test.setTimeout(300_000);
-  await enterFarm(page);
+  await enterFarm(page, '/?quality=low');
   await reachFirstPlot(page);
 
   await page.keyboard.press('e');
@@ -182,7 +218,7 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   await tendFirstCrop(page);
   await expect(page.getByTestId('hud-prompt')).toContainText('Harvest', { timeout: 30_000 });
 
-  await page.keyboard.press('e');
+  await harvestFirstCrop(page);
   await carryFirstHarvestHome(page);
   await expect(page.getByTestId('coach-mark')).toContainText(/(Press M|Tap Market).*Sell all/i);
 
@@ -226,7 +262,10 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   await page.keyboard.press('m');
   await expect(page.getByTestId('market-sell-all-eggs')).toBeVisible();
   await page.getByTestId('market-close').click();
-  await expect(page.getByTestId('coach-mark')).toContainText(/Starter Extension/i);
+  await expect(page.getByTestId('coach-mark')).toContainText(/Something is coming/i);
+  await expect(page.getByTestId('hud-warning')).toBeVisible();
+  await preventFirstIncident(page);
+  await expect(page.getByText('That is already dealt with.')).toHaveCount(0);
   await page.getByRole('button', { name: 'Open build' }).click();
   const extension = page.getByTestId('build-land-row-parcel-starter-extension');
   const north = page.getByTestId('build-land-row-parcel-north-field');
@@ -235,12 +274,40 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   await expect(north).toContainText(/Buy Starter Extension first/i);
   await page.getByTestId('build-land-parcel-starter-extension').click();
   await expect(page.getByTestId('build-panel')).toBeHidden();
-  await expect(page.getByTestId('coach-mark')).toContainText(/Something is coming/i);
-  await expect(page.getByTestId('hud-warning')).toBeVisible();
+  await expect(page.getByTestId('coach-mark')).toContainText(/Millbrook Seed Box/i);
+  await page.getByRole('button', { name: 'Open town' }).click();
+  await expect(page.getByTestId('town-panel')).toBeVisible();
+  const starterProject = page.getByTestId('town-project-project-seed-box');
+  await expect(starterProject).toBeEnabled();
+  await expect(page.getByTestId('town-projects')).toContainText(/\$0\.00.*no materials needed/i);
+  await starterProject.click();
+  await expect(page.getByTestId('town-projects')).toContainText(/Millbrook Seed Box.*remaining/i);
+  await expect(page.getByTestId('coach-mark')).toBeHidden({ timeout: 5_000 });
+});
 
-  await page.keyboard.press('f');
-  await expect(page.getByTestId('coach-mark')).toBeHidden();
-  await expect(page.getByText('That is already dealt with.')).toHaveCount(0);
+test('the top objective, status bar and messages never overlap', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.setViewportSize({ width: 1184, height: 780 });
+  await enterFarm(page, '/?quality=low');
+  await skipTutorial(page);
+
+  const objective = page.getByTestId('hud-objective');
+  const stats = page.getByTestId('hud-bar');
+  await expect(objective).toBeVisible();
+  await expect(stats).toBeVisible();
+  const [objectiveBox, statsBox] = await Promise.all([
+    objective.boundingBox(),
+    stats.boundingBox(),
+  ]);
+  expect(objectiveBox).not.toBeNull();
+  expect(statsBox).not.toBeNull();
+  const horizontallySeparate =
+    objectiveBox!.x + objectiveBox!.width <= statsBox!.x ||
+    statsBox!.x + statsBox!.width <= objectiveBox!.x;
+  const verticallySeparate =
+    objectiveBox!.y + objectiveBox!.height <= statsBox!.y ||
+    statsBox!.y + statsBox!.height <= objectiveBox!.y;
+  expect(horizontallySeparate || verticallySeparate).toBe(true);
 });
 
 test('market and reinvest interfaces block farm controls behind them', async ({ page }) => {

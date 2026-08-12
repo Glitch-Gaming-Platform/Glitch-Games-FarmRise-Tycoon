@@ -52,7 +52,9 @@ test('main-menu settings and account interfaces open, render and close', async (
 
   await openMainMenuInterface(page, 'menu-account', 'account-panel');
   await expect(page.getByTestId('account-panel')).toBeVisible();
-  await expect(page.getByTestId('account-status')).toContainText(/saved/i);
+  await expect(page.getByTestId('account-form')).toBeVisible();
+  await expect(page.getByLabel('Email')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create account' })).toBeVisible();
   await page.getByTestId('account-close').click();
   await expect(page.getByTestId('account-panel')).toBeHidden();
   await expect(page.getByTestId('main-menu')).toBeVisible();
@@ -92,6 +94,19 @@ test('runs the game loop, so the tick counter advances', async ({ page }) => {
   const first = await readTick();
   await page.waitForTimeout(1200);
   expect(await readTick()).toBeGreaterThan(first);
+});
+
+test('routes low to the frozen model pack and requests no Ultra surfaces', async ({ page }) => {
+  const requested: string[] = [];
+  page.on('request', (request) => requested.push(request.url()));
+
+  await enterFarm(page, '/?quality=low&debug=overlay');
+  await expect(page.getByTestId('debug-overlay')).toContainText('tier low');
+
+  const modelRequests = requested.filter((url) => url.includes('/assets/models/'));
+  expect(modelRequests.length).toBeGreaterThan(0);
+  expect(modelRequests.every((url) => url.includes('/assets/models/low/'))).toBe(true);
+  expect(requested.some((url) => url.includes('/assets/textures/'))).toBe(false);
 });
 
 test('handles a viewport resize without errors', async ({ page }) => {

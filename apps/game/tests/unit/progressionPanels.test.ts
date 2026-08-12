@@ -202,6 +202,36 @@ describe('progression management panels', () => {
     expect(town.root.textContent).not.toContain('Market Road');
   });
 
+  it('shows the council-funded starter project without malformed cost copy', () => {
+    const fund = vi.fn();
+    const town = new TownPanel({ onStartProject: fund, onClose: vi.fn() });
+    town.update({
+      stageName: 'Hamlet',
+      population: 'Under 200',
+      prosperity: 0,
+      summary: 'Small.',
+      activeProject: null,
+      projectsUnlocked: true,
+      projects: [
+        {
+          id: 'project-seed-box',
+          title: 'Millbrook Seed Box',
+          description: 'A council-funded box.',
+          benefit: 'Town deliveries pay more.',
+          cost: cents(0),
+          materials: 'no materials needed',
+          enabled: true,
+        },
+      ],
+    });
+
+    expect(town.root.textContent).toMatch(/\$0\.00 \+ no materials needed/i);
+    town.root
+      .querySelector<HTMLButtonElement>('[data-testid="town-project-project-seed-box"]')!
+      .click();
+    expect(fund).toHaveBeenCalledWith('project-seed-box');
+  });
+
   it('distinguishes accepting an offer from delivering an accepted contract', () => {
     const act = vi.fn();
     const market = new MarketPanel({ onSellSpot: vi.fn(), onFulfil: act, onClose: vi.fn() });

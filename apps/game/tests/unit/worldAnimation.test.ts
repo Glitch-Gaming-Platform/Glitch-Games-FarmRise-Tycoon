@@ -10,6 +10,7 @@ import {
   StructureView,
 } from '../../src/game/world/view/StructureView.js';
 import { constructionProgressState } from '../../src/game/world/view/ConstructionProgressView.js';
+import { incidentLightingTarget } from '../../src/game/world/view/FarmLightingResponse.js';
 import { groundGoodsActionLabel } from '../../src/game/world/view/GroundGoodsView.js';
 import { proximityMeterAnchor } from '../../src/game/world/view/ProximityStatusView.js';
 import { fundedCareer, makeCareer } from '../helpers/career.js';
@@ -48,6 +49,16 @@ describe('world animation state', () => {
       urgent: false,
     });
     expect(stackAnchor).toEqual({ x: stackAt.x, y: 1.15, z: stackAt.z });
+
+    const animalAnchor = proximityMeterAnchor(world, {
+      kind: 'animal',
+      target: { kind: 'animal', id: 'chicken', x: 4, y: 1.25, z: 7 },
+      label: '2 Hens make 8 Eggs',
+      value: 0,
+      detail: 'Store 2 Corn each cycle · 0/2 stored',
+      urgent: true,
+    });
+    expect(animalAnchor).toEqual({ x: 4, y: 1.25, z: 7 });
   });
 
   it('reports construction percentage and remaining time for the overhead bar', () => {
@@ -131,6 +142,39 @@ describe('world animation state', () => {
     expect(sun!.color.getHex()).not.toBe(normalColour);
     expect(sun!.intensity).toBeGreaterThan(2.3);
     view.dispose();
+  });
+
+  it('keeps atmospheric response restrained to drought and Ultra cold snaps', () => {
+    const base: IncidentInstance = {
+      id: 'lighting-target',
+      definitionId: 'incident-drought',
+      siteId: 'farm',
+      severity: 'minor',
+      warnedTick: 0,
+      impactTick: 1,
+      endsTick: 60,
+      targetIds: ['plot-1'],
+      responseKind: null,
+      responseProgress: 0,
+      resolved: false,
+      appliedMultiplier: null,
+    };
+
+    expect(incidentLightingTarget(base, false)).toEqual({ drought: 0.18, cold: 0 });
+    expect(
+      incidentLightingTarget({ ...base, appliedMultiplier: 0.35, responseProgress: 3 }, true),
+    ).toEqual({ drought: 0.38, cold: 0 });
+    expect(incidentLightingTarget({ ...base, definitionId: 'incident-cold-snap' }, false)).toEqual({
+      drought: 0,
+      cold: 0,
+    });
+    expect(incidentLightingTarget({ ...base, definitionId: 'incident-cold-snap' }, true)).toEqual({
+      drought: 0,
+      cold: 0.08,
+    });
+    expect(
+      incidentLightingTarget({ ...base, definitionId: 'incident-processor-breakdown' }, true),
+    ).toEqual({ drought: 0, cold: 0 });
   });
 
   it('gives a raiding fox a stronger pounce silhouette than its idle pose', () => {

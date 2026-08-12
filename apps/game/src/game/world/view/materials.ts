@@ -28,6 +28,15 @@ export interface FarmMaterials {
   dispose(): void;
 }
 
+/**
+ * The ground's base colour, `ground_scrub` from the palette.
+ *
+ * Exported because the Ultra terrain material is a different material object
+ * with the same base colour, and two hex literals that must agree is exactly
+ * the situation `docs/ART_DIRECTION.md` forbids.
+ */
+export const GROUND_BASE_COLOUR = 0xc9a227;
+
 export function createFarmMaterials(): FarmMaterials {
   const make = (color: number, roughness = 0.85, metalness = 0) =>
     new THREE.MeshStandardMaterial({ color, roughness, metalness });
@@ -41,7 +50,7 @@ export function createFarmMaterials(): FarmMaterials {
     // this base colour - so the palette hue still lives in exactly one place
     // and the geometry only decides light-and-shade.
     ground: new THREE.MeshStandardMaterial({
-      color: 0xc9a227,
+      color: GROUND_BASE_COLOUR,
       roughness: 0.92,
       metalness: 0,
       vertexColors: true,

@@ -62,12 +62,17 @@ export class DebugOverlaySystem implements EngineSystem {
     if (this.#accumulator < this.#interval) return;
     this.#accumulator = 0;
 
-    const stats = this.#services?.tryResolve(RendererToken)?.stats;
+    const renderer = this.#services?.tryResolve(RendererToken);
+    const stats = renderer?.stats;
     const rows: Record<string, string | number> = {
       fps: this.options.loop.fps.toFixed(0),
       tick: this.options.loop.tick,
+      // Tier and program count are here specifically so the claim "the low tier
+      // gained nothing" is checkable from a screenshot rather than from trust.
+      tier: renderer?.pipeline?.tier ?? 'low',
       draws: stats?.drawCalls ?? 0,
       tris: stats?.triangles ?? 0,
+      programs: stats?.programs ?? 0,
       ...(this.options.extraRows?.() ?? {}),
     };
 

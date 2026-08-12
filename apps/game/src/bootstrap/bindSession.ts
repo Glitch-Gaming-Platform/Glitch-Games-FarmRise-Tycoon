@@ -20,6 +20,7 @@ import {
   LOAN_OFFERS,
   PROCESSORS,
   SPECIALIZATIONS,
+  STARTER_EXTENSION_PARCEL_ID,
   STAGE_NAMES,
   WORKER_ROLES,
   availableProjects,
@@ -360,6 +361,12 @@ export function bindSession(
     if (ui.town.visible) {
       const stage = townStageFor(career.town.prosperity);
       const active = career.town.activeProject;
+      const starterProjectAvailable = world.parcels.owns(STARTER_EXTENSION_PARCEL_ID);
+      const projectSurfaceUnlocked =
+        starterProjectAvailable ||
+        career.unlocks.includes('town_projects') ||
+        active !== null ||
+        career.town.completedProjectIds.length > 0;
       ui.town.update({
         stageName: stage.displayName,
         population: stage.populationBand,
@@ -371,9 +378,12 @@ export function bindSession(
               remainingTicks: active.remainingTicks,
             }
           : null,
-        projectsUnlocked: career.unlocks.includes('town_projects'),
-        projects: (career.unlocks.includes('town_projects')
-          ? availableProjects(career.town.prosperity, career.town.completedProjectIds)
+        projectsUnlocked: projectSurfaceUnlocked,
+        projects: (projectSurfaceUnlocked
+          ? availableProjects(career.town.prosperity, career.town.completedProjectIds, {
+              unlocks: career.unlocks,
+              ownedParcelIds: world.parcels.ownedIds,
+            })
           : []
         )
           .filter((project) => project.id !== active?.id)
@@ -382,23 +392,20 @@ export function bindSession(
             const hasMaterials = materials.every(
               ([itemId, quantity]) => world.stores.totalOf(itemId) >= quantity,
             );
-            const enabled =
-              career.unlocks.includes('town_projects') &&
-              active === null &&
-              career.balance >= project.cost &&
-              hasMaterials;
+            const enabled = active === null && career.balance >= project.cost && hasMaterials;
             return {
               id: project.id,
               title: project.displayName,
               description: project.description,
               benefit: project.benefit,
               cost: project.cost,
-              materials: materials
-                .map(
-                  ([itemId, quantity]) =>
-                    `${quantity} ${itemId} (${world.stores.totalOf(itemId)} held)`,
-                )
-                .join(', '),
+              materials:
+                materials
+                  .map(
+                    ([itemId, quantity]) =>
+                      `${quantity} ${itemId} (${world.stores.totalOf(itemId)} held)`,
+                  )
+                  .join(', ') || 'no materials needed',
               enabled,
             };
           }),

@@ -23,6 +23,7 @@ const base: OnboardingContext = {
   eggsCollected: 0,
   eggsHandled: false,
   starterExtensionOwned: false,
+  communityProjectHandled: false,
   warningActive: false,
   eventsResolved: 0,
   marketOpen: false,
@@ -65,8 +66,10 @@ describe('beat copy', () => {
     expect(order.indexOf('harvest')).toBeLessThan(order.indexOf('haul'));
     expect(order.indexOf('haul')).toBeLessThan(order.indexOf('sell'));
     expect(order.indexOf('sell')).toBeLessThan(order.indexOf('reinvest'));
+    expect(order.indexOf('setback')).toBeLessThan(order.indexOf('expand'));
     expect(order.indexOf('eggs')).toBeLessThan(order.indexOf('expand'));
-    expect(order.indexOf('expand')).toBeLessThan(order.indexOf('setback'));
+    expect(order.indexOf('expand')).toBeLessThan(order.indexOf('community'));
+    expect(order.at(-1)).toBe('community');
   });
 
   it('states the next concrete action on every sequential beat', () => {
@@ -80,7 +83,7 @@ describe('beat copy', () => {
     expect(copy['reinvest']).toMatch(/Press B.*place/i);
     expect(copy['eggs']).toMatch(/hens.*press E.*Pick up Eggs/i);
     expect(copy['expand']).toMatch(/Press B.*\$20 Starter Extension.*three new crop beds/i);
-    expect(copy['goal']).toMatch(/\$75.*press B/i);
+    expect(copy['community']).toMatch(/Press T.*Town.*Millbrook Seed Box.*Fund/i);
   });
 
   it('gives touch players concrete mobile actions instead of keyboard keys', () => {
@@ -92,6 +95,7 @@ describe('beat copy', () => {
     expect(touchCopy['reinvest']).toMatch(/Tap Build/i);
     expect(touchCopy['eggs']).toMatch(/tap Work.*Pick up Eggs/i);
     expect(touchCopy['expand']).toMatch(/Tap Build.*\$20 Starter Extension/i);
+    expect(touchCopy['community']).toMatch(/Tap Town.*Millbrook Seed Box.*Fund/i);
     expect(touchCopy['setback']).toMatch(/Tap Protect/i);
   });
 });
@@ -127,8 +131,6 @@ describe('a first-time player', () => {
         starterExtensionOwned: true,
       }),
     );
-    // The goal beat is a hand-off: it is shown, then completes on the next
-    // tick, which is what carries the player into the free-running loop.
     director.update(
       ctx({
         salesMade: 1,
@@ -136,9 +138,9 @@ describe('a first-time player', () => {
         eggsCollected: 8,
         eggsHandled: true,
         starterExtensionOwned: true,
+        communityProjectHandled: true,
       }),
     );
-
     // 'setback' is absent in this headless director test because SessionController
     // owns the guaranteed first warning. The egg action remains required.
     expect(seen).toEqual([
@@ -151,7 +153,7 @@ describe('a first-time player', () => {
       'reinvest',
       'eggs',
       'expand',
-      'goal',
+      'community',
     ]);
     expect(director.finished).toBe(true);
     expect(director.hasDeferredBeats).toBe(false);
@@ -261,6 +263,7 @@ describe('the setback beat', () => {
         eggsCollected: 8,
         eggsHandled: true,
         starterExtensionOwned: true,
+        communityProjectHandled: true,
       }),
     );
     director.update(
@@ -269,6 +272,7 @@ describe('the setback beat', () => {
         eggsCollected: 8,
         eggsHandled: true,
         starterExtensionOwned: true,
+        communityProjectHandled: true,
       }),
     );
 
@@ -299,6 +303,7 @@ describe('the setback beat', () => {
         eggsCollected: 8,
         eggsHandled: true,
         starterExtensionOwned: true,
+        communityProjectHandled: true,
       }),
     );
     director.update(
@@ -307,6 +312,7 @@ describe('the setback beat', () => {
         eggsCollected: 8,
         eggsHandled: true,
         starterExtensionOwned: true,
+        communityProjectHandled: true,
       }),
     );
     expect(seen).not.toContain('setback');
@@ -329,13 +335,11 @@ describe('the setback beat', () => {
     director.update(ctx({ goodsHauled: 1 }));
     director.update(ctx({ salesMade: 1 }));
     director.update(ctx({ reinvestments: 1 }));
-    director.update(ctx({ reinvestments: 1, eggsCollected: 8, eggsHandled: true }));
     director.update(
       ctx({
         reinvestments: 1,
         eggsCollected: 8,
         eggsHandled: true,
-        starterExtensionOwned: true,
         warningActive: true,
       }),
     );
@@ -376,13 +380,14 @@ describe('the egg collection beat', () => {
         starterExtensionOwned: true,
       }),
     );
-    expect(director.currentBeat?.id).toBe('goal');
+    expect(director.currentBeat?.id).toBe('community');
     director.update(
       ctx({
         nowMs: 97_000,
         eggsCollected: 8,
         eggsHandled: true,
         starterExtensionOwned: true,
+        communityProjectHandled: true,
       }),
     );
     expect(director.currentBeat).toBeNull();
@@ -409,6 +414,27 @@ describe('the starter extension beat', () => {
       beats: BEATS.filter((beat) => beat.id === 'expand'),
     });
     director.start(ctx({ starterExtensionOwned: true }));
+    expect(director.finished).toBe(true);
+  });
+});
+
+describe('the community project beat', () => {
+  it('is the final required action and completes when any project is underway', () => {
+    const director = new OnboardingDirector({
+      beats: BEATS.filter((beat) => beat.id === 'community'),
+    });
+    director.start(ctx({ starterExtensionOwned: true }));
+    expect(director.currentBeat?.id).toBe('community');
+
+    director.update(ctx({ starterExtensionOwned: true, communityProjectHandled: true }));
+    expect(director.finished).toBe(true);
+  });
+
+  it('skips cleanly for a resumed save with a project already active or completed', () => {
+    const director = new OnboardingDirector({
+      beats: BEATS.filter((beat) => beat.id === 'community'),
+    });
+    director.start(ctx({ starterExtensionOwned: true, communityProjectHandled: true }));
     expect(director.finished).toBe(true);
   });
 });
