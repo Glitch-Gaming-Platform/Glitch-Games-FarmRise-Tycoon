@@ -13,13 +13,15 @@ import { describe, expect, it } from 'vitest';
 import { CharacterRig } from '@game/player/rig/CharacterRig.js';
 import { createSkeleton } from '@game/player/rig/autoSkin.js';
 import { BONE_INDEX, SHIN_LENGTH, THIGH_LENGTH } from '@game/player/rig/skeletonDefinition.js';
-import { ankleFromHip, createJointBuffer, measureStrideLength, sampleClip, sampleRootMotion } from '@game/player/rig/clipSampler.js'; // prettier-ignore
+import { ankleFromHip, createJointBuffer, measureStrideLength, sampleClip, sampleGait, sampleRootMotion } from '@game/player/rig/clipSampler.js'; // prettier-ignore
 import { RUN, WALK, type Clip } from '@game/player/rig/poseClips.js';
 import { solveTwoBone } from '@game/player/rig/ikSolver.js';
-import { Player } from '@game/player/Player.js';
+import { DEFAULT_SPRINT_MULTIPLIER, DEFAULT_WALK_SPEED, Player } from '@game/player/Player.js';
 
 const LEG = THIGH_LENGTH + SHIN_LENGTH;
 const PLANT_BAND = 0.035;
+const SHIPPING_WALK_SPEED = DEFAULT_WALK_SPEED;
+const SHIPPING_SPRINT_SPEED = DEFAULT_WALK_SPEED * DEFAULT_SPRINT_MULTIPLIER;
 
 interface GaitProfile {
   readonly stanceExcursion: number;
@@ -52,7 +54,6 @@ interface LeadLegSnapshot {
   readonly kneeForward: number;
   readonly ankleForward: number;
   readonly shinWorldAngle: number;
-  readonly footAngle: number;
 }
 
 function leadLegSnapshot(phase: number): LeadLegSnapshot {
@@ -65,7 +66,6 @@ function leadLegSnapshot(phase: number): LeadLegSnapshot {
     kneeForward: Math.sin(thigh) * THIGH_LENGTH,
     ankleForward: ankleFromHip(thigh, shin).forward,
     shinWorldAngle: thigh + shin,
-    footAngle: pose[BONE_INDEX['foot.L']! * 3]!,
   };
 }
 
@@ -74,7 +74,7 @@ function settledWalkSnapshots(targets: readonly number[]): WalkSnapshot[] {
   const rig = new CharacterRig(bones);
   const input = {
     deltaSeconds: 1 / 60,
-    speed: 1.4,
+    speed: SHIPPING_WALK_SPEED,
     facing: 0,
     turn: 0,
     working: false,
@@ -232,7 +232,7 @@ describe('gait measurements', () => {
   });
 
   it('reports pose extremes and smoothness at the two gameplay speeds', () => {
-    for (const speed of [0.6, 1.4, 2.4, 3.43]) {
+    for (const speed of [0.6, SHIPPING_WALK_SPEED, 2.4, SHIPPING_SPRINT_SPEED]) {
       const { bones } = createSkeleton();
       const rig = new CharacterRig(bones);
       const input = {
@@ -273,7 +273,7 @@ describe('gait measurements', () => {
           }
         }
         const angle = rig.bones[BONE_INDEX['thigh.L']!]!.rotation.x;
-        if (process.env['GAIT_TRACE'] && speed === 3.43 && i > 40 && i < 85) {
+        if (process.env['GAIT_TRACE'] && speed === SHIPPING_SPRINT_SPEED && i > 40 && i < 85) {
           // eslint-disable-next-line no-console
           console.log(
             `t${i} thigh=${angle.toFixed(4)} shin=${rig.bones[BONE_INDEX['shin.L']!]!.rotation.x.toFixed(4)} lock=${rig.footLock('L').toFixed(2)}`,
@@ -300,8 +300,8 @@ describe('gait measurements', () => {
           `reversals ${reversals}`,
       );
       expect(peakThigh).toBeLessThan(0.8);
-      expect(worstAcceleration).toBeLessThan(speed <= 1.4 ? 0.25 : 0.3);
-      if (speed === 1.4) expect(highForwardAnkle).toBeLessThan(0.14);
+      expect(worstAcceleration).toBeLessThan(speed <= SHIPPING_WALK_SPEED ? 0.25 : 0.3);
+      if (speed === SHIPPING_WALK_SPEED) expect(peakThigh).toBeLessThan(0.05);
     }
   });
 
@@ -324,12 +324,12 @@ describe('gait measurements', () => {
 
     // Loading visibly settles below the support-side apex and bends the knee.
     expect(loading.rootY).toBeLessThan(midstance.rootY - 0.025);
-    expect(loading.shinL).toBeLessThan(-0.64);
-    // The pelvis travels over alternating support legs, and the passing leg
-    // clears the planted silhouette instead of disappearing behind it.
+    expect(loading.shinL).toBeGreaterThan(0.6);
+    // The pelvis travels over alternating support legs while both knees remain
+    // directly under the hips, matching the approved flexion reference.
     expect(midstance.rootX).toBeLessThan(-0.025);
     expect(passing.rootX).toBeGreaterThan(0.02);
-    expect(Math.abs(passing.thighLZ - passing.thighRZ)).toBeGreaterThan(0.02);
+    expect(Math.abs(passing.thighLZ - passing.thighRZ)).toBeLessThan(1e-6);
     // A readable heel-to-toe chain survives at gameplay scale.
     expect(contact.footL - toeOff.footL).toBeGreaterThan(0.25);
     expect(toeOff.toeL - midstance.toeL).toBeGreaterThan(0.25);
@@ -345,21 +345,63 @@ describe('gait measurements', () => {
   it('keeps terminal swing knee-led instead of extending into a forward kick', () => {
     const terminal = [0.92, 0.94, 0.96, 0.98, 0].map(leadLegSnapshot);
     for (const pose of terminal) {
-      // Positive separation means the knee is in front of the ankle. A negative
-      // world-space shin angle means the lower leg folds backward from the knee.
-      expect(pose.kneeForward - pose.ankleForward).toBeGreaterThan(0.01);
-      expect(pose.shinWorldAngle).toBeLessThan(-0.05);
+      expect(Math.abs(pose.kneeForward)).toBeLessThan(0.01);
+      expect(pose.ankleForward).toBeGreaterThan(0.05);
+      expect(pose.shinWorldAngle).toBeGreaterThan(0.05);
     }
   });
 
-  it('kicks the boot backward without changing the knee path', () => {
-    const cycle = WALK.keys.map((key) => leadLegSnapshot(key.t));
+  it('moves each leg from straight into a backward knee bend without crossing in front', () => {
+    const pose = createJointBuffer(Object.keys(BONE_INDEX).length);
+    const scratch = createJointBuffer(Object.keys(BONE_INDEX).length);
 
-    for (const pose of cycle) expect(pose.footAngle).toBeGreaterThanOrEqual(0.4);
+    for (let sample = 0; sample < 720; sample += 1) {
+      pose.fill(0);
+      sampleGait(WALK, sample / 720, pose, scratch, 1);
+
+      for (const side of ['L', 'R'] as const) {
+        const thigh = pose[BONE_INDEX[`thigh.${side}`]! * 3]!;
+        const shin = pose[BONE_INDEX[`shin.${side}`]! * 3]!;
+        const foot = pose[BONE_INDEX[`foot.${side}`]! * 3]!;
+        const footYaw = pose[BONE_INDEX[`foot.${side}`]! * 3 + 1]!;
+        const ankle = ankleFromHip(thigh, shin);
+
+        expect(ankle.forward).toBeGreaterThan(0.04);
+        expect(Math.abs(thigh)).toBeLessThan(1e-6);
+        expect(thigh + shin).toBeGreaterThan(0);
+        expect(ankle.forward - Math.sin(thigh) * THIGH_LENGTH).toBeGreaterThan(0.01);
+        expect(Math.abs(footYaw)).toBeLessThan(1e-6);
+        expect(foot).toBeGreaterThan(-0.8);
+        expect(foot).toBeLessThan(0.8);
+      }
+    }
+
+    const runtimeSkeleton = createSkeleton();
+    const runtimeRig = new CharacterRig(runtimeSkeleton.bones);
+    const input = {
+      deltaSeconds: 1 / 60,
+      speed: SHIPPING_WALK_SPEED,
+      facing: 0,
+      turn: 0,
+      working: false,
+      workAction: null,
+      workProgress: 0,
+      waveProgress: 0,
+    } as const;
+    for (let frame = 0; frame < 180; frame += 1) runtimeRig.update(input);
+    for (let frame = 0; frame < 240; frame += 1) {
+      runtimeRig.update(input);
+      for (const side of ['L', 'R'] as const) {
+        const thigh = runtimeSkeleton.bones[BONE_INDEX[`thigh.${side}`]!]!.rotation.x;
+        const shin = runtimeSkeleton.bones[BONE_INDEX[`shin.${side}`]!]!.rotation.x;
+        expect(Math.abs(thigh)).toBeLessThan(0.05);
+        expect(shin).toBeGreaterThan(0.1);
+      }
+    }
   });
 
   it('measures world-space foot slip through a held walk and sprint', () => {
-    for (const speed of [0.7, 1.4, 2.4, 3.43, 6.5]) {
+    for (const speed of [0.7, SHIPPING_WALK_SPEED, 2.4, SHIPPING_SPRINT_SPEED, 6.5]) {
       const { bones } = createSkeleton();
       const rig = new CharacterRig(bones);
       const dt = 1 / 60;
@@ -393,7 +435,7 @@ describe('gait measurements', () => {
           const world = bodyZ + forward;
           if (
             process.env['GAIT_TRACE'] &&
-            speed === 1.4 &&
+            speed === SHIPPING_WALK_SPEED &&
             side === 'L' &&
             frame > 200 &&
             frame < 245
@@ -443,11 +485,11 @@ describe('gait measurements', () => {
           `near-ground ${(worstLowSlip * 1000).toFixed(2)} mm over ` +
           `${lowFrames}; strideScale ${rig.strideScale.toFixed(3)}`,
       );
-      if (speed <= 3.43) {
+      if (speed <= SHIPPING_SPRINT_SPEED) {
         expect(worstSlip).toBeLessThan(0.006);
         expect(worstVerticalSlip).toBeLessThan(0.008);
       } else expect(rig.strideScale).toBeGreaterThan(1.5);
-      if (speed === 1.4) expect(worstLowSlip).toBeLessThan(0.085);
+      if (speed === SHIPPING_WALK_SPEED) expect(worstLowSlip).toBeLessThan(0.085);
     }
   });
 });

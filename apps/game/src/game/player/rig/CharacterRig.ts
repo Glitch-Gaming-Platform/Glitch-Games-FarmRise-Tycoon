@@ -33,7 +33,7 @@ import { BONE_INDEX, BONES, FOREARM_LENGTH, SHIN_LENGTH, THIGH_LENGTH, UPPERARM_
 import { HARVEST, IDLE, PLANT, RUN, TEND, WALK, WAVE, type Clip } from './poseClips.js';
 import { ankleFromHip, createJointBuffer, measureStrideLength, sampleClip, sampleGait, sampleRootMotion, STANCE_CLEARANCE, type JointAngles } from './clipSampler.js'; // prettier-ignore
 import { blendAngle, solveTwoBone } from './ikSolver.js';
-import type { WorkAction } from '../Player.js';
+import { DEFAULT_SPRINT_MULTIPLIER, DEFAULT_WALK_SPEED, type WorkAction } from '../Player.js';
 
 /** Speed below which the character is considered stopped, in m/s. */
 const IDLE_SPEED = 0.12;
@@ -42,14 +42,13 @@ const IDLE_SPEED = 0.12;
  * The speed window over which the walk clip gives way to the run clip.
  *
  * These are keyed to what the *player* is doing, not to an abstract speed
- * ramp. `Player.walkSpeed` is 1.4 m/s and `sprintMultiplier` is 2.45, so held-W
- * walking is 1.4 and Shift+W sprinting is 3.43. Both numbers are what the
- * clips can cover honestly - see the note on `MAX_CADENCE_WALK` - so the walk
- * clip plays at walking speed, the run clip plays at sprinting speed, and the
- * window in between is crossed only while accelerating.
+ * ramp. The thresholds derive from the same defaults as `Player`, so changing
+ * movement speed cannot silently blend the RUN clip into ordinary walking.
+ * Held-W remains pure WALK and Shift+W reaches pure RUN; the window between is
+ * crossed only while accelerating.
  */
-const RUN_BLEND_START = 1.8;
-const RUN_SPEED = 3.43;
+const RUN_BLEND_START = DEFAULT_WALK_SPEED * 1.05;
+const RUN_SPEED = DEFAULT_WALK_SPEED * DEFAULT_SPRINT_MULTIPLIER;
 
 /** Ground clearance under which a foot counts as planted, in metres. */
 const PLANT_HEIGHT = STANCE_CLEARANCE;
@@ -127,15 +126,13 @@ const LOCK_FADE_STRIDE_SCALE = 1.9;
  *   2. The walk and run clips were re-solved against the leg's actual reach:
  *      0.60 m of ground per walk cycle and 1.10 m per run cycle, against 0.37
  *      and 0.38 before.
- *   3. `Player.walkSpeed` came down from 6.5 m/s to 1.4, and the sprint
- *      multiplier up from 1.6 to 2.45, giving 1.4 and 3.43 m/s.
+ *   3. `Player.walkSpeed` came down from 6.5 m/s, then was raised to 1.848 m/s
+ *      by gameplay tuning; the 2.45 sprint multiplier gives 4.5276 m/s.
  *
- * The result is that ordinary walking asks for 2.3 cycles/s and sprinting for
- * 3.1, both under these ceilings, so `strideScale` stays at 1, the swing is
- * never widened, and the foot lock runs at full authority. The caps remain as a
- * guard: if someone raises the movement speed again, the character strides
- * faster up to here and then starts sliding rather than strobing, and
- * `strideScale` says so out loud.
+ * The strict rear-only walk has a shorter measured stride, so these ceilings
+ * now remain active safety limits. The character strides faster up to the cap,
+ * then reports the uncovered distance through `strideScale` instead of
+ * strobing the gait.
  */
 const MAX_CADENCE_WALK = 2.9;
 const MAX_CADENCE_RUN = 3.5;
@@ -373,17 +370,26 @@ export class CharacterRig {
           locomotionWeight *
           (1 - runBlend) *
           WALK_TERMINAL_ROOT_LIFT;
-        this.#widenSwing();
         const gaitDistance = moving ? cadence * dt * baseStride * this.#visualLegScale : 0;
-        const lockAuthority =
+        const strideLockAuthority =
           1 - THREE.MathUtils.smoothstep(this.strideScale, 1, LOCK_FADE_STRIDE_SCALE);
-        // Once locomotion is visible, contact correction needs full authority.
-        // Multiplying by the pose blend made a foot report a full lock at slow
-        // walking speeds while only applying half of the correction, leaving a
-        // visible residual skate precisely when the camera can read it best.
-        this.#applyFootLock(gaitDistance, lockAuthority, dt);
-        this.#turnRecoveryBehind('L', this.#phase, locomotionWeight, runBlend);
-        this.#turnRecoveryBehind('R', (this.#phase + 0.5) % 1, locomotionWeight, runBlend);
+        // The approved WALK silhouette keeps the knee directly under the hip.
+        // IK foot locking would move that thigh to preserve a planted contact,
+        // undoing the reviewed motion, so walking leaves the authored leg
+        // untouched. RUN keeps the existing lock behavior.
+        if (runBlend < 0.5) {
+          // Preserve the visually approved WALK leg chain exactly. Foot-lock
+          // state, stride widening and recovery overrides all solve the thigh
+          // or shin after sampling and would invalidate that reviewed pose.
+          this.#visualLegScale = 1;
+          this.#resetFeet();
+        } else {
+          this.#widenSwing();
+          // Once running is visible, contact correction needs full authority.
+          this.#applyFootLock(gaitDistance, strideLockAuthority, dt);
+          this.#turnRecoveryBehind('L', this.#phase, locomotionWeight, runBlend);
+          this.#turnRecoveryBehind('R', (this.#phase + 0.5) % 1, locomotionWeight, runBlend);
+        }
       } else {
         this.#resetFeet();
       }
@@ -466,8 +472,10 @@ export class CharacterRig {
     this.#angles[spine] = this.#angles[spine]! + load * 0.11;
     this.#angles[chest] = this.#angles[chest]! + load * 0.075;
     this.#angles[neck] = this.#angles[neck]! - load * 0.035;
-    this.#angles[leftShin] = this.#angles[leftShin]! - brace * 0.08;
-    this.#angles[rightShin] = this.#angles[rightShin]! - brace * 0.08;
+    if (runBlend >= 0.5) {
+      this.#angles[leftShin] = this.#angles[leftShin]! - brace * 0.08;
+      this.#angles[rightShin] = this.#angles[rightShin]! - brace * 0.08;
+    }
 
     // The authored clip owns the ankle path; this layer supplies the mass that
     // travels over it. Loading lands low, the pelvis commits over the support
@@ -501,8 +509,10 @@ export class CharacterRig {
     this.#angles[neck + 2] = this.#angles[neck + 2]! - Math.sin(cycle - 0.18) * walkWeight * 0.012;
     this.#angles[head + 2] = this.#angles[head + 2]! - Math.sin(cycle - 0.3) * walkWeight * 0.018;
 
-    this.#applyWalkLegFinish('L', leftPhase, walkWeight);
-    this.#applyWalkLegFinish('R', rightPhase, walkWeight);
+    if (runBlend >= 0.5) {
+      this.#applyWalkLegFinish('L', leftPhase, walkWeight);
+      this.#applyWalkLegFinish('R', rightPhase, walkWeight);
+    }
 
     // Steering begins in the eyes and shoulders, then crosses the ribs into a
     // modest pelvis bank. The actor yaw is smoothed separately in PlayerView;
@@ -588,12 +598,14 @@ export class CharacterRig {
     const terminalSwing = phasePulse(phase, 0.9, 0.13) * airborneAuthority * airborne * locomotion;
     if (terminalSwing <= 0) return;
 
-    const targetShin = THREE.MathUtils.lerp(-1.02, -1.12, runBlend);
-    this.#angles[shin] = THREE.MathUtils.lerp(
-      this.#angles[shin]!,
-      Math.min(this.#angles[shin]!, targetShin),
-      terminalSwing,
-    );
+    const walkTargetShin = 1.02;
+    const runTargetShin = -1.12;
+    const targetShin = runBlend < 0.5 ? walkTargetShin : runTargetShin;
+    const constrainedShin =
+      runBlend < 0.5
+        ? Math.max(this.#angles[shin]!, targetShin)
+        : Math.min(this.#angles[shin]!, targetShin);
+    this.#angles[shin] = THREE.MathUtils.lerp(this.#angles[shin]!, constrainedShin, terminalSwing);
     const targetFoot = THREE.MathUtils.lerp(0.48, 0.56, runBlend);
     this.#angles[foot] = THREE.MathUtils.lerp(
       this.#angles[foot]!,
@@ -689,10 +701,9 @@ export class CharacterRig {
       const angle = this.#angles[slot]!;
       // Thigh flexion is the only signed swing here: positive is forward of the
       // hip, and that half gets a much smaller factor so widening the stride
-      // does not throw the shoe out in front. A shin angle is always negative
-      // (a knee bends one way) and is not a direction, so it takes the full
-      // factor - clamping it as if it were "backwards" would straighten the
-      // knee and drag the toe.
+      // does not throw the shoe out in front. RUN's shin angle retains the
+      // legacy negative bend and is not a travel direction, so it takes the
+      // full factor. The approved WALK path bypasses this widening entirely.
       const isThigh = name === 'thigh.L' || name === 'thigh.R';
       const scale = isThigh && angle > 0 ? forwardScale : legScale;
       this.#angles[slot] = angle * scale;

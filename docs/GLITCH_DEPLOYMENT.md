@@ -404,6 +404,28 @@ The staging audit found no `.env*` file, Distribution token, or Hosting token. T
 still reports 50 of 50 records and AWS case `178639262100188` remains `CASE_OPENED`; the active
 domain and certificate continue to work despite that unchanged quota state.
 
+### Redeployment — version 0.1.11 on August 12, 2026
+
+Distribution version `0.1.11-20260812`, build `019ff7bc-a33a-703b-b189-b6fa886b8fc1`, is ready
+and live with `index.html` as its entry. The public Glitch Play page selected that exact build,
+loaded the Spanish locale on demand, switched back to English, and reached the interactive farm
+with one WebGL canvas, the gameplay menus, and no browser console errors. The nested CDN entry and
+all JavaScript bundles returned HTTP 200. The primary files are `index-CofptGZn.js` and
+`three-BPC2If2_.js`; the release also includes the verified Arabic, Bengali, German, Spanish,
+French, Hindi, Indonesian, Japanese, Portuguese, Urdu, and Simplified Chinese locale bundles.
+
+The matching Webhosting Node build is `019ff7c0-9437-705f-9b9e-6917610a92cc`, and Hosting release
+`019ff7c5-45d9-7345-a890-52b68ca1c642` uses the executable entry
+`tools/hosting/server.mjs`. The release became `active` at `2026-08-12T20:58:56Z`; the site and
+generated domain are `live`/`active`, and certificate status is `Enabled`. The public `/`,
+`/health`, `/readyz`, `/livez`, and `/api/v1/health` endpoints returned HTTP 200. The Hosting root
+served the same primary and localized asset hashes as the verified Distribution build.
+
+The Hosting artifact came from a filtered 115 MB staging tree and produced a 92.8 MB upload. The
+staging audit found no `.env*` file, Distribution token, Hosting token, or MCP credential. The full
+Node 24 verification passed 87 test files and 872 tests, and the targeted localization persistence
+and gameplay-start browser tests also passed before deployment.
+
 ## Rollback
 
 Distribution and Hosting release state are separate. To restore a previous website release:

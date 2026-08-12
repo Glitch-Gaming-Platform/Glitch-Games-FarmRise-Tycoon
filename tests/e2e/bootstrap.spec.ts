@@ -39,6 +39,39 @@ test('boots to the main menu', async ({ page }) => {
   expect(await hero.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
 });
 
+test('changes and persists the language from the menu and settings', async ({ page }) => {
+  await page.goto('/');
+
+  const menuLanguage = page.getByTestId('menu-language-select');
+  const menuFlag = menuLanguage.locator('..').locator('.fr-language-flag');
+  await expect(menuFlag).toHaveText('🇺🇸');
+  await menuLanguage.selectOption('es');
+  await expect(page.getByTestId('menu-play')).toContainText('Trabajar la granja');
+  await expect(menuFlag).toHaveText('🇪🇸');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'es');
+
+  await openMainMenuInterface(page, 'menu-settings', 'settings-panel');
+  const settingsLanguage = page.getByTestId('settings-language-select');
+  await expect(settingsLanguage).toHaveValue('es');
+  await settingsLanguage.selectOption('ar');
+  await expect(page.getByRole('heading', { name: 'الإعدادات' })).toBeVisible();
+  await expect(settingsLanguage.locator('..').locator('.fr-language-flag')).toHaveText('🇸🇦');
+  await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+
+  await page.reload();
+  await expect(page.getByTestId('menu-language-select')).toHaveValue('ar');
+  await expect(page.getByTestId('menu-play')).toContainText('ابدأ العمل في المزرعة');
+
+  await page.getByTestId('menu-language-select').selectOption('ja');
+  await expect(page.getByTestId('menu-play')).toContainText('農場で働く');
+  await expect(page.getByTestId('menu-language-select').locator('..')).toContainText('🇯🇵');
+  await page.getByTestId('menu-language-select').selectOption('de');
+  await expect(page.getByTestId('menu-play')).toContainText('Auf dem Hof arbeiten');
+  await expect(page.getByTestId('menu-language-select').locator('..')).toContainText('🇩🇪');
+  await page.reload();
+  await expect(page.getByTestId('menu-language-select')).toHaveValue('de');
+});
+
 test('main-menu settings and account interfaces open, render and close', async ({ page }) => {
   await page.goto('/');
 

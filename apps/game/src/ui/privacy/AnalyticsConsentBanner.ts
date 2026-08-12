@@ -1,5 +1,7 @@
 import type { AnalyticsConsentState } from '@analytics/consent.js';
-import { button, el } from '../core/dom.js';
+import { el } from '../core/dom.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedButton, localizedText } from '../i18n/localizedDom.js';
 
 export interface AnalyticsConsentBannerOptions {
   readonly initialState: AnalyticsConsentState;
@@ -11,7 +13,10 @@ export class AnalyticsConsentBanner {
   readonly root: HTMLElement;
   #source: 'banner' | 'settings';
 
-  constructor(private readonly options: AnalyticsConsentBannerOptions) {
+  constructor(
+    private readonly options: AnalyticsConsentBannerOptions,
+    i18n: GameLocalization = createEnglishLocalization(),
+  ) {
     this.#source = options.initialState === 'unknown' ? 'banner' : 'settings';
     this.root = el(
       'div',
@@ -27,28 +32,21 @@ export class AnalyticsConsentBanner {
       el(
         'div',
         { class: 'fr-panel fr-panel--compact fr-consent__panel' },
-        el('span', { class: 'fr-ribbon', text: 'Your privacy' }),
-        el('h1', {
+        localizedText(i18n, 'span', 'privacy.ribbon', { class: 'fr-ribbon' }),
+        localizedText(i18n, 'h1', 'privacy.title', {
           class: 'fr-title',
-          text: 'Help improve the farm',
           attrs: { id: 'analytics-consent-title' },
         }),
-        el('p', {
-          class: 'fr-subtitle',
-          text: 'Anonymous usage analytics are on by default, including coarse device and browser details, so we can find confusing steps, crashes and slow performance. We never send passwords, account details, chat or anything you type.',
-        }),
-        el('p', {
-          class: 'fr-consent__note',
-          text: 'Optional. The game still works if you turn analytics off, and you can change this choice later in Settings.',
-        }),
+        localizedText(i18n, 'p', 'privacy.body', { class: 'fr-subtitle' }),
+        localizedText(i18n, 'p', 'privacy.note', { class: 'fr-consent__note' }),
         el(
           'div',
           { class: 'fr-actions' },
-          button('Keep analytics on', () => this.#decide(true), {
+          localizedButton(i18n, 'privacy.keepOn', () => this.#decide(true), {
             class: 'fr-btn fr-btn--primary',
             testId: 'analytics-consent-allow',
           }),
-          button('Turn analytics off', () => this.#decide(false), {
+          localizedButton(i18n, 'privacy.turnOff', () => this.#decide(false), {
             class: 'fr-btn fr-btn--secondary',
             testId: 'analytics-consent-deny',
           }),

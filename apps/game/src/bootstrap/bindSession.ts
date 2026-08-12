@@ -26,14 +26,13 @@ import {
   availableProjects,
   batchMargin,
   cents,
-  formatCents,
-  formatTicks,
   getItem,
   milestoneProgress as milestoneRequirementProgress,
   purchasableAnimals,
   recipesFor,
   storageUsed,
   townStageFor,
+  ticksToSeconds,
   type BuildingKind,
   type ProcessorKind,
 } from '@farmrise/shared';
@@ -50,6 +49,10 @@ import {
 import type { FarmScene } from '@game/scenes/FarmScene.js';
 import type { SessionController } from '@game/systems/SessionController.js';
 import type { UiRoot } from '@ui/UiRoot.js';
+import type { GameLocalization } from '@ui/i18n/gameI18n.js';
+import { domainText, itemName } from '@ui/i18n/domainText.js';
+import { localizeGameText } from '@ui/i18n/gameText.js';
+import type { Beat } from '@game/onboarding/beats.js';
 
 export interface SessionBinding {
   readonly unsubscribe: Unsubscribe;
@@ -63,6 +66,7 @@ export function bindSession(
   ui: UiRoot,
   audio: AudioSystem,
   onSeasonReview: () => void,
+  i18n: GameLocalization,
 ): SessionBinding {
   const career = scene.career;
   const careerDirector = scene.careerDirector;
@@ -74,6 +78,64 @@ export function bindSession(
   ui.setMenuShortcutsAvailable(true);
   const playUi = (id: string, volume = 0.75) =>
     audio.play(id, { bus: 'ui', volume, detuneJitter: 10 });
+  let coachState: { readonly beat: Beat; readonly hint: boolean } | null = null;
+  let placementState: {
+    readonly kind: BuildingKind;
+    readonly valid: boolean;
+    readonly problem: string | null;
+  } | null = null;
+
+  const showCoach = (): void => {
+    if (!coachState) return;
+    const { beat, hint } = coachState;
+    const copyKey = touch
+      ? hint
+        ? `onboarding.${beat.id}.touchHint`
+        : `onboarding.${beat.id}.touchBody`
+      : hint
+        ? `onboarding.${beat.id}.hint`
+        : `onboarding.${beat.id}.body`;
+    const fallback = touch
+      ? hint
+        ? (beat.touch?.hintBody ?? beat.touch?.body ?? beat.body)
+        : (beat.touch?.body ?? beat.body)
+      : hint
+        ? (beat.hint?.body ?? beat.body)
+        : beat.body;
+    ui.coach.show(
+      {
+        id: beat.id,
+        title: i18n.t(`onboarding.${beat.id}.title`, undefined, beat.title),
+        body: i18n.t(copyKey, undefined, fallback),
+        key: touch ? beat.touch?.key : beat.key,
+      },
+      () => session.skipOnboarding(),
+    );
+  };
+
+  const showPlacement = (): void => {
+    if (!placementState) {
+      ui.setPlacing(null);
+      return;
+    }
+    const definition = BUILDINGS[placementState.kind];
+    const building = domainText(
+      i18n,
+      'building',
+      placementState.kind,
+      'name',
+      definition.displayName,
+    );
+    ui.setPlacing(
+      placementState.valid
+        ? i18n.t(touch ? 'placement.activeTouch' : 'placement.activeDesktop', { building })
+        : i18n.t(touch ? 'placement.blockedTouch' : 'placement.blockedDesktop', {
+            problem:
+              localizeGameText(i18n, placementState.problem) ?? i18n.t('placement.cannotBuild'),
+          }),
+      !placementState.valid,
+    );
+  };
 
   const refresh = (): void => {
     if (ui.market.visible) {
@@ -87,11 +149,14 @@ export function bindSession(
           const outstanding = contract.quantity - contract.delivered;
           const spotValue = cents((getItem(contract.itemId)?.spotUnitPrice ?? 0) * outstanding);
           const payout = cents(contract.unitPrice * outstanding);
+          const item = getItem(contract.itemId);
           return {
             action: 'deliver' as const,
             orderId: contract.id,
             itemId: contract.itemId,
-            displayName: `${getItem(contract.itemId)?.displayName ?? contract.itemId} — deliver`,
+            displayName: i18n.t('market.deliverSuffix', {
+              item: itemName(i18n, contract.itemId, item?.displayName ?? contract.itemId),
+            }),
             quantity: outstanding,
             payout,
             spotValue,
@@ -105,11 +170,15 @@ export function bindSession(
       const offers = session.contracts.map((entry) => {
         const held = sellableQuantity(career, entry.offer.itemId);
         const payout = cents(entry.offer.unitPrice * entry.offer.quantity);
+        const item = getItem(entry.offer.itemId);
         return {
           action: 'accept' as const,
           orderId: entry.offer.id,
           itemId: entry.offer.itemId,
-          displayName: `${getItem(entry.offer.itemId)?.displayName ?? entry.offer.itemId} — ${entry.buyer.displayName}`,
+          displayName: i18n.t('market.offerName', {
+            item: itemName(i18n, entry.offer.itemId, item?.displayName ?? entry.offer.itemId),
+            buyer: domainText(i18n, 'buyer', entry.buyer.id, 'name', entry.buyer.displayName),
+          }),
           quantity: entry.offer.quantity,
           payout,
           spotValue: entry.spotValue,
@@ -122,7 +191,12 @@ export function bindSession(
 
       ui.market.update({
         balance: career.balance,
-        rows: inventoryRows(sellableInventory(career), (itemId) => spotQuote(career, itemId)),
+        rows: inventoryRows(sellableInventory(career), (itemId) => spotQuote(career, itemId)).map(
+          (row) => ({
+            ...row,
+            displayName: itemName(i18n, row.itemId, row.displayName),
+          }),
+        ),
         storageUsed: storageUsed(world.storedInventory),
         storageCapacity: world.storageCapacity,
         contractsUnlocked: career.unlocks.includes('contracts'),
@@ -148,18 +222,21 @@ export function bindSession(
         ).map((parcel) => {
           const missing = parcel.requiresOwned.filter((id) => !world.parcels.owns(id));
           const ownershipRequirement = missing
-            .map((id) => ESTATE_PARCELS.find((candidate) => candidate.id === id)?.displayName ?? id)
+            .map((id) => {
+              const required = ESTATE_PARCELS.find((candidate) => candidate.id === id);
+              return domainText(i18n, 'parcel', id, 'name', required?.displayName ?? id);
+            })
             .join(', ');
           const tutorialRequirement = session.landPurchaseRequirement(parcel.id);
           const requirement =
             tutorialRequirement ??
-            (missing.length > 0 ? `Buy ${ownershipRequirement} first` : null);
+            (missing.length > 0 ? i18n.t('build.buyFirst', { land: ownershipRequirement }) : null);
           return {
             parcelId: parcel.id,
-            displayName: parcel.displayName,
+            displayName: domainText(i18n, 'parcel', parcel.id, 'name', parcel.displayName),
             cost: parcel.purchaseCost,
             bedCount: parcel.beds.length,
-            description: parcel.description,
+            description: domainText(i18n, 'parcel', parcel.id, 'description', parcel.description),
             affordable: career.balance >= parcel.purchaseCost,
             available: missing.length === 0 && tutorialRequirement === null,
             progress:
@@ -210,18 +287,44 @@ export function bindSession(
                 queued < PROCESSORS[kind].queueCapacity &&
                 held >= recipe.inputQuantity &&
                 career.balance >= recipe.batchCost;
+              const input = getItem(recipe.inputItemId);
+              const output = getItem(recipe.outputItemId);
               return {
                 id: `${processor.id}-${recipe.id}`,
                 buildingId: building.id,
                 recipeId: recipe.id,
-                title: recipe.displayName,
-                meta:
-                  `${recipe.inputQuantity} ${recipe.inputItemId} → ${recipe.outputQuantity} ` +
-                  `${recipe.outputItemId}; ${formatCents(recipe.batchCost)} to run; ` +
-                  `${formatCents(batchMargin(recipe))} raw margin; ` +
-                  `${queued}/${PROCESSORS[kind].queueCapacity} queued` +
-                  (remaining > 0 ? `; ${formatTicks(remaining)} remaining` : ''),
-                action: building.broken ? 'Broken' : enabled ? 'Queue 1' : 'Unavailable',
+                title: domainText(i18n, 'recipe', recipe.id, 'name', recipe.displayName),
+                meta: i18n.t('career.processorMeta', {
+                  inputQuantity: i18n.formatNumber(recipe.inputQuantity),
+                  input: itemName(
+                    i18n,
+                    recipe.inputItemId,
+                    input?.displayName ?? recipe.inputItemId,
+                  ),
+                  outputQuantity: i18n.formatNumber(recipe.outputQuantity),
+                  output: itemName(
+                    i18n,
+                    recipe.outputItemId,
+                    output?.displayName ?? recipe.outputItemId,
+                  ),
+                  cost: i18n.formatCents(recipe.batchCost),
+                  margin: i18n.formatCents(batchMargin(recipe)),
+                  queued: i18n.formatNumber(queued),
+                  capacity: i18n.formatNumber(PROCESSORS[kind].queueCapacity),
+                  remaining:
+                    remaining > 0
+                      ? i18n.t('career.remaining', {
+                          time: i18n.formatDurationSeconds(ticksToSeconds(remaining)),
+                        })
+                      : '',
+                }),
+                action: i18n.t(
+                  building.broken
+                    ? 'career.broken'
+                    : enabled
+                      ? 'career.queueOne'
+                      : 'common.unavailable',
+                ),
                 enabled,
               };
             });
@@ -233,20 +336,37 @@ export function bindSession(
             ...world.workforce.workers.map((worker) => ({
               id: `employed-${worker.id}`,
               title: worker.displayName,
-              meta:
-                `${WORKER_ROLES[worker.role].displayName}; skill ${worker.skill}; ` +
-                `${worker.tasksCompleted} tasks; priorities ${worker.priorities.join(', ')}`,
-              action: worker.currentTask ?? 'Employed',
+              meta: i18n.t('career.workerMeta', {
+                role: domainText(
+                  i18n,
+                  'worker',
+                  worker.role,
+                  'name',
+                  WORKER_ROLES[worker.role].displayName,
+                ),
+                skill: i18n.formatNumber(worker.skill),
+                tasks: i18n.formatNumber(worker.tasksCompleted),
+                priorities: worker.priorities.join(', '),
+              }),
+              action: worker.currentTask ?? i18n.t('career.employed'),
               enabled: false,
               selected: true,
             })),
             ...Object.values(WORKER_ROLES).map((role) => ({
               id: role.id,
-              title: `Hire ${role.displayName}`,
-              meta:
-                `${formatCents(role.hiringCost)} to hire; ${formatCents(role.wagePerDay)} per day. ` +
-                role.description,
-              action: freeHuts > 0 && career.balance >= role.hiringCost ? 'Hire' : 'Unavailable',
+              title: i18n.t('career.hireTitle', {
+                role: domainText(i18n, 'worker', role.id, 'name', role.displayName),
+              }),
+              meta: i18n.t('career.hireMeta', {
+                cost: i18n.formatCents(role.hiringCost),
+                wage: i18n.formatCents(role.wagePerDay),
+                description: domainText(i18n, 'worker', role.id, 'description', role.description),
+              }),
+              action: i18n.t(
+                freeHuts > 0 && career.balance >= role.hiringCost
+                  ? 'career.hire'
+                  : 'common.unavailable',
+              ),
               enabled: freeHuts > 0 && career.balance >= role.hiringCost,
             })),
           ]
@@ -263,19 +383,31 @@ export function bindSession(
                 id: `repay-${loan.id}`,
                 loanId: loan.id,
                 amount,
-                title: `Repay ${loan.id}`,
-                meta: `${formatCents(loan.outstanding)} outstanding; ${(loan.dailyRate * 100).toFixed(1)}% per day`,
-                action: amount > 0 ? `Pay ${formatCents(cents(amount))}` : 'No cash',
+                title: i18n.t('career.repayTitle', { loan: loan.id }),
+                meta: i18n.t('career.loanOutstanding', {
+                  amount: i18n.formatCents(loan.outstanding),
+                  rate: i18n.formatNumber(loan.dailyRate * 100, {
+                    maximumFractionDigits: 1,
+                  }),
+                }),
+                action:
+                  amount > 0
+                    ? i18n.t('career.pay', { amount: i18n.formatCents(cents(amount)) })
+                    : i18n.t('common.noCash'),
                 enabled: amount > 0,
               };
             }),
             ...LOAN_OFFERS.filter((offer) => !heldLoanOffers.has(offer.id)).map((offer) => ({
               id: offer.id,
-              title: offer.displayName,
-              meta:
-                `${formatCents(offer.principal)} at ${(offer.dailyRate * 100).toFixed(1)}% per day. ` +
-                offer.description,
-              action: 'Borrow',
+              title: domainText(i18n, 'loan', offer.id, 'name', offer.displayName),
+              meta: i18n.t('career.loanOfferMeta', {
+                principal: i18n.formatCents(offer.principal),
+                rate: i18n.formatNumber(offer.dailyRate * 100, {
+                  maximumFractionDigits: 1,
+                }),
+                description: domainText(i18n, 'loan', offer.id, 'description', offer.description),
+              }),
+              action: i18n.t('career.borrow'),
               enabled: true,
             })),
           ]
@@ -286,50 +418,76 @@ export function bindSession(
           ? [
               {
                 id: 'cancel-policy',
-                title: `Current policy: ${career.insurance.policyId}`,
-                meta:
-                  `${formatCents(career.insurance.premiumPerDay)} per day; ` +
-                  `${Math.round(career.insurance.coverage * 100)}% coverage; ` +
-                  `${career.insurance.claimsMade} claims`,
-                action: 'Cancel',
+                title: i18n.t('career.currentPolicy', { policy: career.insurance.policyId }),
+                meta: i18n.t('career.policyMeta', {
+                  premium: i18n.formatCents(career.insurance.premiumPerDay),
+                  coverage: i18n.formatNumber(Math.round(career.insurance.coverage * 100)),
+                  claims: i18n.formatNumber(career.insurance.claimsMade),
+                }),
+                action: i18n.t('common.cancel'),
                 enabled: true,
                 selected: true,
               },
             ]
           : INSURANCE_POLICIES.map((policy) => ({
               id: policy.policyId,
-              title: policy.displayName,
-              meta:
-                `${formatCents(policy.premiumPerDay)} per day; ` +
-                `${Math.round(policy.coverage * 100)}% coverage. ${policy.description}`,
-              action: 'Take policy',
+              title: domainText(i18n, 'insurance', policy.policyId, 'name', policy.displayName),
+              meta: i18n.t('career.policyOfferMeta', {
+                premium: i18n.formatCents(policy.premiumPerDay),
+                coverage: i18n.formatNumber(Math.round(policy.coverage * 100)),
+                description: domainText(
+                  i18n,
+                  'insurance',
+                  policy.policyId,
+                  'description',
+                  policy.description,
+                ),
+              }),
+              action: i18n.t('career.takePolicy'),
               enabled: true,
             }))
         : [];
 
       ui.career.update({
         balance: career.balance,
-        stageName: STAGE_NAMES[career.stage],
-        health: career.health()[0]!.toUpperCase() + career.health().slice(1),
+        stageName: domainText(
+          i18n,
+          'stage',
+          String(career.stage),
+          'name',
+          STAGE_NAMES[career.stage],
+        ),
+        health: domainText(
+          i18n,
+          'health',
+          career.health(),
+          'name',
+          career.health()[0]!.toUpperCase() + career.health().slice(1),
+        ),
         milestone: milestone
           ? {
               id: milestone.id,
-              title: milestone.displayName,
-              roleName: milestone.roleName,
-              summary: milestone.newProblem,
+              title: domainText(i18n, 'milestone', milestone.id, 'name', milestone.displayName),
+              roleName: domainText(i18n, 'milestone', milestone.id, 'role', milestone.roleName),
+              summary: domainText(i18n, 'milestone', milestone.id, 'problem', milestone.newProblem),
               progress: career.milestoneProgress(),
               ready: career.milestoneProgress() >= 1,
               requirements: milestoneRequirementProgress(milestone, career.progression()).map(
                 (entry) => {
                   const current =
                     entry.key === 'lifetimeEarned'
-                      ? formatCents(cents(entry.current))
-                      : String(Math.floor(entry.current));
+                      ? i18n.formatCents(cents(entry.current))
+                      : i18n.formatNumber(Math.floor(entry.current));
                   const target =
                     entry.key === 'lifetimeEarned'
-                      ? formatCents(cents(entry.target))
-                      : String(Math.floor(entry.target));
-                  return `${entry.met ? '✓' : '○'} ${entry.label}: ${current}/${target}`;
+                      ? i18n.formatCents(cents(entry.target))
+                      : i18n.formatNumber(Math.floor(entry.target));
+                  return i18n.t('career.requirement', {
+                    mark: entry.met ? '✓' : '○',
+                    label: domainText(i18n, 'requirement', entry.key, 'name', entry.label),
+                    current,
+                    target,
+                  });
                 },
               ),
             }
@@ -337,14 +495,35 @@ export function bindSession(
         specializations: career.unlocks.includes('specialization')
           ? Object.values(SPECIALIZATIONS).map((specialization) => ({
               id: specialization.id,
-              title: specialization.displayName,
-              meta: `${specialization.description} Trade-off: ${specialization.tradeoff}`,
+              title: domainText(
+                i18n,
+                'specialization',
+                specialization.id,
+                'name',
+                specialization.displayName,
+              ),
+              meta: i18n.t('career.tradeoff', {
+                description: domainText(
+                  i18n,
+                  'specialization',
+                  specialization.id,
+                  'description',
+                  specialization.description,
+                ),
+                tradeoff: domainText(
+                  i18n,
+                  'specialization',
+                  specialization.id,
+                  'tradeoff',
+                  specialization.tradeoff,
+                ),
+              }),
               action:
                 currentSpecialization === specialization.id
-                  ? 'Chosen'
+                  ? i18n.t('common.chosen')
                   : currentSpecialization
-                    ? `Switch ${formatCents(switchCost)}`
-                    : 'Choose',
+                    ? i18n.t('career.switch', { cost: i18n.formatCents(switchCost) })
+                    : i18n.t('common.choose'),
               enabled:
                 currentSpecialization !== specialization.id &&
                 (!currentSpecialization || career.balance >= switchCost),
@@ -368,13 +547,25 @@ export function bindSession(
         active !== null ||
         career.town.completedProjectIds.length > 0;
       ui.town.update({
-        stageName: stage.displayName,
-        population: stage.populationBand,
+        stageName: domainText(i18n, 'townStage', String(stage.stage), 'name', stage.displayName),
+        population: domainText(
+          i18n,
+          'townStage',
+          String(stage.stage),
+          'population',
+          stage.populationBand,
+        ),
         prosperity: career.town.prosperity,
-        summary: stage.summary,
+        summary: domainText(i18n, 'townStage', String(stage.stage), 'summary', stage.summary),
         activeProject: active
           ? {
-              title: COMMUNITY_PROJECTS_BY_ID[active.id]?.displayName ?? active.id,
+              title: domainText(
+                i18n,
+                'project',
+                active.id,
+                'name',
+                COMMUNITY_PROJECTS_BY_ID[active.id]?.displayName ?? active.id,
+              ),
               remainingTicks: active.remainingTicks,
             }
           : null,
@@ -395,17 +586,27 @@ export function bindSession(
             const enabled = active === null && career.balance >= project.cost && hasMaterials;
             return {
               id: project.id,
-              title: project.displayName,
-              description: project.description,
-              benefit: project.benefit,
+              title: domainText(i18n, 'project', project.id, 'name', project.displayName),
+              description: domainText(
+                i18n,
+                'project',
+                project.id,
+                'description',
+                project.description,
+              ),
+              benefit: domainText(i18n, 'project', project.id, 'benefit', project.benefit),
               cost: project.cost,
               materials:
                 materials
-                  .map(
-                    ([itemId, quantity]) =>
-                      `${quantity} ${itemId} (${world.stores.totalOf(itemId)} held)`,
-                  )
-                  .join(', ') || 'no materials needed',
+                  .map(([itemId, quantity]) => {
+                    const item = getItem(itemId);
+                    return i18n.t('town.materialHeld', {
+                      quantity: i18n.formatNumber(quantity),
+                      item: itemName(i18n, itemId, item?.displayName ?? itemId),
+                      held: i18n.formatNumber(world.stores.totalOf(itemId)),
+                    });
+                  })
+                  .join(', ') || i18n.t('town.noMaterials'),
               enabled,
             };
           }),
@@ -438,21 +639,16 @@ export function bindSession(
 
     // --- build placement ------------------------------------------------
     session.placement.events.on('placement:started', ({ kind }) => {
-      ui.setPlacing(
-        `Placing ${BUILDINGS[kind].displayName} — ${touch ? 'tap to build more, Rotate to turn, Cancel to stop' : 'click to build more, R to rotate, WASD to move, Esc to stop'}`,
-      );
+      placementState = { kind, valid: true, problem: null };
+      showPlacement();
       playUi(SOUND.uiOpen, 0.7);
     }),
     session.placement.events.on(
       'placement:moved',
       ({ kind, tileX, tileZ, rotation, valid, problem }) => {
         scene.setPlacementPreview(kind, tileX, tileZ, valid, rotation);
-        ui.setPlacing(
-          valid
-            ? `Placing ${BUILDINGS[kind].displayName} — ${touch ? 'tap to build more, Rotate to turn, Cancel to stop' : 'click to build more, R to rotate, WASD to move, Esc to stop'}`
-            : `${problem ?? 'Cannot build here.'} — ${touch ? 'tap another spot, Rotate, or Cancel' : 'WASD to move, R to rotate, Esc to stop'}`,
-          !valid,
-        );
+        placementState = { kind, valid, problem };
+        showPlacement();
       },
     ),
     session.placement.events.on('placement:placed', () => {
@@ -461,43 +657,38 @@ export function bindSession(
       refresh();
     }),
     session.placement.events.on('placement:cancelled', () => {
-      ui.setPlacing(null);
+      placementState = null;
+      showPlacement();
       scene.setPlacementPreview(null);
     }),
     session.placement.events.on('placement:refused', ({ reason }) => {
       playUi(SOUND.uiDeny, 0.7);
-      ui.hud.toast(reason, 'warn');
+      ui.hud.toast(localizeGameText(i18n, reason) ?? reason, 'warn');
     }),
 
     // --- onboarding ------------------------------------------------------
     session.onboarding.events.on('onboarding:beat', ({ beat }) => {
-      ui.coach.show(
-        touch && beat.touch ? { ...beat, body: beat.touch.body, key: beat.touch.key } : beat,
-        () => session.skipOnboarding(),
-      );
+      coachState = { beat, hint: false };
+      showCoach();
       playUi(SOUND.uiOpen, 0.5);
     }),
     session.onboarding.events.on('onboarding:hint', ({ beat }) => {
       // The hint replaces the beat's body in place rather than adding a
       // second prompt, so prompts can never stack.
-      ui.coach.show(
-        touch && beat.touch
-          ? {
-              ...beat,
-              body: beat.touch.hintBody ?? beat.touch.body,
-              key: beat.touch.key,
-            }
-          : { ...beat, body: beat.hint?.body ?? beat.body },
-        () => session.skipOnboarding(),
-      );
+      coachState = { beat, hint: true };
+      showCoach();
     }),
     session.onboarding.events.on('onboarding:beat-complete', () => playUi(SOUND.uiConfirm, 0.5)),
     session.onboarding.events.on('onboarding:complete', () => {
+      coachState = null;
       ui.coach.hide();
       refresh();
     }),
     session.onboarding.events.on('onboarding:skipped', ({ reason }) => {
-      if (reason === 'player') ui.coach.hide();
+      if (reason === 'player') {
+        coachState = null;
+        ui.coach.hide();
+      }
     }),
 
     // --- season review -----------------------------------------------------
@@ -507,6 +698,11 @@ export function bindSession(
       ui.outcome.present(summary);
       audio.play(SOUND.runSuccess, { bus: 'ui', volume: 0.7 });
       onSeasonReview();
+    }),
+    i18n.onChange(() => {
+      refresh();
+      showCoach();
+      showPlacement();
     }),
   );
 

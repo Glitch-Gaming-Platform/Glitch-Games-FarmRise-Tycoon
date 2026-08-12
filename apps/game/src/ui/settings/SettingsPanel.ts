@@ -5,7 +5,7 @@
  * localStorage, wrapped in try/catch because storage throws in private mode on
  * some browsers and losing a volume preference must never break boot.
  */
-import { button, el } from '../core/dom.js';
+import { el } from '../core/dom.js';
 import { uiIcon } from '../core/icons.js';
 import type { Screen } from '../core/Screen.js';
 import type { AudioBus } from '@engine/audio/AudioSystem.js';
@@ -22,6 +22,9 @@ import {
   resolveQualityTier,
   type QualityTier,
 } from '@engine/render/quality/QualityTier.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { languageSelect } from '../i18n/LanguageSelect.js';
+import { localizedButton, localizedText } from '../i18n/localizedDom.js';
 
 export interface SettingsValues {
   master: number;
@@ -78,11 +81,6 @@ export interface SettingsCallbacks {
   readonly onQualityChange?: (tier: QualityTier) => void;
 }
 
-const QUALITY_LABELS: Readonly<Record<QualityTier, string>> = {
-  low: 'Standard (fastest)',
-  ultra: 'Ultra (desktop)',
-};
-
 export class SettingsPanel implements Screen {
   readonly id = 'settings';
   readonly root: HTMLElement;
@@ -90,12 +88,14 @@ export class SettingsPanel implements Screen {
   readonly #songSelect: HTMLSelectElement;
   readonly #qualitySelect: HTMLSelectElement;
   readonly #songToggles = new Map<MusicId, HTMLInputElement>();
+  readonly #i18n: GameLocalization;
 
-  constructor(callbacks: SettingsCallbacks) {
+  constructor(callbacks: SettingsCallbacks, i18n: GameLocalization = createEnglishLocalization()) {
+    this.#i18n = i18n;
     this.#values = loadSettings();
 
     const slider = (
-      label: string,
+      labelKey: string,
       bus: Extract<AudioBus, 'master' | 'music' | 'sfx'>,
     ): HTMLElement => {
       const input = el('input', {
@@ -105,21 +105,22 @@ export class SettingsPanel implements Screen {
           max: '1',
           step: '0.05',
           value: String(this.#values[bus]),
-          'aria-label': label,
         },
       });
+      i18n.bindAttribute(input, 'aria-label', labelKey);
       input.addEventListener('input', () => {
         const value = Number(input.value);
         this.#values[bus] = value;
         callbacks.onVolumeChange(bus, value);
         saveSettings(this.#values);
       });
-      return el('label', { class: 'fr-field' }, el('span', { text: label }), input);
+      return el('label', { class: 'fr-field' }, localizedText(i18n, 'span', labelKey), input);
     };
 
     const debugToggle = el('input', {
-      attrs: { type: 'checkbox', 'aria-label': 'Show performance overlay' },
+      attrs: { type: 'checkbox' },
     });
+    i18n.bindAttribute(debugToggle, 'aria-label', 'settings.showPerformanceOverlay');
     debugToggle.checked = this.#values.showDebugOverlay;
     debugToggle.addEventListener('change', () => {
       this.#values.showDebugOverlay = debugToggle.checked;
@@ -133,11 +134,13 @@ export class SettingsPanel implements Screen {
     // decides renderer construction flags and a global shader chunk.
     const activeQuality = resolveQualityTier();
     const qualitySelect = el('select', {
-      attrs: { 'aria-label': 'Graphics quality' },
       testId: 'quality-select',
     }) as HTMLSelectElement;
-    for (const [tier, label] of Object.entries(QUALITY_LABELS)) {
-      qualitySelect.append(el('option', { attrs: { value: tier }, text: label }));
+    i18n.bindAttribute(qualitySelect, 'aria-label', 'settings.graphicsQuality');
+    for (const tier of ['low', 'ultra'] as const) {
+      qualitySelect.append(
+        localizedText(i18n, 'option', `settings.quality.${tier}`, { attrs: { value: tier } }),
+      );
     }
     qualitySelect.value = activeQuality;
     const qualityNote = el('p', {
@@ -148,16 +151,15 @@ export class SettingsPanel implements Screen {
       const tier = qualitySelect.value;
       if (!isQualityTier(tier)) return;
       persistQualityTier(tier);
-      qualityNote.textContent =
-        tier === activeQuality ? '' : 'Reload the page to apply the new quality level.';
+      qualityNote.textContent = tier === activeQuality ? '' : i18n.t('settings.qualityReload');
       callbacks.onQualityChange?.(tier);
     });
     this.#qualitySelect = qualitySelect;
 
     this.#songSelect = el('select', {
-      attrs: { 'aria-label': 'Current song' },
       testId: 'music-track-select',
     });
+    i18n.bindAttribute(this.#songSelect, 'aria-label', 'settings.currentSong');
     for (const track of MUSIC_TRACKS) {
       this.#songSelect.append(
         el('option', {
@@ -176,14 +178,14 @@ export class SettingsPanel implements Screen {
     });
 
     const songList = el('fieldset', { class: 'fr-music-list' });
-    songList.append(el('legend', { text: 'Songs in rotation' }));
+    songList.append(localizedText(i18n, 'legend', 'settings.songsInRotation'));
     for (const track of MUSIC_TRACKS) {
       const toggle = el('input', {
         attrs: {
           type: 'checkbox',
-          'aria-label': `Play ${track.title}`,
         },
       });
+      i18n.bindAttribute(toggle, 'aria-label', 'settings.playSong', { song: track.title });
       this.#songToggles.set(track.id, toggle);
       toggle.addEventListener('change', () => {
         const disabled = new Set(this.#values.disabledMusicTracks);
@@ -221,24 +223,30 @@ export class SettingsPanel implements Screen {
         'div',
         { class: 'fr-panel fr-panel--compact fr-panel--settings' },
         el('div', { class: 'fr-screen-icon' }, uiIcon('settings', '', 'fr-screen-icon__image')),
-        el('span', { class: 'fr-ribbon', text: 'Farmhouse controls' }),
-        el('h1', { class: 'fr-title', text: 'Settings' }),
-        slider('Master volume', 'master'),
-        slider('Music', 'music'),
+        localizedText(i18n, 'span', 'settings.ribbon', { class: 'fr-ribbon' }),
+        localizedText(i18n, 'h1', 'settings.title', { class: 'fr-title' }),
+        languageSelect(i18n, { testId: 'settings-language-select' }),
+        slider('settings.masterVolume', 'master'),
+        slider('settings.music', 'music'),
         el(
           'label',
           { class: 'fr-field fr-field--music-select' },
-          el('span', { text: 'Current song' }),
+          localizedText(i18n, 'span', 'settings.currentSong'),
           this.#songSelect,
         ),
         songList,
-        slider('Effects', 'sfx'),
-        el('label', { class: 'fr-field' }, el('span', { text: 'Graphics quality' }), qualitySelect),
+        slider('settings.effects', 'sfx'),
+        el(
+          'label',
+          { class: 'fr-field' },
+          localizedText(i18n, 'span', 'settings.graphicsQuality'),
+          qualitySelect,
+        ),
         qualityNote,
         el(
           'label',
           { class: 'fr-field' },
-          el('span', { text: 'Performance overlay' }),
+          localizedText(i18n, 'span', 'settings.performanceOverlay'),
           debugToggle,
         ),
         el(
@@ -246,15 +254,21 @@ export class SettingsPanel implements Screen {
           { class: 'fr-actions' },
           ...(callbacks.onPrivacy
             ? [
-                button('Privacy choices', callbacks.onPrivacy, {
+                localizedButton(i18n, 'settings.privacy', callbacks.onPrivacy, {
                   class: 'fr-btn fr-btn--secondary',
                 }),
               ]
             : []),
-          button('Back', callbacks.onClose, { class: 'fr-btn' }),
+          localizedButton(i18n, 'settings.back', callbacks.onClose, { class: 'fr-btn' }),
         ),
       ),
     );
+    i18n.onChange(() => {
+      if (qualitySelect.value !== activeQuality) {
+        qualityNote.textContent = i18n.t('settings.qualityReload');
+      }
+      this.#syncMusicControls();
+    });
   }
 
   get values(): SettingsValues {
@@ -290,7 +304,7 @@ export class SettingsPanel implements Screen {
       const enabled = !disabled.has(id);
       toggle.checked = enabled;
       toggle.disabled = enabled && enabledCount === 1;
-      toggle.title = toggle.disabled ? 'At least one song must stay enabled.' : '';
+      toggle.title = toggle.disabled ? this.#i18n.t('settings.keepOneSong') : '';
     }
   }
 }

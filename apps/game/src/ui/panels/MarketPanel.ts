@@ -12,10 +12,12 @@
  * follow and show their premium over spot as a percentage. This keeps the
  * first sale discoverable without hiding the longer-term trade-off.
  */
-import { formatCents, formatTicks, type Cents } from '@farmrise/shared';
+import { ticksToSeconds, type Cents } from '@farmrise/shared';
 import { button, clear, el } from '../core/dom.js';
 import { itemIcon, uiIcon } from '../core/icons.js';
 import type { InventoryRow } from '@game/items/InventoryView.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedButton, localizedText } from '../i18n/localizedDom.js';
 
 export interface ContractRow {
   readonly action: 'accept' | 'deliver';
@@ -57,14 +59,18 @@ export class MarketPanel {
   readonly #inventory: HTMLElement;
   readonly #summary: HTMLElement;
   #visible = false;
+  #snapshot: MarketSnapshot | null = null;
 
-  constructor(private readonly callbacks: MarketPanelCallbacks) {
+  constructor(
+    private readonly callbacks: MarketPanelCallbacks,
+    private readonly i18n: GameLocalization = createEnglishLocalization(),
+  ) {
     this.#contracts = el('div', { class: 'fr-market__list', testId: 'market-contracts' });
     this.#contractsHeading = el('h3', {
       class: 'fr-panel-card__section',
-      text: 'Contracts',
       testId: 'market-contracts-heading',
     });
+    i18n.bindText(this.#contractsHeading, 'market.contracts');
     this.#inventory = el('div', { class: 'fr-market__list', testId: 'market-inventory' });
     this.#summary = el('p', { class: 'fr-market__summary' });
 
@@ -73,7 +79,7 @@ export class MarketPanel {
       {
         class: 'fr-panel-layer',
         testId: 'market-panel',
-        attrs: { role: 'dialog', 'aria-label': 'Market' },
+        attrs: { role: 'dialog' },
       },
       el(
         'div',
@@ -85,20 +91,24 @@ export class MarketPanel {
             'div',
             { class: 'fr-panel-card__title' },
             uiIcon('market', '', 'fr-panel-card__icon'),
-            el('h2', { text: 'Millbrook Grocers' }),
+            localizedText(i18n, 'h2', 'market.title'),
           ),
-          button('Close', () => this.callbacks.onClose(), {
+          localizedButton(i18n, 'common.close', () => this.callbacks.onClose(), {
             class: 'fr-btn fr-btn--ghost fr-btn--small',
             testId: 'market-close',
           }),
         ),
         this.#summary,
-        el('h3', { class: 'fr-panel-card__section', text: 'Sell now' }),
+        localizedText(i18n, 'h3', 'market.sellNow', { class: 'fr-panel-card__section' }),
         this.#inventory,
         this.#contractsHeading,
         this.#contracts,
       ),
     );
+    i18n.bindAttribute(this.root, 'aria-label', 'market.dialog');
+    i18n.onChange(() => {
+      if (this.#snapshot) this.update(this.#snapshot);
+    });
     this.root.hidden = true;
   }
 
@@ -112,9 +122,12 @@ export class MarketPanel {
   }
 
   update(snapshot: MarketSnapshot): void {
-    this.#summary.textContent =
-      `${formatCents(snapshot.balance)} in hand  ·  ` +
-      `storage ${snapshot.storageUsed}/${snapshot.storageCapacity}`;
+    this.#snapshot = snapshot;
+    this.#summary.textContent = this.i18n.t('market.summary', {
+      balance: this.i18n.formatCents(snapshot.balance),
+      used: this.i18n.formatNumber(snapshot.storageUsed),
+      capacity: this.i18n.formatNumber(snapshot.storageCapacity),
+    });
 
     this.#contractsHeading.hidden = !snapshot.contractsUnlocked;
     this.#contracts.hidden = !snapshot.contractsUnlocked;
@@ -122,7 +135,7 @@ export class MarketPanel {
     if (snapshot.contractsUnlocked) {
       if (snapshot.contracts.length === 0) {
         this.#contracts.append(
-          el('p', { class: 'fr-market__empty', text: 'No contracts posted right now.' }),
+          localizedText(this.i18n, 'p', 'market.noContracts', { class: 'fr-market__empty' }),
         );
       }
       for (const contract of snapshot.contracts) {
@@ -135,7 +148,7 @@ export class MarketPanel {
       this.#inventory.append(
         el('p', {
           class: 'fr-market__empty',
-          text: 'Nothing harvested yet. Grow something first.',
+          text: this.i18n.t('market.empty'),
         }),
       );
     }
@@ -153,21 +166,29 @@ export class MarketPanel {
       el(
         'div',
         { class: 'fr-market__info' },
-        el('strong', { text: `${contract.quantity} × ${contract.displayName}` }),
+        el('strong', {
+          text: `${this.i18n.formatNumber(contract.quantity)} × ${contract.displayName}`,
+        }),
         el('span', {
           class: 'fr-market__meta',
-          text:
-            `${formatCents(contract.payout)}  ` +
-            `(+${premium}% over spot)  ·  ${formatTicks(contract.ticksRemaining)} left  ·  ` +
-            `you hold ${contract.held}`,
+          text: this.i18n.t('market.contractMeta', {
+            payout: this.i18n.formatCents(contract.payout),
+            premium: this.i18n.formatNumber(premium),
+            time: this.i18n.formatDurationSeconds(ticksToSeconds(contract.ticksRemaining)),
+            held: this.i18n.formatNumber(contract.held),
+          }),
         }),
       ),
       button(
         contract.action === 'accept'
-          ? 'Accept contract'
+          ? this.i18n.t('market.accept')
           : contract.canFulfil
-            ? `Deliver ${Math.min(contract.held, contract.quantity)}`
-            : `Need ${contract.quantity - contract.held} more`,
+            ? this.i18n.t('market.deliver', {
+                quantity: this.i18n.formatNumber(Math.min(contract.held, contract.quantity)),
+              })
+            : this.i18n.t('market.needMore', {
+                quantity: this.i18n.formatNumber(contract.quantity - contract.held),
+              }),
         () => this.callbacks.onFulfil(contract.orderId, contract.action),
         {
           class: 'fr-btn fr-btn--small',
@@ -189,23 +210,36 @@ export class MarketPanel {
       el(
         'div',
         { class: 'fr-market__info' },
-        el('strong', { text: `${row.quantity} × ${row.displayName}` }),
+        el('strong', { text: `${this.i18n.formatNumber(row.quantity)} × ${row.displayName}` }),
         el('span', {
           class: 'fr-market__meta',
-          text: `${formatCents(row.unitPrice)} each  ·  ${row.formattedTotal} for all`,
+          text: this.i18n.t('market.itemMeta', {
+            price: this.i18n.formatCents(row.unitPrice),
+            total: this.i18n.formatCents(row.totalValue),
+          }),
         }),
       ),
       el(
         'div',
         { class: 'fr-market__actions' },
-        button('Sell 1', () => this.callbacks.onSellSpot(row.itemId, 1), {
-          class: 'fr-btn fr-btn--small fr-btn--ghost',
-          testId: `market-sell-one-${row.itemId}`,
-        }),
-        button('Sell all', () => this.callbacks.onSellSpot(row.itemId, row.quantity), {
-          class: 'fr-btn fr-btn--small',
-          testId: `market-sell-all-${row.itemId}`,
-        }),
+        localizedButton(
+          this.i18n,
+          'market.sellOne',
+          () => this.callbacks.onSellSpot(row.itemId, 1),
+          {
+            class: 'fr-btn fr-btn--small fr-btn--ghost',
+            testId: `market-sell-one-${row.itemId}`,
+          },
+        ),
+        localizedButton(
+          this.i18n,
+          'market.sellAll',
+          () => this.callbacks.onSellSpot(row.itemId, row.quantity),
+          {
+            class: 'fr-btn fr-btn--small',
+            testId: `market-sell-all-${row.itemId}`,
+          },
+        ),
       ),
     );
   }

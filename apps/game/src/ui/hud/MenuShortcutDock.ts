@@ -8,6 +8,8 @@
  */
 import { el } from '../core/dom.js';
 import { uiIcon, type UiIconId } from '../core/icons.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedText } from '../i18n/localizedDom.js';
 
 export interface MenuShortcutCallbacks {
   readonly onMarket: () => void;
@@ -19,19 +21,23 @@ export interface MenuShortcutCallbacks {
 export class MenuShortcutDock {
   readonly root: HTMLElement;
 
-  constructor(callbacks: MenuShortcutCallbacks) {
+  constructor(
+    callbacks: MenuShortcutCallbacks,
+    i18n: GameLocalization = createEnglishLocalization(),
+  ) {
     this.root = el(
       'nav',
       {
         class: 'fr-menu-shortcuts',
         testId: 'menu-shortcuts',
-        attrs: { 'aria-label': 'Gameplay menus' },
+        attrs: {},
       },
-      shortcut('Market', 'M', 'market', callbacks.onMarket, 'menu-shortcut-market'),
-      shortcut('Build', 'B', 'barn', callbacks.onBuild, 'menu-shortcut-build'),
-      shortcut('Office', 'C', 'land', callbacks.onCareer, 'menu-shortcut-career'),
-      shortcut('Town', 'T', 'market', callbacks.onTown, 'menu-shortcut-town'),
+      shortcut(i18n, 'dock.market', 'M', 'market', callbacks.onMarket, 'menu-shortcut-market'),
+      shortcut(i18n, 'dock.build', 'B', 'barn', callbacks.onBuild, 'menu-shortcut-build'),
+      shortcut(i18n, 'dock.office', 'C', 'land', callbacks.onCareer, 'menu-shortcut-career'),
+      shortcut(i18n, 'dock.town', 'T', 'market', callbacks.onTown, 'menu-shortcut-town'),
     );
+    i18n.bindAttribute(this.root, 'aria-label', 'dock.label');
     this.root.hidden = true;
   }
 
@@ -41,26 +47,31 @@ export class MenuShortcutDock {
 }
 
 function shortcut(
-  label: string,
+  i18n: GameLocalization,
+  labelKey: string,
   key: string,
   icon: UiIconId,
   onClick: () => void,
   testId: string,
 ): HTMLButtonElement {
-  return el(
+  const control = el(
     'button',
     {
       class: 'fr-menu-shortcut',
       testId,
       attrs: {
         type: 'button',
-        'aria-label': `Open ${label.toLowerCase()} (${key})`,
         'aria-keyshortcuts': key,
       },
       on: { click: onClick },
     },
     uiIcon(icon, '', 'fr-menu-shortcut__icon'),
-    el('span', { class: 'fr-menu-shortcut__name', text: label }),
+    localizedText(i18n, 'span', labelKey, { class: 'fr-menu-shortcut__name' }),
     el('kbd', { class: 'fr-menu-shortcut__key', text: key }),
   );
+  i18n.bindAttribute(control, 'aria-label', 'dock.open', {
+    menu: { id: labelKey },
+    key,
+  });
+  return control;
 }

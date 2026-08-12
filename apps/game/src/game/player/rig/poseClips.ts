@@ -14,7 +14,9 @@
  * Positive X rotation swings a bone's tail toward +Z, which is the direction
  * the farmer faces. So:
  *   - `thigh` positive = knee forward, negative = leg trailing behind.
- *   - `shin` is always <= 0, because a knee only bends one way.
+ *   - `shin` follows the exported mesh's local knee axis. WALK uses positive X
+ *     for the reviewer-approved backward heel fold; legacy clips retain their
+ *     existing authored sign.
  *   - `foot` positive = toes up (dorsiflexion), negative = pointed (plantarflexion).
  *
  * ## Where the numbers came from
@@ -74,17 +76,15 @@ export interface Clip {
  * therefore 0.37 m by construction, and the pelvis track is not decoration: it
  * is the third variable in that solve, which is why the pelvis is *lowest* at
  * both double-support beats (t = 0 and t = 0.6) and highest at midstance.
- * That is the compass gait, and it is what buys the reach - a foot 0.185 m in
- * front of the hip is only reachable with the pelvis 4 cm down.
+ * That is the compass gait, and it is what controls reach without lifting the
+ * knee artificially.
  *
- * ## Why the forward reach is larger than the previous version's
+ * ## Why the ankle never crosses in front
  *
- * The lead leg stays knee-first through terminal swing and contact. The thigh
- * carries the knee forward while the shin remains folded behind it, avoiding
- * the straight-boot "kick" silhouette even at the widest part of the stride.
- * The excursion remains rear-biased because the trailing half of the cycle is
- * where the toe roll adds its own extension. During recovery, only the foot
- * bone curls the boot backward; the authored knee path remains unchanged.
+ * The leg passes nearly straight beneath the body, travels rearward, then
+ * folds backward at the knee as the foot rises. It straightens toward contact
+ * from behind without placing the ankle on the front side. The foot bone keeps
+ * its authored roll and receives no yaw correction.
  */
 export const WALK: Clip = {
   name: 'walk',
@@ -109,9 +109,9 @@ export const WALK: Clip = {
       t: 0.0,
       root: [-0.034, -0.025, 0.002],
       pose: {
-        'thigh.L': [0.58, 0, 0],
-        'shin.L': [-0.68, 0, 0],
-        'foot.L': [1.3, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.58899, 0, 0],
+        'foot.L': [0.61101, 0, 0],
         'toe.L': [0, 0, 0],
         'shoulder.R': [0.06, 0, -0.04],
         'upperarm.R': [0.38, 0, -0.08],
@@ -134,9 +134,9 @@ export const WALK: Clip = {
       t: 0.12,
       root: [-0.038, -0.038, 0.008],
       pose: {
-        'thigh.L': [0.45, 0, 0],
-        'shin.L': [-0.9, 0, 0],
-        'foot.L': [0.9, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.64183, 0, 0],
+        'foot.L': [-0.19183, 0, 0],
         'toe.L': [0, 0, 0],
         'shoulder.R': [0.055, 0, -0.045],
         'upperarm.R': [0.36, 0, -0.09],
@@ -156,9 +156,9 @@ export const WALK: Clip = {
       t: 0.3,
       root: [-0.026, -0.0048, 0.002],
       pose: {
-        'thigh.L': [0.112, 0, 0],
-        'shin.L': [-0.301, 0, 0],
-        'foot.L': [0.4, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.21953, 0, 0],
+        'foot.L': [-0.00853, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.11, 0, -0.06],
         'forearm.R': [-0.24, 0, -0.025],
@@ -175,9 +175,9 @@ export const WALK: Clip = {
       t: 0.46,
       root: [-0.006, -0.018, -0.004],
       pose: {
-        'thigh.L': [-0.223, 0, 0],
-        'shin.L': [-0.193, 0, 0],
-        'foot.L': [0.7, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.47345, 0, 0],
+        'foot.L': [-0.18945, 0, 0],
         'toe.L': [0.3, 0, 0],
         'upperarm.R': [-0.2, 0, -0.045],
         'forearm.R': [-0.18, 0, -0.02],
@@ -194,9 +194,9 @@ export const WALK: Clip = {
       t: 0.6,
       root: [0.03, -0.045, -0.006],
       pose: {
-        'thigh.L': [-0.4, 0, 0],
-        'shin.L': [-0.56, 0, 0],
-        'foot.L': [1.6, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [1.05354, 0, 0],
+        'foot.L': [-0.41354, 0, 0],
         'toe.L': [0.46, 0, 0],
         'upperarm.R': [-0.36, 0, -0.075],
         'forearm.R': [-0.16, 0, -0.025],
@@ -216,9 +216,9 @@ export const WALK: Clip = {
       t: 0.68,
       root: [0.032, -0.035, 0.004],
       pose: {
-        'thigh.L': [-0.6, 0, 0],
-        'shin.L': [-0.8, 0, 0],
-        'foot.L': [2.4, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [1.5753, 0, 0],
+        'foot.L': [-0.5753, 0, 0],
         'toe.L': [0.06, 0, 0],
         'upperarm.R': [-0.3, 0, -0.09],
         'forearm.R': [-0.18, 0, -0.03],
@@ -236,9 +236,9 @@ export const WALK: Clip = {
       t: 0.72,
       root: [0.032, -0.025, 0.005],
       pose: {
-        'thigh.L': [-0.46, 0, 0],
-        'shin.L': [-1.12, 0, 0],
-        'foot.L': [2.6, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [1.68404, 0, 0],
+        'foot.L': [-0.66404, 0, 0],
         'toe.L': [0.04, 0, 0],
         'upperarm.R': [-0.2, 0, -0.083],
         'forearm.R': [-0.2, 0, -0.029],
@@ -255,9 +255,9 @@ export const WALK: Clip = {
       t: 0.76,
       root: [0.03, -0.012, 0.004],
       pose: {
-        'thigh.L': [-0.3, 0, 0],
-        'shin.L': [-1.25, 0, 0],
-        'foot.L': [2.6, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [1.5948, 0, 0],
+        'foot.L': [-0.5448, 0, 0],
         'toe.L': [0.02, 0, 0],
         'upperarm.R': [-0.1, 0, -0.075],
         'forearm.R': [-0.22, 0, -0.028],
@@ -272,9 +272,9 @@ export const WALK: Clip = {
       t: 0.84,
       root: [0.022, 0.02, 0.004],
       pose: {
-        'thigh.L': [0.055, 0, 0],
-        'shin.L': [-1.4, 0, 0],
-        'foot.L': [2.3, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [1.34642, 0, 0],
+        'foot.L': [-0.39142, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.12, 0, -0.065],
         'forearm.R': [-0.28, 0, -0.025],
@@ -289,9 +289,9 @@ export const WALK: Clip = {
       t: 0.88,
       root: [0.016, 0.01, 0.003],
       pose: {
-        'thigh.L': [0.235, 0, 0],
-        'shin.L': [-1.2, 0, 0],
-        'foot.L': [1.9, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.99798, 0, 0],
+        'foot.L': [-0.06298, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.22, 0, -0.068],
         'forearm.R': [-0.31, 0, -0.028],
@@ -303,15 +303,14 @@ export const WALK: Clip = {
       },
     },
     {
-      // Terminal swing begins only after the heel has descended. The thigh now
-      // leads decisively while the heel stays tucked behind the knee. The foot
-      // bone keeps the boot itself pointing backward.
+      // Terminal swing begins only after the heel has descended. The heel stays
+      // tucked behind the knee and the ankle approaches contact from behind.
       t: 0.92,
       root: [0.008, 0, 0.002],
       pose: {
-        'thigh.L': [0.43, 0, 0],
-        'shin.L': [-1.05, 0, 0],
-        'foot.L': [1.6, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.76266, 0, 0],
+        'foot.L': [0.21734, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.32, 0, -0.07],
         'forearm.R': [-0.34, 0, -0.03],
@@ -328,9 +327,9 @@ export const WALK: Clip = {
       t: 0.94,
       root: [-0.004, -0.002, 0.002],
       pose: {
-        'thigh.L': [0.48, 0, 0],
-        'shin.L': [-0.9, 0, 0],
-        'foot.L': [1.5, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.6435, 0, 0],
+        'foot.L': [0.4365, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.34, 0, -0.073],
         'forearm.R': [-0.345, 0, -0.03],
@@ -349,9 +348,9 @@ export const WALK: Clip = {
       t: 0.96,
       root: [-0.016, -0.012, 0.002],
       pose: {
-        'thigh.L': [0.53, 0, 0],
-        'shin.L': [-0.8, 0, 0],
-        'foot.L': [1.4, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.59793, 0, 0],
+        'foot.L': [0.53207, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.36, 0, -0.076],
         'forearm.R': [-0.35, 0, -0.03],
@@ -368,9 +367,9 @@ export const WALK: Clip = {
       t: 0.98,
       root: [-0.026, -0.02, 0.002],
       pose: {
-        'thigh.L': [0.56, 0, 0],
-        'shin.L': [-0.72, 0, 0],
-        'foot.L': [1.35, 0, 0],
+        'thigh.L': [0, 0, 0],
+        'shin.L': [0.58357, 0, 0],
+        'foot.L': [0.60643, 0, 0],
         'toe.L': [0, 0, 0],
         'upperarm.R': [0.37, 0, -0.078],
         'forearm.R': [-0.35, 0, -0.03],

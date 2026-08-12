@@ -13,6 +13,7 @@ expected to work inside.
 | A crop, animal, building, event or item definition | `packages/shared/src/domain/` |
 | A request or response shape | `packages/shared/src/schemas/` |
 | A reusable runtime capability (rendering, input, audio, physics, scenes) | `apps/game/src/engine/<area>/` |
+| A player-facing translation or locale registration | `apps/game/src/ui/i18n/` — English source plus one lazy catalog per locale |
 | Farm state or its evolution | `apps/game/src/game/world/FarmWorld.ts` |
 | A player-initiated action | `apps/game/src/game/world/FarmCommands.ts` (one function per intent) |
 | A per-frame game behaviour | `apps/game/src/game/systems/` |

@@ -136,8 +136,9 @@ async function reachEggStack(page: Page) {
 
   // The first plot is north-west of the shelter. The basket is on its east
   // side, and the shelter's solid footprint blocks a straight diagonal. Walk
-  // a three-leg route below the building. These durations follow the shipped
-  // 3.773 m/s sprint rather than the old arcade-speed player movement.
+  // a three-leg route below the building. These holds are collision-bounded:
+  // each leg reaches a building edge before turning, so movement-speed tuning
+  // must not shorten them into a corner-cutting route.
   await page.waitForTimeout(1_000);
   await page.keyboard.down('Shift');
   await page.keyboard.down('s');

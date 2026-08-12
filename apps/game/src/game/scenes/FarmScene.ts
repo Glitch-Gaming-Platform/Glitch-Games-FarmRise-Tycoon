@@ -63,6 +63,7 @@ import {
   createChickenPose,
 } from '../animals/chickenMotion.js';
 import { COW_COLLISION_RADIUS, cowPose, createCowPose } from '../animals/cowMotion.js';
+import type { TextLocalizer } from '@engine/i18n/Localization.js';
 
 export const FARM_SCENE_ID = 'farm';
 
@@ -108,6 +109,8 @@ export interface FarmSceneOptions {
    * capture still exercises the shipping views, materials and clips.
    */
   readonly reviewCamera?: ReviewCameraOverride;
+  /** Presentation-only copy for loading and world-space status. */
+  readonly localization?: TextLocalizer;
 }
 
 export class FarmScene implements GameScene {
@@ -176,7 +179,7 @@ export class FarmScene implements GameScene {
   }
 
   async load(context: SceneLoadContext): Promise<void> {
-    context.reportProgress(0.05, 'Surveying the land');
+    context.reportProgress(0.05, this.#text('loading.surveying', 'Surveying the land'));
 
     const resumed = this.options.career !== undefined;
     const state =
@@ -240,7 +243,7 @@ export class FarmScene implements GameScene {
       : world.grid.tileToWorld(level.spawn.tileX, level.spawn.tileZ);
     const player = new Player(spawn.x, spawn.z);
 
-    context.reportProgress(0.55, 'Turning the soil');
+    context.reportProgress(0.55, this.#text('loading.turningSoil', 'Turning the soil'));
     const farmView = new FarmView(world, library, {
       shadowMapSize: this.options.shadowMapSize,
       ...(this.options.pipeline ? { pipeline: this.options.pipeline } : {}),
@@ -249,7 +252,7 @@ export class FarmScene implements GameScene {
     const playerView = new PlayerView(player, library, Boolean(this.options.pipeline?.active));
     this.root.add(farmView.object, playerView.object);
 
-    context.reportProgress(0.7, 'Waking the animals');
+    context.reportProgress(0.7, this.#text('loading.wakingAnimals', 'Waking the animals'));
     const input = context.services.resolve(InputToken) as InputSystem<GameAction>;
     const playerController = new PlayerController(player, world, world.physics, input);
     const incidents = new IncidentDirector(career);
@@ -337,7 +340,7 @@ export class FarmScene implements GameScene {
     });
     this.#refreshDynamicColliders();
 
-    context.reportProgress(1, 'Ready');
+    context.reportProgress(1, this.#text('loading.ready', 'Ready'));
     this.events.emit('farm:ready', { level: level.id, resumed });
   }
 
@@ -551,7 +554,10 @@ export class FarmScene implements GameScene {
         if (context.signal.aborted) return null;
         console.warn(`[FarmScene] art family "${id}" unavailable, falling back`, error);
       }
-      context.reportProgress(0.05 + ((index + 1) / families.length) * 0.45, 'Unloading the truck');
+      context.reportProgress(
+        0.05 + ((index + 1) / families.length) * 0.45,
+        this.#text('loading.unloadingTruck', 'Unloading the truck'),
+      );
     }
 
     if (loaded === 0) {
@@ -576,7 +582,7 @@ export class FarmScene implements GameScene {
   async #loadSurfaces(context: SceneLoadContext): Promise<SurfaceLibrary | null> {
     const loader = this.options.assets;
     if (!loader) return null;
-    context.reportProgress(0.52, 'Weathering the ground');
+    context.reportProgress(0.52, this.#text('loading.weatheringGround', 'Weathering the ground'));
     try {
       const library = await SurfaceLibrary.load(
         loader,
@@ -621,6 +627,10 @@ export class FarmScene implements GameScene {
     } finally {
       this.#loadingSeasonPacks.delete(season);
     }
+  }
+
+  #text(key: string, fallback: string): string {
+    return this.options.localization?.t(key, undefined, fallback) ?? fallback;
   }
 
   dispose(): void {

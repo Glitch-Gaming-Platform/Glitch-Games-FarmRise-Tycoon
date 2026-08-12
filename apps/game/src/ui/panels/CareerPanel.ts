@@ -1,6 +1,8 @@
-import { formatCents, type Cents } from '@farmrise/shared';
+import type { Cents } from '@farmrise/shared';
 import { button, clear, el } from '../core/dom.js';
 import { uiIcon } from '../core/icons.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedButton, localizedText } from '../i18n/localizedDom.js';
 
 export interface CareerMilestoneSnapshot {
   readonly id: string;
@@ -60,8 +62,12 @@ export class CareerPanel {
   readonly #body: HTMLElement;
   readonly #summary: HTMLElement;
   #visible = false;
+  #snapshot: CareerPanelSnapshot | null = null;
 
-  constructor(private readonly callbacks: CareerPanelCallbacks) {
+  constructor(
+    private readonly callbacks: CareerPanelCallbacks,
+    private readonly i18n: GameLocalization = createEnglishLocalization(),
+  ) {
     this.#body = el('div', { class: 'fr-career__body', testId: 'career-options' });
     this.#summary = el('p', { class: 'fr-market__summary' });
     this.root = el(
@@ -69,7 +75,7 @@ export class CareerPanel {
       {
         class: 'fr-panel-layer',
         testId: 'career-panel',
-        attrs: { role: 'dialog', 'aria-label': 'Farm office' },
+        attrs: { role: 'dialog' },
       },
       el(
         'div',
@@ -81,9 +87,9 @@ export class CareerPanel {
             'div',
             { class: 'fr-panel-card__title' },
             uiIcon('land', '', 'fr-panel-card__icon'),
-            el('h2', { text: 'Farm Office' }),
+            localizedText(i18n, 'h2', 'career.title'),
           ),
-          button('Close', callbacks.onClose, {
+          localizedButton(i18n, 'common.close', callbacks.onClose, {
             class: 'fr-btn fr-btn--ghost fr-btn--small',
             testId: 'career-close',
           }),
@@ -92,6 +98,10 @@ export class CareerPanel {
         this.#body,
       ),
     );
+    i18n.bindAttribute(this.root, 'aria-label', 'career.dialog');
+    i18n.onChange(() => {
+      if (this.#snapshot) this.update(this.#snapshot);
+    });
     this.root.hidden = true;
   }
 
@@ -105,23 +115,34 @@ export class CareerPanel {
   }
 
   update(snapshot: CareerPanelSnapshot): void {
-    this.#summary.textContent = `${snapshot.stageName}  ·  ${snapshot.health}  ·  ${formatCents(snapshot.balance)} in hand`;
+    this.#snapshot = snapshot;
+    this.#summary.textContent = this.i18n.t('career.summary', {
+      stage: snapshot.stageName,
+      health: snapshot.health,
+      balance: this.i18n.formatCents(snapshot.balance),
+    });
     clear(this.#body);
 
-    this.#body.append(el('h3', { class: 'fr-panel-card__section', text: 'Current milestone' }));
+    this.#body.append(
+      localizedText(this.i18n, 'h3', 'career.currentMilestone', {
+        class: 'fr-panel-card__section',
+      }),
+    );
     this.#body.append(this.#milestone(snapshot.milestone));
-    this.#appendRows('Specialization', snapshot.specializations, (row) =>
+    this.#appendRows('career.specialization', snapshot.specializations, (row) =>
       this.callbacks.onChooseSpecialization(row.id),
     );
-    this.#appendRows('Processing', snapshot.processors, (row) =>
+    this.#appendRows('career.processing', snapshot.processors, (row) =>
       this.callbacks.onQueueProcessing(row.buildingId, row.recipeId),
     );
-    this.#appendRows('Workers', snapshot.workers, (row) => this.callbacks.onHireWorker(row.id));
-    this.#appendRows('Finance', snapshot.loans, (row) => {
+    this.#appendRows('career.workers', snapshot.workers, (row) =>
+      this.callbacks.onHireWorker(row.id),
+    );
+    this.#appendRows('career.finance', snapshot.loans, (row) => {
       if (row.loanId && row.amount) this.callbacks.onRepayLoan(row.loanId, row.amount);
       else this.callbacks.onTakeLoan(row.id);
     });
-    this.#appendRows('Insurance', snapshot.insurance, (row) => {
+    this.#appendRows('career.insurance', snapshot.insurance, (row) => {
       if (row.id === 'cancel-policy') this.callbacks.onCancelInsurance();
       else this.callbacks.onBuyInsurance(row.id);
     });
@@ -129,26 +150,25 @@ export class CareerPanel {
 
   #milestone(milestone: CareerMilestoneSnapshot | null): HTMLElement {
     if (!milestone) {
-      return el('p', { class: 'fr-market__empty', text: 'Every estate milestone is complete.' });
+      return localizedText(this.i18n, 'p', 'career.complete', { class: 'fr-market__empty' });
     }
     const fill = el('div', { class: 'fr-objective__fill' });
     fill.style.width = `${Math.round(milestone.progress * 100)}%`;
-    return el(
+    const card = el(
       'div',
       { class: `fr-career__milestone${milestone.ready ? ' fr-career__milestone--ready' : ''}` },
       el('strong', { text: milestone.title }),
-      el('span', { class: 'fr-market__meta', text: `Next role: ${milestone.roleName}` }),
-      el(
-        'div',
-        { class: 'fr-objective__track', attrs: { 'aria-label': 'Milestone progress' } },
-        fill,
-      ),
+      el('span', {
+        class: 'fr-market__meta',
+        text: this.i18n.t('career.nextRole', { role: milestone.roleName }),
+      }),
+      el('div', { class: 'fr-objective__track' }, fill),
       ...milestone.requirements.map((requirement) =>
         el('span', { class: 'fr-career__requirement', text: requirement }),
       ),
       el('span', { class: 'fr-market__meta', text: milestone.summary }),
       button(
-        milestone.ready ? 'Claim milestone' : 'Not ready',
+        this.i18n.t(milestone.ready ? 'career.claim' : 'career.notReady'),
         () => {
           this.callbacks.onClaimMilestone(milestone.id);
         },
@@ -159,15 +179,23 @@ export class CareerPanel {
         },
       ),
     );
+    this.i18n.bindAttribute(
+      card.querySelector<HTMLElement>('.fr-objective__track')!,
+      'aria-label',
+      'career.milestoneProgress',
+    );
+    return card;
   }
 
   #appendRows<T extends CareerActionRow>(
-    title: string,
+    titleKey: string,
     rows: readonly T[],
     onAction: (row: T) => void,
   ): void {
     if (rows.length === 0) return;
-    this.#body.append(el('h3', { class: 'fr-panel-card__section', text: title }));
+    this.#body.append(
+      localizedText(this.i18n, 'h3', titleKey, { class: 'fr-panel-card__section' }),
+    );
     const list = el('div', { class: 'fr-market__list' });
     for (const row of rows) {
       list.append(

@@ -8,6 +8,7 @@
  */
 import type { GameAction } from '@game/GameActions.js';
 import { el } from '../core/dom.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
 
 export interface TouchControlCallbacks {
   readonly setAction: (action: GameAction, down: boolean) => void;
@@ -22,21 +23,31 @@ export class TouchControls {
   readonly #placement: HTMLElement;
   readonly #releases: Array<() => void> = [];
 
-  constructor(callbacks: TouchControlCallbacks) {
+  constructor(
+    callbacks: TouchControlCallbacks,
+    private readonly i18n: GameLocalization = createEnglishLocalization(),
+  ) {
     const movement = this.#joystick(callbacks);
     const actions = el(
       'div',
       { class: 'fr-touch-actions' },
-      this.#actionButton('cycleCrop', 'Change seed', 'Seed', 'touch-cycle', callbacks, true),
+      this.#actionButton(
+        'cycleCrop',
+        'touch.changeSeed',
+        'touch.seed',
+        'touch-cycle',
+        callbacks,
+        true,
+      ),
       this.#actionButton(
         'prevent',
-        'Protect the farm',
-        'Protect',
+        'touch.protectFarm',
+        'touch.protect',
         'touch-prevent',
         callbacks,
         true,
       ),
-      this.#actionButton('interact', 'Work', 'Work', 'touch-interact', callbacks, true),
+      this.#actionButton('interact', 'touch.work', 'touch.work', 'touch-interact', callbacks, true),
     );
 
     this.#gameplay = el(
@@ -44,31 +55,39 @@ export class TouchControls {
       { class: 'fr-touch-gameplay' },
       movement,
       actions,
-      this.#actionButton('pause', 'Pause', 'Ⅱ', 'touch-pause', callbacks, true),
+      this.#actionButton('pause', 'touch.pause', null, 'touch-pause', callbacks, true, 'Ⅱ'),
     );
     this.#placement = el(
       'div',
       { class: 'fr-touch-placement' },
       this.#actionButton(
         'rotatePlacement',
-        'Rotate placement',
-        'Rotate',
+        'touch.rotatePlacement',
+        'touch.rotate',
         'touch-rotate',
         callbacks,
         true,
       ),
-      this.#actionButton('cancel', 'Cancel placement', 'Cancel', 'touch-cancel', callbacks, true),
+      this.#actionButton(
+        'cancel',
+        'touch.cancelPlacement',
+        'touch.cancel',
+        'touch-cancel',
+        callbacks,
+        true,
+      ),
     );
     this.root = el(
       'nav',
       {
         class: 'fr-touch-controls',
         testId: 'touch-controls',
-        attrs: { 'aria-label': 'Touch controls', 'data-engine-input-ignore': 'true' },
+        attrs: { 'data-engine-input-ignore': 'true' },
       },
       this.#gameplay,
       this.#placement,
     );
+    i18n.bindAttribute(this.root, 'aria-label', 'touch.controls');
     this.setMode('hidden');
   }
 
@@ -91,10 +110,12 @@ export class TouchControls {
       {
         class: 'fr-touch-joystick',
         testId: 'touch-joystick',
-        attrs: { role: 'slider', 'aria-label': 'Move', 'aria-valuetext': 'Centered' },
+        attrs: { role: 'slider' },
       },
       knob,
     );
+    this.i18n.bindAttribute(base, 'aria-label', 'touch.move');
+    this.i18n.bindAttribute(base, 'aria-valuetext', 'touch.centered');
     let pointerId: number | null = null;
 
     const setVector = (clientX: number, clientY: number): void => {
@@ -120,7 +141,9 @@ export class TouchControls {
       knob.style.transform = `translate(${outputX * radius}px, ${outputY * radius}px)`;
       base.setAttribute(
         'aria-valuetext',
-        scale === 0 ? 'Centered' : `${Math.round(outputX * 100)}, ${Math.round(-outputY * 100)}`,
+        scale === 0
+          ? this.i18n.t('touch.centered')
+          : `${Math.round(outputX * 100)}, ${Math.round(-outputY * 100)}`,
       );
     };
     const reset = (): void => {
@@ -128,7 +151,7 @@ export class TouchControls {
         callbacks.setActionValue(action, 0);
       }
       knob.style.transform = 'translate(0px, 0px)';
-      base.setAttribute('aria-valuetext', 'Centered');
+      base.setAttribute('aria-valuetext', this.i18n.t('touch.centered'));
     };
     const press = (event: PointerEvent): void => {
       if (pointerId !== null) return;
@@ -169,18 +192,21 @@ export class TouchControls {
 
   #actionButton(
     action: GameAction,
-    label: string,
-    text: string,
+    labelKey: string,
+    textKey: string | null,
     testId: string,
     callbacks: TouchControlCallbacks,
     compact = false,
+    literalText?: string,
   ): HTMLButtonElement {
     const button = el('button', {
       class: `fr-touch-button${compact ? ' fr-touch-button--compact' : ''}`,
-      text,
+      text: literalText ?? '',
       testId,
-      attrs: { type: 'button', 'aria-label': label },
+      attrs: { type: 'button' },
     });
+    this.i18n.bindAttribute(button, 'aria-label', labelKey);
+    if (textKey) this.i18n.bindText(button, textKey);
     const pointers = new Set<number>();
 
     const press = (event: PointerEvent): void => {

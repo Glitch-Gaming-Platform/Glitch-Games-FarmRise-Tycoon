@@ -40,6 +40,7 @@ import { createProgressionReviewCareer } from '@game/debug/progressionReview.js'
 import { createIncidentReviewCareer } from '@game/debug/incidentReview.js';
 import { bindRuntimeAnalytics } from './bindRuntimeAnalytics.js';
 import { createAnalyticsRuntime } from './createAnalytics.js';
+import { createGameLocalization } from '@ui/i18n/gameI18n.js';
 
 export interface StartGameOptions {
   readonly container: HTMLElement;
@@ -54,6 +55,7 @@ export interface RunningGame {
 
 export async function startGame(options: StartGameOptions): Promise<RunningGame> {
   const { container } = options;
+  const i18n = await createGameLocalization();
   const isDev = options.isDev ?? false;
   const isProduction = options.isProduction ?? !isDev;
   const bundle = createEngine(container, isDev);
@@ -134,9 +136,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     } catch (error) {
       analytics.track('account_action', { action: actionName, outcome: 'failed' });
       accountError =
-        error instanceof Error && error.message
-          ? error.message
-          : 'That did not work. Please check your details and try again.';
+        error instanceof Error && error.message ? error.message : i18n.t('account.genericError');
     } finally {
       accountBusy = false;
       refreshAccount();
@@ -145,6 +145,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
 
   const ui = new UiRoot({
     container,
+    i18n,
     shortcuts: {
       onMarket: () => activeScene?.session?.togglePanel('market'),
       onBuild: () => activeScene?.session?.togglePanel('build'),
@@ -241,7 +242,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
           const restored = await loadCareer(saves);
           if (restored.kind === 'resume' && restored.tier === 'account') {
             resumeState = restored.state;
-            ui.hud.toast('Signed in. Your farm is ready from the menu.');
+            ui.hud.toast(i18n.t('account.signedInToast'));
           }
         }),
       onLogout: () =>
@@ -338,6 +339,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       // Null on the low tier; the scene and its views then take exactly the
       // branches they took before the pipeline existed.
       ...(bundle.pipeline ? { pipeline: bundle.pipeline } : {}),
+      localization: i18n,
     });
     return activeScene;
   });
@@ -360,11 +362,16 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       artLoaded: scene.hasAuthoredArt,
     });
 
-    unbindHud = bindHud(scene, ui.hud, session);
+    unbindHud = bindHud(scene, ui.hud, session, i18n);
     unbindSceneAudio = bindSceneAudio(scene, bundle.audio);
     unbindAnalytics = bindAnalytics(scene, session, analytics);
-    unbindSession = bindSession(scene, session, ui, bundle.audio, () =>
-      machine.transitionTo('outcome', 'run-finished'),
+    unbindSession = bindSession(
+      scene,
+      session,
+      ui,
+      bundle.audio,
+      () => machine.transitionTo('outcome', 'run-finished'),
+      i18n,
     ).unsubscribe;
 
     // Autosave on a wall clock rather than on a money event, plus immediate
@@ -401,7 +408,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     console.error('[startGame] scene failed to load', error);
     analytics.track('runtime_error', { area: 'scene', code: 'load_failed' });
     playUi(SOUND.uiDeny, 0.8);
-    ui.hud.toast('The farm failed to load. Returning to the menu.', 'error');
+    ui.hud.toast(i18n.t('toast.loadFailed'), 'error');
   });
 
   const deps = {
@@ -446,7 +453,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
   } catch (error) {
     ui.dispose();
     if (error instanceof WebGLUnavailableError) renderFatal(container, error.message);
-    else renderFatal(container, 'FarmRise Tycoon failed to start. Check the console for details.');
+    else renderFatal(container, i18n.t('app.fatal'));
     throw error;
   }
 
@@ -466,10 +473,10 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
   const restored = await loadCareer(saves);
   if (bundle.progressionReviewStage !== null) {
     resumeState = createProgressionReviewCareer(bundle.progressionReviewStage);
-    ui.hud.toast('Progression review career loaded. Saving is disabled.', 'warn');
+    ui.hud.toast(i18n.t('toast.reviewProgression'), 'warn');
   } else if (incidentReview) {
     resumeState = incidentReview.state;
-    ui.hud.toast('Incident review career loaded. Saving is disabled.', 'warn');
+    ui.hud.toast(i18n.t('toast.reviewIncident'), 'warn');
   } else if (restored.kind === 'resume') {
     resumeState = restored.state;
     if (restored.tier === 'cloud') saves.writeLocal(restored.state);

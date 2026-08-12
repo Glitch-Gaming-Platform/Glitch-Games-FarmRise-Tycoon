@@ -139,6 +139,16 @@ export const UI_STYLES = `
   color: var(--fr-ink); font: 700 13px/1.2 inherit;
 }
 .fr-field select:focus-visible { outline: 3px solid var(--fr-gold-bright); outline-offset: 2px; }
+.fr-field--language { margin-block: 14px; }
+.fr-field--language select { flex: 0 1 220px; max-width: 100%; }
+.fr-language-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.fr-language-flag {
+  display: inline-grid; place-items: center; flex: 0 0 auto; font-size: 24px; line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(42, 36, 32, 0.24)); direction: ltr;
+}
+.fr-field--language-menu {
+  width: min(420px, 100%); margin-inline: 0; background: rgba(245, 241, 229, 0.86);
+}
 .fr-field--music-select { flex-wrap: wrap; }
 .fr-field--music-select select { flex: 1 1 180px; min-width: 0; }
 .fr-music-list {
@@ -412,6 +422,20 @@ export const UI_STYLES = `
 .fr-field--stacked input:focus-visible { outline: 3px solid var(--fr-gold-bright); outline-offset: 2px; }
 .fr-account__error { margin: 0; padding: 9px 11px; border: 2px solid var(--fr-red); border-radius: 8px; background: rgba(212, 92, 66, 0.12); color: var(--fr-red); font-size: 13px; font-weight: 800; }
 
+/* Right-to-left locales ------------------------------------------------ */
+html[dir="rtl"] .fr-layer,
+html[dir="rtl"] .fr-panel-card,
+html[dir="rtl"] .fr-coach,
+html[dir="rtl"] .fr-toast { text-align: right; }
+html[dir="rtl"] .fr-menu-shortcuts {
+  right: auto; left: calc(14px + env(safe-area-inset-left)); justify-content: flex-start;
+}
+html[dir="rtl"] .fr-market__price,
+html[dir="rtl"] .fr-market__actions,
+html[dir="rtl"] .fr-panel-card__head > .fr-btn { direction: ltr; }
+html[dir="rtl"] .fr-outcome__stats { text-align: right; }
+html[dir="rtl"] .fr-field--stacked { align-items: stretch; }
+
 @media (max-width: 760px) {
   .fr-layer {
     padding: calc(10px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right))
@@ -423,6 +447,7 @@ export const UI_STYLES = `
   .fr-menu__hero-image { max-height: 190px; }
   .fr-title--hero { font-size: 36px; margin-inline: auto; }
   .fr-ribbon { margin-inline: auto; }
+  .fr-field--language-menu { margin-inline: auto; }
   .fr-actions--menu { grid-template-columns: 1fr; }
   .fr-actions--menu .fr-btn--large { grid-column: auto; }
   .fr-panel-layer {

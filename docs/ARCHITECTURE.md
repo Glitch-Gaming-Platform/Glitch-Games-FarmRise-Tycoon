@@ -87,6 +87,7 @@ is deterministic, which is what allows the server to re-run them over a submitte
 | `scene/` | `SceneManager`, the `GameScene` interface, GPU-safe teardown |
 | `input/` | `InputSystem` (buffered), action maps, pointer state |
 | `audio/` | `AudioSystem` with named buses and gesture unlocking |
+| `i18n/` | Locale-neutral catalog runtime, formatting, interpolation and DOM bindings |
 | `physics/` | `TileGrid`, static sub-tile raster, bucketed moving circles, `GridPhysics`, A* — behind `PhysicsPort` |
 | `debug/` | Frame overlay, debug flags |
 
@@ -142,6 +143,11 @@ logged and skipped — one broken HUD widget must not stop the game loop.
 **Ports for swappable infrastructure.** `PhysicsPort` and the repository interfaces exist so the
 grid could become Rapier, and SQLite could become Postgres, without gameplay or service code
 changing.
+
+**Locale-neutral state, translated presentation.** Saves, shared domain records and simulation
+events retain stable ids and raw values. One localization instance is composed in `bootstrap/`,
+while `ui/` resolves message catalogs and domain display text. See
+[INTERNATIONALIZATION.md](INTERNATIONALIZATION.md) and ADR 0025.
 
 **Results, not exceptions, in rules.** Rule functions return `Result<T>` carrying a shared error
 code. The server turns a failure into an HTTP error and the client turns the same failure into a

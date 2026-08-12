@@ -10,32 +10,17 @@
  * The statistics shown are exactly the ones the core playtest question turns
  * on, so a playtester reading a screenshot can answer it.
  */
-import { formatCents, formatTicks, type RunSummary } from '@farmrise/shared';
-import { button, el } from '../core/dom.js';
+import { ticksToSeconds, type RunSummary } from '@farmrise/shared';
+import { el } from '../core/dom.js';
 import { setUiIcon, uiIcon } from '../core/icons.js';
 import type { Screen } from '../core/Screen.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedButton, localizedText } from '../i18n/localizedDom.js';
 
 export interface OutcomeCallbacks {
   readonly onPlayAgain: () => void;
   readonly onBackToMenu: () => void;
 }
-
-const COPY = {
-  season: {
-    title: 'Season complete',
-    headline:
-      'The farm carries on. Take stock of what changed, then decide what the next season is for.',
-  },
-  milestone: {
-    title: 'The farm has changed',
-    headline: 'A new capability is yours, along with the new problem that makes it matter.',
-  },
-  restructured: {
-    title: 'The farm has been restructured',
-    headline:
-      'The terms hurt, but the land, working buildings and relationships survived. There is a route back.',
-  },
-} as const;
 
 export class OutcomeScreen implements Screen {
   readonly id = 'outcome';
@@ -44,8 +29,11 @@ export class OutcomeScreen implements Screen {
   readonly #headline: HTMLElement;
   readonly #stats: HTMLElement;
   readonly #icon: HTMLImageElement;
+  readonly #i18n: GameLocalization;
+  #summary: RunSummary | null = null;
 
-  constructor(callbacks: OutcomeCallbacks) {
+  constructor(callbacks: OutcomeCallbacks, i18n: GameLocalization = createEnglishLocalization()) {
+    this.#i18n = i18n;
     this.#title = el('h1', { class: 'fr-title' });
     this.#headline = el('p', { class: 'fr-outcome__headline' });
     this.#stats = el('dl', { class: 'fr-outcome__stats', testId: 'outcome-stats' });
@@ -58,46 +46,58 @@ export class OutcomeScreen implements Screen {
         'div',
         { class: 'fr-panel fr-panel--outcome' },
         this.#icon,
-        el('span', { class: 'fr-ribbon', text: 'Season summary' }),
+        localizedText(i18n, 'span', 'outcome.ribbon', { class: 'fr-ribbon' }),
         this.#title,
         this.#headline,
         this.#stats,
         el(
           'div',
           { class: 'fr-actions' },
-          button('Run another season', () => callbacks.onPlayAgain(), {
+          localizedButton(i18n, 'outcome.continue', () => callbacks.onPlayAgain(), {
             class: 'fr-btn',
             testId: 'outcome-again',
           }),
-          button('Back to menu', () => callbacks.onBackToMenu(), {
+          localizedButton(i18n, 'outcome.backToMenu', () => callbacks.onBackToMenu(), {
             class: 'fr-btn fr-btn--ghost',
             testId: 'outcome-menu',
           }),
         ),
       ),
     );
+    i18n.onChange(() => {
+      if (this.#summary) this.present(this.#summary);
+    });
   }
 
   present(summary: RunSummary): void {
-    const copy = COPY[summary.outcome];
+    this.#summary = summary;
     setUiIcon(this.#icon, summary.outcome === 'restructured' ? 'warning' : 'land');
-    this.#title.textContent = copy.title;
-    this.#headline.textContent = copy.headline;
+    this.#title.textContent = this.#i18n.t(`outcome.${summary.outcome}.title`);
+    this.#headline.textContent = this.#i18n.t(`outcome.${summary.outcome}.headline`);
 
     const rows: [string, string][] = [
-      ['Production cycles', String(summary.cyclesCompleted)],
-      ['Crops harvested', String(summary.cropsHarvested)],
-      ['Money earned', formatCents(summary.totalEarned)],
-      ['Best balance', formatCents(summary.peakBalance)],
-      ['Buildings raised', String(summary.buildingsBuilt)],
-      ['Goods hauled', String(summary.goodsHauled)],
-      ['Goods processed', String(summary.goodsProcessed)],
-      ['Contracts completed', String(summary.contractsCompleted)],
+      [this.#i18n.t('outcome.productionCycles'), this.#i18n.formatNumber(summary.cyclesCompleted)],
+      [this.#i18n.t('outcome.cropsHarvested'), this.#i18n.formatNumber(summary.cropsHarvested)],
+      [this.#i18n.t('outcome.moneyEarned'), this.#i18n.formatCents(summary.totalEarned)],
+      [this.#i18n.t('outcome.bestBalance'), this.#i18n.formatCents(summary.peakBalance)],
+      [this.#i18n.t('outcome.buildingsRaised'), this.#i18n.formatNumber(summary.buildingsBuilt)],
+      [this.#i18n.t('outcome.goodsHauled'), this.#i18n.formatNumber(summary.goodsHauled)],
+      [this.#i18n.t('outcome.goodsProcessed'), this.#i18n.formatNumber(summary.goodsProcessed)],
       [
-        'Setbacks weathered',
-        `${summary.incidentsSurvived} (${summary.incidentsMitigated} answered)`,
+        this.#i18n.t('outcome.contractsCompleted'),
+        this.#i18n.formatNumber(summary.contractsCompleted),
       ],
-      ['Time on the farm', formatTicks(summary.elapsedTicks)],
+      [
+        this.#i18n.t('outcome.setbacksWeathered'),
+        this.#i18n.t('outcome.setbacksValue', {
+          survived: this.#i18n.formatNumber(summary.incidentsSurvived),
+          answered: this.#i18n.formatNumber(summary.incidentsMitigated),
+        }),
+      ],
+      [
+        this.#i18n.t('outcome.timeOnFarm'),
+        this.#i18n.formatDurationSeconds(ticksToSeconds(summary.elapsedTicks)),
+      ],
     ];
 
     this.#stats.replaceChildren();

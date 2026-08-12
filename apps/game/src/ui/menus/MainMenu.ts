@@ -3,8 +3,11 @@
  * "how does the game begin?" has exactly one answer.
  */
 import { el } from '../core/dom.js';
-import { iconButton, uiIcon } from '../core/icons.js';
+import { uiIcon } from '../core/icons.js';
 import type { Screen } from '../core/Screen.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { languageSelect } from '../i18n/LanguageSelect.js';
+import { localizedIconButton, localizedText } from '../i18n/localizedDom.js';
 
 export interface MainMenuCallbacks {
   readonly onPlay: () => void;
@@ -16,7 +19,9 @@ export class MainMenu implements Screen {
   readonly id = 'menu';
   readonly root: HTMLElement;
 
-  constructor(callbacks: MainMenuCallbacks) {
+  constructor(callbacks: MainMenuCallbacks, i18n: GameLocalization = createEnglishLocalization()) {
+    const hero = uiIcon('heroFarm', '', 'fr-menu__hero-image');
+    i18n.bindAttribute(hero, 'alt', 'menu.heroAlt');
     this.root = el(
       'div',
       { class: 'fr-layer', testId: 'main-menu' },
@@ -26,24 +31,25 @@ export class MainMenu implements Screen {
         el(
           'div',
           { class: 'fr-menu__copy' },
-          el('span', { class: 'fr-ribbon', text: 'A new season begins' }),
-          el('h1', { class: 'fr-title fr-title--hero', text: 'FarmRise Tycoon' }),
-          el('p', {
-            class: 'fr-subtitle',
-            text: 'Work the soil, read the market and turn one smallholding into a farm worth keeping.',
+          localizedText(i18n, 'span', 'menu.ribbon', { class: 'fr-ribbon' }),
+          localizedText(i18n, 'h1', 'app.title', { class: 'fr-title fr-title--hero' }),
+          localizedText(i18n, 'p', 'menu.subtitle', { class: 'fr-subtitle' }),
+          languageSelect(i18n, {
+            className: 'fr-field fr-field--language fr-field--language-menu',
+            testId: 'menu-language-select',
           }),
           el(
             'div',
             { class: 'fr-actions fr-actions--menu' },
-            iconButton('Work the farm', callbacks.onPlay, 'tools', {
+            localizedIconButton(i18n, 'menu.play', callbacks.onPlay, 'tools', {
               class: 'fr-btn fr-btn--primary fr-btn--large',
               testId: 'menu-play',
             }),
-            iconButton('Settings', callbacks.onSettings, 'settings', {
+            localizedIconButton(i18n, 'menu.settings', callbacks.onSettings, 'settings', {
               class: 'fr-btn fr-btn--secondary',
               testId: 'menu-settings',
             }),
-            iconButton('Account', callbacks.onAccount, 'farmer', {
+            localizedIconButton(i18n, 'menu.account', callbacks.onAccount, 'farmer', {
               class: 'fr-btn fr-btn--secondary',
               testId: 'menu-account',
             }),
@@ -52,8 +58,8 @@ export class MainMenu implements Screen {
         el(
           'div',
           { class: 'fr-menu__hero' },
-          uiIcon('heroFarm', 'Farmer beside a barn and ripe crops', 'fr-menu__hero-image'),
-          el('span', { class: 'fr-menu__hero-label', text: 'Millbrook Smallholding' }),
+          hero,
+          localizedText(i18n, 'span', 'menu.heroLabel', { class: 'fr-menu__hero-label' }),
         ),
       ),
     );

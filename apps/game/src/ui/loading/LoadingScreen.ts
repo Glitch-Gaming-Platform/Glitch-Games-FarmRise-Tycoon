@@ -8,16 +8,20 @@
 import { el } from '../core/dom.js';
 import { uiIcon } from '../core/icons.js';
 import type { Screen } from '../core/Screen.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedText } from '../i18n/localizedDom.js';
 
 export class LoadingScreen implements Screen {
   readonly id = 'loading';
   readonly root: HTMLElement;
   readonly #fill: HTMLElement;
   readonly #label: HTMLElement;
+  readonly #i18n: GameLocalization;
 
-  constructor() {
+  constructor(i18n: GameLocalization = createEnglishLocalization()) {
+    this.#i18n = i18n;
     this.#fill = el('div', { class: 'fr-progress__fill' });
-    this.#label = el('p', { class: 'fr-subtitle', text: 'Preparing the farm…' });
+    this.#label = localizedText(i18n, 'p', 'loading.preparing', { class: 'fr-subtitle' });
     this.root = el(
       'div',
       {
@@ -29,8 +33,8 @@ export class LoadingScreen implements Screen {
         'div',
         { class: 'fr-panel fr-panel--compact' },
         uiIcon('heroFarm', '', 'fr-loading__art'),
-        el('span', { class: 'fr-ribbon', text: 'Opening the farm gate' }),
-        el('h1', { class: 'fr-title', text: 'FarmRise Tycoon' }),
+        localizedText(i18n, 'span', 'loading.ribbon', { class: 'fr-ribbon' }),
+        localizedText(i18n, 'h1', 'app.title', { class: 'fr-title' }),
         this.#label,
         el('div', { class: 'fr-progress' }, this.#fill),
       ),
@@ -44,6 +48,6 @@ export class LoadingScreen implements Screen {
   }
 
   show(): void {
-    this.setProgress(0, 'Preparing the farm…');
+    this.setProgress(0, this.#i18n.t('loading.preparing'));
   }
 }

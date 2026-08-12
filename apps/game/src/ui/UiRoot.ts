@@ -27,11 +27,13 @@ import {
   AnalyticsConsentBanner,
   type AnalyticsConsentBannerOptions,
 } from './privacy/AnalyticsConsentBanner.js';
+import type { GameLocalization } from './i18n/gameI18n.js';
 
 export type ScreenName = 'none' | 'menu' | 'loading' | 'pause' | 'settings' | 'outcome';
 
 export interface UiRootOptions {
   readonly container: HTMLElement;
+  readonly i18n: GameLocalization;
   readonly menu: MainMenuCallbacks;
   readonly pause: PauseMenuCallbacks;
   readonly settings: SettingsCallbacks;
@@ -60,7 +62,7 @@ export class UiRoot {
   readonly build: BuildPanel;
   readonly career: CareerPanel;
   readonly town: TownPanel;
-  readonly coach = new CoachMark();
+  readonly coach: CoachMark;
   readonly account: AccountPanel;
   readonly shortcuts: MenuShortcutDock;
   readonly touchControls: TouchControls | null;
@@ -78,8 +80,11 @@ export class UiRoot {
 
   constructor(options: UiRootOptions) {
     injectStyles();
-    this.touchControls = options.touchControls ? new TouchControls(options.touchControls) : null;
-    this.hud = new Hud({ touch: this.touchControls !== null });
+    this.touchControls = options.touchControls
+      ? new TouchControls(options.touchControls, options.i18n)
+      : null;
+    this.hud = new Hud({ touch: this.touchControls !== null, i18n: options.i18n });
+    this.coach = new CoachMark(options.i18n);
     this.#layer = document.createElement('div');
     this.#layer.dataset['engineInputIgnore'] = 'true';
     this.#layer.style.position = 'absolute';
@@ -89,21 +94,23 @@ export class UiRoot {
     this.#layer.style.pointerEvents = 'none';
     options.container.appendChild(this.#layer);
 
-    this.loading = new LoadingScreen();
-    this.settings = new SettingsPanel(options.settings);
-    this.market = new MarketPanel(options.market);
-    this.build = new BuildPanel(options.build);
-    this.career = new CareerPanel(options.career);
-    this.town = new TownPanel(options.town);
-    this.outcome = new OutcomeScreen(options.outcome);
-    this.account = new AccountPanel(options.account);
-    this.privacy = options.privacy ? new AnalyticsConsentBanner(options.privacy) : null;
-    this.shortcuts = new MenuShortcutDock(options.shortcuts);
+    this.loading = new LoadingScreen(options.i18n);
+    this.settings = new SettingsPanel(options.settings, options.i18n);
+    this.market = new MarketPanel(options.market, options.i18n);
+    this.build = new BuildPanel(options.build, options.i18n);
+    this.career = new CareerPanel(options.career, options.i18n);
+    this.town = new TownPanel(options.town, options.i18n);
+    this.outcome = new OutcomeScreen(options.outcome, options.i18n);
+    this.account = new AccountPanel(options.account, options.i18n);
+    this.privacy = options.privacy
+      ? new AnalyticsConsentBanner(options.privacy, options.i18n)
+      : null;
+    this.shortcuts = new MenuShortcutDock(options.shortcuts, options.i18n);
     this.#placing = el('div', { class: 'fr-placing', testId: 'placing-banner' });
     this.#placing.hidden = true;
-    this.#register('menu', new MainMenu(options.menu));
+    this.#register('menu', new MainMenu(options.menu, options.i18n));
     this.#register('loading', this.loading);
-    this.#register('pause', new PauseMenu(options.pause));
+    this.#register('pause', new PauseMenu(options.pause, options.i18n));
     this.#register('settings', this.settings);
 
     this.#register('outcome', this.outcome);

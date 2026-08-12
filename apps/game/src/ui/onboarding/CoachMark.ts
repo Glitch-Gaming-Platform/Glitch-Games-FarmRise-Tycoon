@@ -14,6 +14,7 @@
  *   - Always skippable, and the skip control is always in the same place.
  */
 import { el } from '../core/dom.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
 
 export interface CoachBeat {
   readonly id: string;
@@ -30,8 +31,10 @@ export class CoachMark {
   readonly #body: HTMLElement;
   readonly #foot: HTMLElement;
   #onSkip: (() => void) | null = null;
+  readonly #i18n: GameLocalization;
 
-  constructor() {
+  constructor(i18n: GameLocalization = createEnglishLocalization()) {
+    this.#i18n = i18n;
     this.#title = el('p', { class: 'fr-coach__title' });
     this.#body = el('p', { class: 'fr-coach__body' });
     this.#foot = el('div', { class: 'fr-coach__foot' });
@@ -62,10 +65,10 @@ export class CoachMark {
     }
     const skip = el('button', {
       class: 'fr-coach__skip',
-      text: 'Skip tutorial',
       testId: 'coach-skip',
       attrs: { type: 'button' },
     });
+    this.#i18n.bindText(skip, 'coach.skip');
     skip.addEventListener('click', () => this.#onSkip?.());
     this.#foot.append(skip);
 

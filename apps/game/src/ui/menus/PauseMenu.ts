@@ -3,8 +3,10 @@
  * player keeps their spatial context.
  */
 import { el } from '../core/dom.js';
-import { iconButton, uiIcon } from '../core/icons.js';
+import { uiIcon } from '../core/icons.js';
 import type { Screen } from '../core/Screen.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedIconButton, localizedText } from '../i18n/localizedDom.js';
 
 export interface PauseMenuCallbacks {
   readonly onResume: () => void;
@@ -17,7 +19,7 @@ export class PauseMenu implements Screen {
   readonly id = 'pause';
   readonly root: HTMLElement;
 
-  constructor(callbacks: PauseMenuCallbacks) {
+  constructor(callbacks: PauseMenuCallbacks, i18n: GameLocalization = createEnglishLocalization()) {
     this.root = el(
       'div',
       { class: 'fr-layer', testId: 'pause-menu' },
@@ -25,27 +27,24 @@ export class PauseMenu implements Screen {
         'div',
         { class: 'fr-panel fr-panel--compact' },
         el('div', { class: 'fr-screen-icon' }, uiIcon('farmer', '', 'fr-screen-icon__image')),
-        el('span', { class: 'fr-ribbon', text: 'Farm ledger closed' }),
-        el('h1', { class: 'fr-title', text: 'Paused' }),
-        el('p', {
-          class: 'fr-subtitle',
-          text: 'Crops keep their progress while you are away from the keyboard.',
-        }),
+        localizedText(i18n, 'span', 'pause.ribbon', { class: 'fr-ribbon' }),
+        localizedText(i18n, 'h1', 'pause.title', { class: 'fr-title' }),
+        localizedText(i18n, 'p', 'pause.subtitle', { class: 'fr-subtitle' }),
         el(
           'div',
           { class: 'fr-actions' },
-          iconButton('Resume', callbacks.onResume, 'farmer', {
+          localizedIconButton(i18n, 'pause.resume', callbacks.onResume, 'farmer', {
             class: 'fr-btn fr-btn--primary',
             testId: 'pause-resume',
           }),
-          iconButton('Settings', callbacks.onSettings, 'settings', {
+          localizedIconButton(i18n, 'menu.settings', callbacks.onSettings, 'settings', {
             class: 'fr-btn fr-btn--secondary',
           }),
-          iconButton('Account', callbacks.onAccount, 'farmer', {
+          localizedIconButton(i18n, 'menu.account', callbacks.onAccount, 'farmer', {
             class: 'fr-btn fr-btn--secondary',
             testId: 'pause-account',
           }),
-          iconButton('Back to menu', callbacks.onQuit, 'land', {
+          localizedIconButton(i18n, 'pause.backToMenu', callbacks.onQuit, 'land', {
             class: 'fr-btn fr-btn--quiet',
           }),
         ),

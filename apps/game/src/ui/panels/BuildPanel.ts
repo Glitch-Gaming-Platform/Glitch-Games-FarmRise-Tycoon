@@ -12,9 +12,8 @@ import {
   ANIMALS,
   BUILDINGS,
   CARRIERS,
-  formatCents,
-  formatTicks,
   getItem,
+  ticksToSeconds,
   type AnimalSpecies,
   type BuildingKind,
   type CarrierKind,
@@ -22,6 +21,14 @@ import {
 } from '@farmrise/shared';
 import { button, clear, el } from '../core/dom.js';
 import { uiIcon, type UiIconId } from '../core/icons.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedButton, localizedText } from '../i18n/localizedDom.js';
+import {
+  animalName as localizedAnimalName,
+  buildingName,
+  domainText,
+  itemName,
+} from '../i18n/domainText.js';
 
 export interface BuildOption {
   readonly kind: BuildingKind;
@@ -74,8 +81,12 @@ export class BuildPanel {
   readonly #list: HTMLElement;
   readonly #summary: HTMLElement;
   #visible = false;
+  #snapshot: BuildSnapshot | null = null;
 
-  constructor(private readonly callbacks: BuildPanelCallbacks) {
+  constructor(
+    private readonly callbacks: BuildPanelCallbacks,
+    private readonly i18n: GameLocalization = createEnglishLocalization(),
+  ) {
     this.#list = el('div', { class: 'fr-market__list', testId: 'build-options' });
     this.#summary = el('p', { class: 'fr-market__summary' });
 
@@ -84,7 +95,7 @@ export class BuildPanel {
       {
         class: 'fr-panel-layer',
         testId: 'build-panel',
-        attrs: { role: 'dialog', 'aria-label': 'Build and reinvest' },
+        attrs: { role: 'dialog' },
       },
       el(
         'div',
@@ -96,18 +107,22 @@ export class BuildPanel {
             'div',
             { class: 'fr-panel-card__title' },
             uiIcon('barn', '', 'fr-panel-card__icon'),
-            el('h2', { text: 'Build & Reinvest' }),
+            localizedText(i18n, 'h2', 'build.title'),
           ),
-          button('Close', () => this.callbacks.onClose(), {
+          localizedButton(i18n, 'common.close', () => this.callbacks.onClose(), {
             class: 'fr-btn fr-btn--ghost fr-btn--small',
             testId: 'build-close',
           }),
         ),
         this.#summary,
-        el('h3', { class: 'fr-panel-card__section', text: 'Build' }),
+        localizedText(i18n, 'h3', 'build.section', { class: 'fr-panel-card__section' }),
         this.#list,
       ),
     );
+    i18n.bindAttribute(this.root, 'aria-label', 'build.dialog');
+    i18n.onChange(() => {
+      if (this.#snapshot) this.update(this.#snapshot);
+    });
     this.root.hidden = true;
   }
 
@@ -127,7 +142,10 @@ export class BuildPanel {
   }
 
   update(snapshot: BuildSnapshot): void {
-    this.#summary.textContent = `${formatCents(snapshot.balance)} in hand`;
+    this.#snapshot = snapshot;
+    this.#summary.textContent = this.i18n.t('build.summary', {
+      balance: this.i18n.formatCents(snapshot.balance),
+    });
     clear(this.#list);
 
     for (const option of snapshot.options) {
@@ -136,9 +154,15 @@ export class BuildPanel {
         this.#row({
           testId: `build-${option.kind}`,
           icon: buildIcon(option.kind),
-          title: definition.displayName,
-          meta: `${formatCents(option.cost)}  ·  ${definition.description}`,
-          action: option.affordable ? 'Place' : 'Too costly',
+          title: buildingName(this.i18n, option.kind, definition.displayName),
+          meta: `${this.i18n.formatCents(option.cost)}  ·  ${domainText(
+            this.i18n,
+            'building',
+            option.kind,
+            'description',
+            definition.description,
+          )}`,
+          action: this.i18n.t(option.affordable ? 'build.place' : 'build.tooCostly'),
           enabled: option.affordable,
           onClick: () => this.callbacks.onSelectBuilding(option.kind),
         }),
@@ -146,27 +170,42 @@ export class BuildPanel {
     }
 
     if (snapshot.animals.length > 0) {
-      this.#list.append(el('h3', { class: 'fr-panel-card__section', text: 'Livestock' }));
+      this.#list.append(
+        localizedText(this.i18n, 'h3', 'build.livestock', { class: 'fr-panel-card__section' }),
+      );
     }
     for (const option of snapshot.animals) {
       const definition = ANIMALS[option.species];
       const hasShelter = snapshot.shelterFree >= option.shelterRequired;
-      const animalName = option.species === 'chicken' ? 'hen' : 'cow';
-      const feedName = getItem(definition.feedItemId)?.displayName ?? definition.feedItemId;
-      const productName =
-        getItem(definition.producesItemId)?.displayName ?? definition.producesItemId;
+      const animal = localizedAnimalName(this.i18n, option.species, definition.displayName);
+      const feedDefinition = getItem(definition.feedItemId);
+      const productDefinition = getItem(definition.producesItemId);
+      const feedName = itemName(
+        this.i18n,
+        definition.feedItemId,
+        feedDefinition?.displayName ?? definition.feedItemId,
+      );
+      const productName = itemName(
+        this.i18n,
+        definition.producesItemId,
+        productDefinition?.displayName ?? definition.producesItemId,
+      );
       this.#list.append(
         this.#row({
           testId: `build-animal-${option.species}`,
           icon: option.species === 'chicken' ? 'chicken' : 'cow',
-          title: definition.displayName,
-          meta:
-            `${formatCents(definition.purchaseCost)}  ·  Each ${animalName} needs ` +
-            `${definition.feedPerCycle} stored ${feedName} every ${formatTicks(definition.cycleTicks)} ` +
-            `to make ${definition.producePerCycle} ${productName}. Collect the ${productName} ` +
-            `by the shelter, then sell them at Market. ` +
-            `${snapshot.shelterFree} shelter space free`,
-          action: option.affordable && hasShelter ? 'Buy' : 'Unavailable',
+          title: animal,
+          meta: this.i18n.t('build.animalMeta', {
+            cost: this.i18n.formatCents(definition.purchaseCost),
+            animal,
+            feedQuantity: this.i18n.formatNumber(definition.feedPerCycle),
+            feed: feedName,
+            time: this.i18n.formatDurationSeconds(ticksToSeconds(definition.cycleTicks)),
+            produceQuantity: this.i18n.formatNumber(definition.producePerCycle),
+            product: productName,
+            free: this.i18n.formatNumber(snapshot.shelterFree),
+          }),
+          action: this.i18n.t(option.affordable && hasShelter ? 'build.buy' : 'common.unavailable'),
           enabled: option.affordable && hasShelter,
           onClick: () => this.callbacks.onBuyAnimal(option.species),
         }),
@@ -174,7 +213,9 @@ export class BuildPanel {
     }
 
     if (snapshot.carriers.length > 0) {
-      this.#list.append(el('h3', { class: 'fr-panel-card__section', text: 'Hauling' }));
+      this.#list.append(
+        localizedText(this.i18n, 'h3', 'build.hauling', { class: 'fr-panel-card__section' }),
+      );
     }
     for (const option of snapshot.carriers) {
       const definition = CARRIERS[option.kind];
@@ -182,11 +223,19 @@ export class BuildPanel {
         this.#row({
           testId: `build-carrier-${option.kind}`,
           icon: 'land',
-          title: definition.displayName,
-          meta:
-            `${formatCents(definition.purchaseCost)}  ·  ${definition.capacity} capacity. ` +
-            definition.description,
-          action: option.affordable ? 'Buy' : 'Too costly',
+          title: domainText(this.i18n, 'carrier', option.kind, 'name', definition.displayName),
+          meta: this.i18n.t('build.carrierMeta', {
+            cost: this.i18n.formatCents(definition.purchaseCost),
+            capacity: this.i18n.formatNumber(definition.capacity),
+            description: domainText(
+              this.i18n,
+              'carrier',
+              option.kind,
+              'description',
+              definition.description,
+            ),
+          }),
+          action: this.i18n.t(option.affordable ? 'build.buy' : 'build.tooCostly'),
           enabled: option.affordable,
           onClick: () => this.callbacks.onBuyCarrier(option.kind),
         }),
@@ -196,9 +245,13 @@ export class BuildPanel {
     // Land, listed last and visually distinct. Starter Extension deliberately
     // appears immediately above North Field so onboarding and the long-term
     // objective remain visible together.
-    this.#list.append(el('h3', { class: 'fr-panel-card__section', text: 'Expand' }));
+    this.#list.append(
+      localizedText(this.i18n, 'h3', 'build.expand', { class: 'fr-panel-card__section' }),
+    );
     if (snapshot.land.length === 0) {
-      this.#list.append(el('p', { class: 'fr-market__empty', text: 'You own every field.' }));
+      this.#list.append(
+        localizedText(this.i18n, 'p', 'build.ownedAllFields', { class: 'fr-market__empty' }),
+      );
     }
     for (const parcel of snapshot.land) {
       const progress = Math.round(parcel.progress * 100);
@@ -208,12 +261,21 @@ export class BuildPanel {
           rowTestId: `build-land-row-${parcel.parcelId}`,
           icon: 'land',
           title: parcel.displayName,
-          meta:
-            `${formatCents(parcel.cost)}  ·  ${parcel.bedCount} crop beds  ·  ` +
-            (parcel.available
-              ? `${progress}% saved  ·  ${parcel.description}`
-              : (parcel.requirement ?? 'Not available yet')),
-          action: parcel.available ? (parcel.affordable ? 'Buy land' : `${progress}%`) : 'Locked',
+          meta: this.i18n.t('build.landMeta', {
+            cost: this.i18n.formatCents(parcel.cost),
+            beds: this.i18n.formatNumber(parcel.bedCount),
+            detail: parcel.available
+              ? this.i18n.t('build.saved', {
+                  progress: this.i18n.formatNumber(progress),
+                  description: parcel.description,
+                })
+              : (parcel.requirement ?? this.i18n.t('build.notAvailable')),
+          }),
+          action: parcel.available
+            ? parcel.affordable
+              ? this.i18n.t('build.buyLand')
+              : `${this.i18n.formatNumber(progress)}%`
+            : this.i18n.t('common.locked'),
           enabled: parcel.affordable && parcel.available,
           onClick: () => this.callbacks.onBuyLand(parcel.parcelId),
           highlight: parcel.affordable && parcel.available,

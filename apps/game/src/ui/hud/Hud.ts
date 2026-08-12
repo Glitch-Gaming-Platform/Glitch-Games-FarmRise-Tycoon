@@ -10,10 +10,11 @@
  * changing values (money, storage). Rebuilding text nodes at 60Hz is wasted
  * main-thread work that competes with the render loop.
  */
-import { formatCents, formatTicks, type Cents } from '@farmrise/shared';
+import { ticksToSeconds, type Cents } from '@farmrise/shared';
 import type { HudFeature } from '@game/onboarding/beats.js';
 import { clear, el } from '../core/dom.js';
 import { TOAST_SECONDS } from '@game/rules/sessionRules.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
 
 export type ToastTone = 'info' | 'warn' | 'error';
 
@@ -26,6 +27,7 @@ export type ToastTone = 'info' | 'warn' | 'error';
  */
 export interface HudOptions {
   readonly touch?: boolean;
+  readonly i18n?: GameLocalization;
 }
 
 export interface HudSnapshot {
@@ -69,9 +71,13 @@ export class Hud {
   readonly #objectiveFill: HTMLElement;
   readonly #timers = new Set<ReturnType<typeof setTimeout>>();
   readonly #touch: boolean;
+  readonly #i18n: GameLocalization;
+  #snapshot: HudSnapshot | null = null;
+  #promptState: readonly [string | null, string | null, string | null] = [null, null, null];
 
   constructor(options: HudOptions = {}) {
     this.#touch = options.touch ?? false;
+    this.#i18n = options.i18n ?? createEnglishLocalization();
     this.#bar = el('div', { class: 'fr-hud__bar', testId: 'hud-bar' });
     this.#prompt = el('div', { class: 'fr-hud__prompt', testId: 'hud-prompt' });
     this.#prompt.hidden = true;
@@ -91,17 +97,27 @@ export class Hud {
     this.#top = el('div', { class: 'fr-hud__top' }, this.#objective, this.#bar, this.#toasts);
 
     this.root = el('div', { class: 'fr-hud', testId: 'hud' }, this.#top, this.#prompt);
+    this.#i18n.onChange(() => {
+      if (this.#snapshot) this.render(this.#snapshot);
+      this.setPrompt(...this.#promptState);
+    });
   }
 
   render(snapshot: HudSnapshot): void {
+    this.#snapshot = snapshot;
     const shows = (feature: HudFeature) => snapshot.revealed.has(feature);
 
     this.#objective.hidden = !shows('objective');
     if (shows('objective')) {
       const percent = Math.round(snapshot.objectiveProgress * 100);
       this.#objectiveLabel.textContent = snapshot.objectiveReady
-        ? `${snapshot.objectiveLabel}  ·  ${this.#touch ? 'tap Career' : 'press C'} to claim`
-        : `${snapshot.objectiveLabel}  ·  ${percent}%`;
+        ? this.#i18n.t(this.#touch ? 'hud.claimTouch' : 'hud.claimDesktop', {
+            objective: snapshot.objectiveLabel,
+          })
+        : this.#i18n.t('hud.progress', {
+            objective: snapshot.objectiveLabel,
+            percent: this.#i18n.formatNumber(percent),
+          });
       this.#objectiveFill.style.width = `${Math.min(100, percent)}%`;
       this.#objective.classList.toggle('fr-objective--ready', snapshot.objectiveReady);
     }
@@ -111,28 +127,40 @@ export class Hud {
     // shown before the player owns anything is noise they have to learn to
     // ignore, and anything a player learns to ignore is wasted.
     if (shows('money')) {
-      this.#bar.append(stat('Money', formatCents(snapshot.balance), 'hud-balance'));
+      this.#bar.append(
+        stat(this.#i18n.t('hud.money'), this.#i18n.formatCents(snapshot.balance), 'hud-balance'),
+      );
     }
     if (shows('storage')) {
       this.#bar.append(
-        stat('Store', `${snapshot.storageUsed}/${snapshot.storageCapacity}`, 'hud-storage'),
+        stat(
+          this.#i18n.t('hud.store'),
+          `${this.#i18n.formatNumber(snapshot.storageUsed)}/${this.#i18n.formatNumber(snapshot.storageCapacity)}`,
+          'hud-storage',
+        ),
       );
     }
     if (shows('seed')) {
-      this.#bar.append(stat('Seed', snapshot.selectedCrop, 'hud-crop'));
+      this.#bar.append(stat(this.#i18n.t('hud.seed'), snapshot.selectedCrop, 'hud-crop'));
     }
     if (shows('ready')) {
-      this.#bar.append(stat('Ready', String(snapshot.readyPlots), 'hud-ready'));
+      this.#bar.append(
+        stat(this.#i18n.t('hud.ready'), this.#i18n.formatNumber(snapshot.readyPlots), 'hud-ready'),
+      );
     }
     // Carrying is only shown while it constrains the player. A permanent
     // "0/8" teaches nothing; "24/30" while walking home is the whole mechanic.
     if (snapshot.carry && snapshot.carry.units > 0) {
       this.#bar.append(
-        stat('Carrying', `${snapshot.carry.units}/${snapshot.carry.capacity}`, 'hud-carry'),
+        stat(
+          this.#i18n.t('hud.carrying'),
+          `${this.#i18n.formatNumber(snapshot.carry.units)}/${this.#i18n.formatNumber(snapshot.carry.capacity)}`,
+          'hud-carry',
+        ),
       );
     }
     if (snapshot.season) {
-      this.#bar.append(stat('Season', snapshot.season, 'hud-season'));
+      this.#bar.append(stat(this.#i18n.t('hud.season'), snapshot.season, 'hud-season'));
     }
     this.#bar.hidden = this.#bar.childElementCount === 0;
 
@@ -140,14 +168,27 @@ export class Hud {
       const prevent =
         snapshot.warning.preventCost === null
           ? ''
-          : `  ·  ${this.#touch ? 'Protect' : 'F'} to prevent ${formatCents(snapshot.warning.preventCost)}`;
+          : this.#i18n.t(this.#touch ? 'hud.preventTouch' : 'hud.preventDesktop', {
+              cost: this.#i18n.formatCents(snapshot.warning.preventCost),
+            });
       this.#bar.hidden = false;
       this.#bar.append(
         stat(
           '⚠',
           snapshot.warning.phase === 'warning'
-            ? `${snapshot.warning.label} in ${formatTicks(snapshot.warning.ticksRemaining)}${prevent}`
-            : `${snapshot.warning.label} active · ${formatTicks(snapshot.warning.ticksRemaining)} left`,
+            ? this.#i18n.t('hud.warningIn', {
+                warning: snapshot.warning.label,
+                time: this.#i18n.formatDurationSeconds(
+                  ticksToSeconds(snapshot.warning.ticksRemaining),
+                ),
+                prevent,
+              })
+            : this.#i18n.t('hud.warningActive', {
+                warning: snapshot.warning.label,
+                time: this.#i18n.formatDurationSeconds(
+                  ticksToSeconds(snapshot.warning.ticksRemaining),
+                ),
+              }),
           'hud-warning',
         ),
       );
@@ -159,12 +200,17 @@ export class Hud {
     secondaryLabel: string | null = null,
     notice: string | null = null,
   ): void {
+    this.#promptState = [label, secondaryLabel, notice];
     clear(this.#prompt);
     this.#prompt.hidden = label === null && notice === null;
     if (label) {
-      const primary = `${label}  ·  ${this.#touch ? 'tap Work' : 'press E'}`;
+      const primary = this.#i18n.t(this.#touch ? 'hud.primaryTouch' : 'hud.primaryDesktop', {
+        action: label,
+      });
       const secondary = secondaryLabel
-        ? `  |  ${secondaryLabel}  ·  ${this.#touch ? 'tap Seed' : 'press Q'}`
+        ? `  |  ${this.#i18n.t(this.#touch ? 'hud.secondaryTouch' : 'hud.secondaryDesktop', {
+            action: secondaryLabel,
+          })}`
         : '';
       this.#prompt.append(
         el('span', { class: 'fr-hud__prompt-actions', text: `${primary}${secondary}` }),

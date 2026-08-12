@@ -1,6 +1,8 @@
-import { formatCents, formatTicks, type Cents } from '@farmrise/shared';
+import { ticksToSeconds, type Cents } from '@farmrise/shared';
 import { button, clear, el } from '../core/dom.js';
 import { uiIcon } from '../core/icons.js';
+import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
+import { localizedButton, localizedText } from '../i18n/localizedDom.js';
 
 export interface TownProjectRow {
   readonly id: string;
@@ -32,8 +34,12 @@ export class TownPanel {
   readonly #body: HTMLElement;
   readonly #summary: HTMLElement;
   #visible = false;
+  #snapshot: TownPanelSnapshot | null = null;
 
-  constructor(private readonly callbacks: TownPanelCallbacks) {
+  constructor(
+    private readonly callbacks: TownPanelCallbacks,
+    private readonly i18n: GameLocalization = createEnglishLocalization(),
+  ) {
     this.#body = el('div', { class: 'fr-market__list', testId: 'town-projects' });
     this.#summary = el('p', { class: 'fr-market__summary' });
     this.root = el(
@@ -41,7 +47,7 @@ export class TownPanel {
       {
         class: 'fr-panel-layer',
         testId: 'town-panel',
-        attrs: { role: 'dialog', 'aria-label': 'Millbrook town' },
+        attrs: { role: 'dialog' },
       },
       el(
         'div',
@@ -53,18 +59,22 @@ export class TownPanel {
             'div',
             { class: 'fr-panel-card__title' },
             uiIcon('market', '', 'fr-panel-card__icon'),
-            el('h2', { text: 'Millbrook' }),
+            localizedText(i18n, 'h2', 'town.title'),
           ),
-          button('Close', callbacks.onClose, {
+          localizedButton(i18n, 'common.close', callbacks.onClose, {
             class: 'fr-btn fr-btn--ghost fr-btn--small',
             testId: 'town-close',
           }),
         ),
         this.#summary,
-        el('h3', { class: 'fr-panel-card__section', text: 'Community projects' }),
+        localizedText(i18n, 'h3', 'town.projects', { class: 'fr-panel-card__section' }),
         this.#body,
       ),
     );
+    i18n.bindAttribute(this.root, 'aria-label', 'town.dialog');
+    i18n.onChange(() => {
+      if (this.#snapshot) this.update(this.#snapshot);
+    });
     this.root.hidden = true;
   }
 
@@ -78,15 +88,19 @@ export class TownPanel {
   }
 
   update(snapshot: TownPanelSnapshot): void {
-    this.#summary.textContent =
-      `${snapshot.stageName}  ·  ${snapshot.population} people  ·  ` +
-      `${Math.floor(snapshot.prosperity)} prosperity. ${snapshot.summary}`;
+    this.#snapshot = snapshot;
+    this.#summary.textContent = this.i18n.t('town.summary', {
+      stage: snapshot.stageName,
+      population: snapshot.population,
+      prosperity: this.i18n.formatNumber(Math.floor(snapshot.prosperity)),
+      summary: snapshot.summary,
+    });
     clear(this.#body);
     if (!snapshot.projectsUnlocked) {
       this.#body.append(
         el('p', {
           class: 'fr-market__empty',
-          text: 'Keep supplying Millbrook. The council will invite established producers to fund projects later.',
+          text: this.i18n.t('town.locked'),
         }),
       );
       return;
@@ -103,10 +117,14 @@ export class TownPanel {
             el('strong', { text: snapshot.activeProject.title }),
             el('span', {
               class: 'fr-market__meta',
-              text: `${formatTicks(snapshot.activeProject.remainingTicks)} remaining`,
+              text: this.i18n.t('town.remaining', {
+                time: this.i18n.formatDurationSeconds(
+                  ticksToSeconds(snapshot.activeProject.remainingTicks),
+                ),
+              }),
             }),
           ),
-          button('Building', () => {}, {
+          localizedButton(this.i18n, 'common.building', () => {}, {
             class: 'fr-btn fr-btn--small',
             attrs: { disabled: 'true' },
           }),
@@ -117,7 +135,7 @@ export class TownPanel {
       this.#body.append(
         el('p', {
           class: 'fr-market__empty',
-          text: 'No project is ready for funding. Deliver more contracts to grow the town.',
+          text: this.i18n.t('town.noProject'),
         }),
       );
     }
@@ -133,13 +151,16 @@ export class TownPanel {
             el('strong', { text: project.title }),
             el('span', {
               class: 'fr-market__meta',
-              text:
-                `${formatCents(project.cost)} + ${project.materials}. ` +
-                `${project.description} ${project.benefit}`,
+              text: this.i18n.t('town.projectMeta', {
+                cost: this.i18n.formatCents(project.cost),
+                materials: project.materials,
+                description: project.description,
+                benefit: project.benefit,
+              }),
             }),
           ),
           button(
-            project.enabled ? 'Fund' : 'Unavailable',
+            this.i18n.t(project.enabled ? 'town.fund' : 'common.unavailable'),
             () => {
               this.callbacks.onStartProject(project.id);
             },
