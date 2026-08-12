@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import {
   createRoadGeometry,
   RoadConnection,
@@ -34,6 +35,33 @@ describe('road geometry', () => {
     expect(cross.userData['roadConnectionMask']).toBe(15);
     isolated.dispose();
     cross.dispose();
+  });
+
+  it('rotates a standalone road while connected roads remain topology-driven', () => {
+    const vertical = createRoadGeometry({ tileSize: 2, connections: 0, variant: 0, rotation: 0 });
+    const horizontal = createRoadGeometry({
+      tileSize: 2,
+      connections: 0,
+      variant: 0,
+      rotation: 1,
+    });
+    const connected = createRoadGeometry({
+      tileSize: 2,
+      connections: RoadConnection.North | RoadConnection.South,
+      variant: 0,
+      rotation: 1,
+    });
+
+    const verticalSize = vertical.boundingBox!.getSize(new THREE.Vector3());
+    const horizontalSize = horizontal.boundingBox!.getSize(new THREE.Vector3());
+    expect(verticalSize.z).toBeGreaterThan(verticalSize.x);
+    expect(horizontalSize.x).toBeGreaterThan(horizontalSize.z);
+    expect(horizontal.userData['roadRotation']).toBe(1);
+    expect(connected.userData['roadRotation']).toBe(0);
+
+    vertical.dispose();
+    horizontal.dispose();
+    connected.dispose();
   });
 
   it('writes deterministic palette colour and normal data', () => {

@@ -36,7 +36,7 @@ async function tapAtFirstValidPlacement(page: Page): Promise<void> {
       const banner = (await page.getByTestId('placing-banner').textContent()) ?? '';
       if (!banner.includes('Cannot') && /tap to build/i.test(banner)) {
         await page.touchscreen.tap(x, y);
-        await expect(page.getByTestId('placing-banner')).toBeHidden({ timeout: 3_000 });
+        await expect(page.getByTestId('placing-banner')).toBeVisible({ timeout: 3_000 });
         return;
       }
     }
@@ -166,7 +166,7 @@ test('keeps essential touch targets on-screen through both orientations', async 
   }
 });
 
-test('places a building with a canvas tap and offers a touch cancel action', async ({
+test('rotates and places multiple buildings before touch cancellation', async ({
   page,
 }, testInfo) => {
   test.skip(!MOBILE_PROJECTS.has(testInfo.project.name));
@@ -177,8 +177,16 @@ test('places a building with a canvas tap and offers a touch cancel action', asy
   await page.getByTestId('menu-shortcut-build').click();
   await page.getByTestId('build-road').click();
   await expect(page.getByTestId('placing-banner')).toContainText(/tap to build|tap another spot/i);
+  await expect(page.getByTestId('touch-rotate')).toBeVisible();
   await expect(page.getByTestId('touch-cancel')).toBeVisible();
 
+  await page.getByTestId('touch-rotate').tap();
   await tapAtFirstValidPlacement(page);
   await expect(page.getByTestId('hud-balance')).not.toHaveText(balanceBeforePlacement ?? '');
+  const balanceAfterFirst = await page.getByTestId('hud-balance').textContent();
+  await tapAtFirstValidPlacement(page);
+  await expect(page.getByTestId('hud-balance')).not.toHaveText(balanceAfterFirst ?? '');
+
+  await page.getByTestId('touch-cancel').tap();
+  await expect(page.getByTestId('placing-banner')).toBeHidden();
 });

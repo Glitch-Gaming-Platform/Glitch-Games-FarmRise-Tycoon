@@ -16,6 +16,8 @@ export interface RoadGeometryOptions {
   readonly tileSize: number;
   readonly connections: number;
   readonly variant: number;
+  /** Standalone roads use the selected quarter-turn; connected roads follow topology. */
+  readonly rotation?: number;
 }
 
 interface LinearColour {
@@ -349,10 +351,13 @@ export function createRoadGeometry(options: RoadGeometryOptions): THREE.BufferGe
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  const isolatedRotation = mask === 0 ? Math.abs(Math.trunc(options.rotation ?? 0)) % 2 : 0;
+  if (isolatedRotation === 1) geometry.rotateY(Math.PI / 2);
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   geometry.userData['roadConnectionMask'] = mask;
   geometry.userData['roadVariant'] = options.variant;
+  geometry.userData['roadRotation'] = isolatedRotation;
   geometry.userData['roadSurfaceStyle'] = 'packed-earth-bands';
   return geometry;
 }

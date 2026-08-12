@@ -75,8 +75,8 @@ are DOM presentation art. They do not add WebGL draw calls, UVs or texture sampl
   layout is capability-gated; never show or reserve its space on desktop.
 - The joystick feeds fractional semantic actions into `InputSystem`. Mobile UI controls must not
   dispatch synthetic keys or mouse events.
-- During mobile placement, hide gameplay controls, leave a clear **Cancel** action and let a direct
-  canvas tap position and commit the preview.
+- During mobile placement, hide gameplay controls, expose clear **Rotate** and **Cancel** actions,
+  and let direct canvas taps place repeated copies until the player cancels or cannot afford another.
 - Mobile layout uses `100dvh` and safe-area insets. Essential controls remain approximately 44 CSS
   pixels or larger and inside portrait and short-landscape viewports.
 - Hide the shortcut dock whenever a panel or exclusive screen already presents menu controls. This

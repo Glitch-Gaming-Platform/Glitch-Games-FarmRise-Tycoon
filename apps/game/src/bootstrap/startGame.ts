@@ -27,29 +27,24 @@ import { createNetworking } from './createNetworking.js';
 import { bindHud } from './bindHud.js';
 import { bindSession } from './bindSession.js';
 import { bindAnalytics } from './bindAnalytics.js';
-import {
-  AnalyticsClient,
-  createConsoleSink,
-  randomId,
-  resolveAnonId,
-} from '@analytics/AnalyticsClient.js';
-import { PROTOCOL_VERSION, type CareerSaveState } from '@farmrise/shared';
+import type { CareerSaveState } from '@farmrise/shared';
 import { OutcomeState } from '@game/states/phases.js';
-import { GlitchPlatform } from '@platform/glitch/GlitchPlatform.js';
 import { SaveDirector } from '@platform/save/SaveDirector.js';
 import { AutosaveController } from '@platform/save/AutosaveController.js';
 import { loadCareer } from '@platform/save/CareerLoader.js';
-import { bindGlitchAnalytics } from './bindGlitch.js';
 import { bindSceneAudio, bindStateAudio, prepareAudio } from './bindAudio.js';
 import { SOUND, type SoundId } from '@assets/audio/soundIds.js';
 import { DEFAULT_MUSIC_ID } from '@assets/audio/musicIds.js';
 import { bindMobileLifecycle } from './bindMobileLifecycle.js';
 import { createProgressionReviewCareer } from '@game/debug/progressionReview.js';
 import { createIncidentReviewCareer } from '@game/debug/incidentReview.js';
+import { bindRuntimeAnalytics } from './bindRuntimeAnalytics.js';
+import { createAnalyticsRuntime } from './createAnalytics.js';
 
 export interface StartGameOptions {
   readonly container: HTMLElement;
   readonly isDev?: boolean;
+  readonly isProduction?: boolean;
   readonly apiBaseUrl?: string;
 }
 
@@ -59,7 +54,9 @@ export interface RunningGame {
 
 export async function startGame(options: StartGameOptions): Promise<RunningGame> {
   const { container } = options;
-  const bundle = createEngine(container, options.isDev ?? false);
+  const isDev = options.isDev ?? false;
+  const isProduction = options.isProduction ?? !isDev;
+  const bundle = createEngine(container, isDev);
   const net = createNetworking(options.apiBaseUrl ?? '');
   // One loader for the whole session, so a scene reload re-uses the meshes
   // already in memory instead of re-fetching them.
@@ -95,30 +92,12 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     ? createIncidentReviewCareer(bundle.incidentReviewId)
     : null;
 
-  const analytics = new AnalyticsClient({
-    context: {
-      anonId: resolveAnonId(),
-      sessionId: randomId(),
-      protocolVersion: PROTOCOL_VERSION,
-      appVersion: '0.1.0',
-    },
-  });
-  if (options.isDev) analytics.addSink(createConsoleSink());
-
-  // Glitch is optional. `create()` returns null on a plain website with no
-  // title token, and every call below tolerates that.
-  const glitch = GlitchPlatform.create();
+  const telemetry = createAnalyticsRuntime({ isDev, isProduction });
+  const { analytics, glitch } = telemetry;
   const saves = new SaveDirector(net.auth, net.api, glitch);
-  // Assigned when Glitch is configured; released in stop().
-  let unbindGlitchAnalytics: Unsubscribe | null = null;
-  void unbindGlitchAnalytics;
+  let unbindRuntimeAnalytics: Unsubscribe = () => {};
   let accountBusy = false;
   let accountError: string | null = null;
-  analytics.track('session_start', {
-    referrer: typeof document === 'undefined' ? '' : document.referrer,
-    viewport: `${globalThis.innerWidth ?? 0}x${globalThis.innerHeight ?? 0}`,
-    touch: (globalThis.navigator?.maxTouchPoints ?? 0) > 0,
-  });
 
   const playUi = (id: SoundId, volume = 0.75): void => {
     bundle.audio.play(id, { bus: 'ui', volume, detuneJitter: 12 });
@@ -140,14 +119,20 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
    * failure, and re-linking Glitch afterwards so cloud features follow the
    * signed-in identity.
    */
-  const runAccountAction = async (action: () => Promise<void>): Promise<void> => {
+  const runAccountAction = async (
+    actionName: 'register' | 'login' | 'logout',
+    action: () => Promise<void>,
+  ): Promise<void> => {
     accountBusy = true;
     accountError = null;
+    analytics.track('account_action', { action: actionName, outcome: 'started' });
     refreshAccount();
     try {
       await action();
-      await glitch?.setAccountEmail(net.auth.user?.email ?? null);
+      await telemetry.setAccountEmail(net.auth.user?.email ?? null);
+      analytics.track('account_action', { action: actionName, outcome: 'succeeded' });
     } catch (error) {
+      analytics.track('account_action', { action: actionName, outcome: 'failed' });
       accountError =
         error instanceof Error && error.message
           ? error.message
@@ -173,10 +158,12 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       },
       onSettings: () => {
         playUi(SOUND.uiOpen, 0.7);
+        analytics.track('panel_viewed', { panel: 'settings', action: 'opened' });
         ui.openSettings('menu');
       },
       onAccount: () => {
         playUi(SOUND.uiOpen, 0.7);
+        analytics.track('panel_viewed', { panel: 'account', action: 'opened' });
         refreshAccount();
         ui.account.setVisible(true);
       },
@@ -185,10 +172,12 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       onResume: () => machine.transitionTo('playing', 'ui-resume'),
       onSettings: () => {
         playUi(SOUND.uiOpen, 0.7);
+        analytics.track('panel_viewed', { panel: 'settings', action: 'opened' });
         ui.openSettings('pause');
       },
       onAccount: () => {
         playUi(SOUND.uiOpen, 0.7);
+        analytics.track('panel_viewed', { panel: 'account', action: 'opened' });
         refreshAccount();
         ui.account.setVisible(true);
       },
@@ -239,7 +228,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     },
     account: {
       onRegister: (email, displayName, password) =>
-        void runAccountAction(async () => {
+        void runAccountAction('register', async () => {
           await net.auth.register({ email, displayName, password });
           // Push the current run straight up so the account is immediately
           // worth having.
@@ -247,7 +236,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
           if (state) await saves.save(state);
         }),
       onLogin: (email, password) =>
-        void runAccountAction(async () => {
+        void runAccountAction('login', async () => {
           await net.auth.login({ email, password });
           const restored = await loadCareer(saves);
           if (restored.kind === 'resume' && restored.tier === 'account') {
@@ -256,11 +245,12 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
           }
         }),
       onLogout: () =>
-        void runAccountAction(async () => {
+        void runAccountAction('logout', async () => {
           await net.auth.logout();
         }),
       onClose: () => {
         playUi(SOUND.uiClick, 0.6);
+        analytics.track('panel_viewed', { panel: 'account', action: 'closed' });
         ui.account.setVisible(false);
       },
     },
@@ -275,16 +265,35 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       },
     },
     settings: {
-      onVolumeChange: (bus, value) => bundle.audio.setVolume(bus, value),
-      onMusicTrackChange: (trackId) => preparedAudio.music.select(trackId),
-      onMusicTrackEnabledChange: (trackId, enabled) =>
-        preparedAudio.music.setEnabled(trackId, enabled),
-      onDebugToggle: () => {
+      onVolumeChange: (bus, value) => {
+        bundle.audio.setVolume(bus, value);
+        analytics.track('setting_changed', {
+          setting: `volume_${bus}`,
+          value: Math.round(value * 100),
+        });
+      },
+      onMusicTrackChange: (trackId) => {
+        preparedAudio.music.select(trackId);
+        analytics.track('setting_changed', { setting: 'music_track', value: trackId });
+      },
+      onMusicTrackEnabledChange: (trackId, enabled) => {
+        preparedAudio.music.setEnabled(trackId, enabled);
+        analytics.track('setting_changed', {
+          setting: `music_track_${trackId}`,
+          value: enabled,
+        });
+      },
+      onQualityChange: (quality) =>
+        analytics.track('setting_changed', { setting: 'graphics_quality', value: quality }),
+      onDebugToggle: (enabled) => {
         playUi(SOUND.uiClick, 0.55);
+        analytics.track('setting_changed', { setting: 'performance_overlay', value: enabled });
         /* Overlay visibility is resolved at boot; the toggle persists for next launch. */
       },
+      ...(telemetry.privacy ? { onPrivacy: () => ui.openPrivacyPreferences() } : {}),
       onClose: () => {
         playUi(SOUND.uiClick, 0.6);
+        analytics.track('panel_viewed', { panel: 'settings', action: 'closed' });
         ui.closeSettings();
       },
     },
@@ -296,6 +305,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
           },
         }
       : {}),
+    ...(telemetry.privacy ? { privacy: telemetry.privacy } : {}),
   });
 
   ui.settings.setMusicTrack(preparedAudio.music.selectedTrack);
@@ -389,6 +399,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
   });
   bundle.sceneManager.events.on('scene:load-error', ({ error }) => {
     console.error('[startGame] scene failed to load', error);
+    analytics.track('runtime_error', { area: 'scene', code: 'load_failed' });
     playUi(SOUND.uiDeny, 0.8);
     ui.hud.toast('The farm failed to load. Returning to the menu.', 'error');
   });
@@ -415,13 +426,14 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     }),
   );
 
-  let glitchStart: Promise<void> | null = null;
-  if (glitch) {
-    unbindGlitchAnalytics = bindGlitchAnalytics(analytics, glitch);
-    // Start this beside engine boot, then await it before choosing a save.
-    // That preserves a fast first render without racing cloud restoration.
-    glitchStart = glitch.start(net.auth.user?.email ?? null, () => machine.current === 'playing');
-  }
+  unbindRuntimeAnalytics = bindRuntimeAnalytics({
+    analytics,
+    machine,
+    saves,
+    engine: bundle.engine,
+    renderer: bundle.renderer,
+    quality: bundle.quality,
+  });
 
   try {
     await bundle.engine.start();
@@ -438,12 +450,13 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     throw error;
   }
 
-  await glitchStart;
+  await telemetry.activate(net.auth.user?.email ?? null, () => machine.current === 'playing');
 
   // Best-effort final delivery of events and the last heartbeat.
   const onHide = (): void => {
     autosave?.flushLocal();
-    void glitch?.flush();
+    telemetry.end('unload');
+    telemetry.flush();
   };
   globalThis.addEventListener?.('pagehide', onHide);
 
@@ -468,8 +481,13 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
 
   return {
     stop(): void {
+      telemetry.end('manual');
+      telemetry.flush();
       unbindHud?.();
       unbindSceneAudio?.();
+      unbindSession?.();
+      unbindAnalytics?.();
+      unbindRuntimeAnalytics();
       autosave?.dispose();
       unbindStateAudio();
       unbindMusicSettings();
@@ -478,6 +496,8 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       globalThis.removeEventListener?.('pagehide', onHide);
       ui.dispose();
       bundle.engine.dispose();
+      telemetry.dispose();
+      saves.dispose();
       assets.dispose();
     },
   };

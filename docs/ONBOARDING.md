@@ -124,7 +124,7 @@ seconds, the hint points directly at the gold/orange colour and the Harvest prom
 | Reinvestment | a sale | Coach + `B` / Build shortcut; all options priced | Nothing is irreversible except spending | Every surplus | A purchase | "Press B or click Build. A barn holds more; irrigation loses less." |
 | Egg collection | starter hens finish a cycle | Visible basket + contextual **Pick up Eggs** prompt | The first clutch is already fed; later cycles require stored corn | Every later animal cycle | Eggs enter the active carrier | Walk in front of the shelter and use `E`/Work. |
 | Starter expansion | egg collection | Build panel shows Starter Extension above North Field | Costs $20 and adds exactly three nearby beds | North Field remains visible as the next $75 goal | Starter Extension owned | Open Build and choose Starter Extension. |
-| Building placement | reinvestment | Ghost preview, green/red | Esc or **Cancel** exits; no cost until confirmed | Each build | A placed building | Desktop says click/Esc; mobile says tap/Cancel. |
+| Building placement | reinvestment | Ghost preview, green/red | WASD still moves; `R`/**Rotate** turns; Esc/**Cancel** exits; no cost until confirmed | Each build | A placed building | One selection places repeated copies until cancelled or unaffordable. |
 | Warned events | starter expansion | A deterministic minor fox warning with a real countdown | Random incidents stay paused until the lesson resolves | Every later event | Uses `F`/Protect, or accepts the hit | Doing nothing remains valid. |
 | The goal | starter expansion | Objective meter + the North Field row | Purely additive | Meter fills constantly | Buys North Field | Meter shows % saved |
 
@@ -147,10 +147,12 @@ fast same-browser hint.
 `mastery`. Someone who plants before being told never sees the planting beat. Replaying after a
 finished run skips onboarding entirely.
 
-**Interface input isolation.** Market, Build & Reinvest and Account panels capture the full pointer surface,
-and plot interaction plus movement are suppressed while a gameplay panel or placement cursor is open.
-The farm simulation still advances behind Market and Build & Reinvest. `Esc` closes the active panel or
-cancels placement before it is allowed to pause the game.
+**Interface input isolation.** Market, Build & Reinvest and Account panels capture the full pointer
+surface and suppress movement, interaction and world clicks. A placement cursor suppresses plot work
+and other world actions but deliberately keeps desktop WASD movement active, so the player can survey
+a long road or fence run without leaving build mode. `R` rotates the preview, successful confirmations
+keep the selected item active for repeated placement, and `Esc` cancels placement before it is allowed
+to pause the game. The farm simulation still advances behind panels and placement.
 
 **Menu shortcuts.** During desktop play, the bottom-right Market, Build, Office and Town buttons pair
 Blender-rendered icons with their `M`, `B`, `C` and `T` keys. Touch-primary play moves the same dock
@@ -220,7 +222,7 @@ later success and become meaningless.
 | Prompts never stack, non-blocking | `slice.spec.ts` — "prompts never stack", "never blocks the game behind it" |
 | Matching pointer and keyboard menu paths | `slice.spec.ts` — Market click / M, Build click / B, Esc |
 | Mobile movement and plot work | `mobile.spec.ts` — held joystick reaches a plot; Work changes money and prompt |
-| Mobile placement | `mobile.spec.ts` — touch canvas tap spends money and exits placement; Cancel is visible |
+| Mobile placement | `mobile.spec.ts` — Rotate changes orientation, repeated canvas taps spend money without reselecting, and Cancel exits |
 | Copy budget | "stays within the prompt length budget" |
 
 The Playwright suite executes desktop Chromium/Firefox/WebKit and dedicated mobile Chrome/WebKit

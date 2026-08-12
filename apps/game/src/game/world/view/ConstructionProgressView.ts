@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BUILDINGS, formatTicks, type BuildingKind } from '@farmrise/shared';
+import { BUILDINGS, buildingFootprint, formatTicks, type BuildingKind } from '@farmrise/shared';
 import type { FarmWorld } from '../FarmWorld.js';
 
 interface ProgressEntry {
@@ -49,10 +49,10 @@ export class ConstructionProgressView {
         this.object.add(entry.sprite);
       }
 
-      const definition = BUILDINGS[building.kind];
+      const footprint = buildingFootprint(building.kind, building.rotation);
       const center = world.grid.tileToWorld(
-        building.tileX + (definition.footprint.width - 1) / 2,
-        building.tileZ + (definition.footprint.depth - 1) / 2,
+        building.tileX + (footprint.width - 1) / 2,
+        building.tileZ + (footprint.depth - 1) / 2,
       );
       entry.sprite.position.set(center.x, progressHeight(building.kind), center.z);
 

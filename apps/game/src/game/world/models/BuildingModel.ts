@@ -7,13 +7,15 @@
  * (docs/PROGRESSION_GAMEPLAY_PLAN.md §33.3).
  */
 import {
-  BUILDINGS,
   BARN_CAPACITY_UNITS,
   BASE_STORAGE_UNITS,
   COLD_STORE_CAPACITY_UNITS,
   LOADING_PAD_CAPACITY,
+  buildingFootprint,
+  normalizeBuildingRotation,
   upkeepForTicks,
   type BuildingKind,
+  type BuildingRotation,
 } from '@farmrise/shared';
 import { EventBus } from '@engine/core/EventBus.js';
 import { TileFlag, type TileGrid } from '@engine/physics/TileGrid.js';
@@ -24,7 +26,7 @@ export interface PlacedBuilding {
   readonly kind: BuildingKind;
   readonly tileX: number;
   readonly tileZ: number;
-  rotation: number;
+  rotation: BuildingRotation;
   remainingBuildTicks: number;
   broken: boolean;
 }
@@ -61,12 +63,12 @@ export class BuildingModel {
 
   at(tileX: number, tileZ: number): PlacedBuilding | undefined {
     return this.#buildings.find((building) => {
-      const definition = BUILDINGS[building.kind];
+      const footprint = buildingFootprint(building.kind, building.rotation);
       return (
         tileX >= building.tileX &&
-        tileX < building.tileX + definition.footprint.width &&
+        tileX < building.tileX + footprint.width &&
         tileZ >= building.tileZ &&
-        tileZ < building.tileZ + definition.footprint.depth
+        tileZ < building.tileZ + footprint.depth
       );
     });
   }
@@ -84,6 +86,7 @@ export class BuildingModel {
   }
 
   add(building: PlacedBuilding): void {
+    building.rotation = normalizeBuildingRotation(building.rotation);
     this.#buildings.push(building);
     // The footprint is reserved immediately, so two builds cannot claim the
     // same tiles while the first is still under construction.
@@ -156,12 +159,12 @@ export class BuildingModel {
   }
 
   applyToGrid(building: PlacedBuilding): void {
-    const definition = BUILDINGS[building.kind];
+    const footprint = buildingFootprint(building.kind, building.rotation);
     this.grid.fillRect(
       building.tileX,
       building.tileZ,
-      definition.footprint.width,
-      definition.footprint.depth,
+      footprint.width,
+      footprint.depth,
       TileFlag.Occupied,
       true,
     );
@@ -170,7 +173,13 @@ export class BuildingModel {
     if (building.kind === 'fence') {
       this.grid.setFlag(building.tileX, building.tileZ, TileFlag.Enclosed, true);
     }
-    addBuildingCollision(this.grid, building.kind, building.tileX, building.tileZ);
+    addBuildingCollision(
+      this.grid,
+      building.kind,
+      building.tileX,
+      building.tileZ,
+      building.rotation,
+    );
 
     // Solid structures also block coarse pathfinding. Roads, pads and fences
     // are things you walk on or past, so they must not.
@@ -178,8 +187,8 @@ export class BuildingModel {
       this.grid.fillRect(
         building.tileX,
         building.tileZ,
-        definition.footprint.width,
-        definition.footprint.depth,
+        footprint.width,
+        footprint.depth,
         TileFlag.Blocked,
         true,
       );
@@ -191,7 +200,10 @@ export class BuildingModel {
   }
 
   hydrate(buildings: readonly PlacedBuilding[]): void {
-    this.#buildings = buildings.map((building) => ({ ...building }));
+    this.#buildings = buildings.map((building) => ({
+      ...building,
+      rotation: normalizeBuildingRotation(building.rotation),
+    }));
     for (const building of this.#buildings) {
       this.#nextId = Math.max(this.#nextId, extractNumber(building.id) + 1);
     }

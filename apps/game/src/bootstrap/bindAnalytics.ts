@@ -31,6 +31,7 @@ export function bindAnalytics(
 
   const subscriptions: Unsubscribe[] = [];
   let cycle = 0;
+  let openPanel = 'none';
 
   /**
    * The four onboarding health metrics. Each fires at most once, because a
@@ -60,8 +61,14 @@ export function bindAnalytics(
         analytics.track('crop_tended', { plotId: target });
       }
     }),
-    interaction.events.on('interaction:refused', ({ reason }) =>
-      analytics.track('action_refused', { action: 'interact', reason }),
+    interaction.events.on('interaction:refused', () =>
+      analytics.track('action_refused', {
+        action: 'interact',
+        reasonCode: 'interaction_refused',
+      }),
+    ),
+    interaction.events.on('interaction:crop-selected', ({ cropId }) =>
+      analytics.track('crop_selected', { cropId }),
     ),
 
     world.events.on('world:harvested', ({ itemId, quantity, carried }) => {
@@ -83,6 +90,9 @@ export function bindAnalytics(
     }),
     world.events.on('world:storage-full', ({ itemId, spilled }) =>
       analytics.track('storage_overflowed', { itemId, spilled }),
+    ),
+    world.events.on('world:goods-spoiled', ({ lost, inTheOpen }) =>
+      analytics.track('goods_spoiled', { lost, inTheOpen }),
     ),
     world.events.on('world:building-placed', ({ kind }) =>
       analytics.track('building_placed', {
@@ -139,14 +149,42 @@ export function bindAnalytics(
         balance: career.balance,
       });
     }),
-    session.events.on('session:refused', ({ action, reason }) =>
-      analytics.track('action_refused', { action, reason }),
+    session.events.on('session:refused', ({ action }) =>
+      analytics.track('action_refused', { action, reasonCode: `${action}_refused` }),
     ),
     session.events.on('session:responded', ({ response }) =>
       analytics.track('farm_event_prevented', { kind: response, cost: 0 }),
     ),
+    session.events.on('session:panel', ({ panel }) => {
+      if (openPanel !== 'none') {
+        analytics.track('panel_viewed', { panel: openPanel, action: 'closed' });
+      }
+      if (panel !== 'none') analytics.track('panel_viewed', { panel, action: 'opened' });
+      openPanel = panel;
+    }),
+    session.events.on('session:career-changed', ({ action }) =>
+      analytics.track('career_action_completed', { action }),
+    ),
+    world.carry.events.on('carry:carrier-changed', ({ carrier }) =>
+      analytics.track('carrier_changed', { carrier }),
+    ),
+    world.processing.events.on('processing:completed', ({ itemId, quantity }) =>
+      analytics.track('processing_completed', { itemId, quantity }),
+    ),
+    world.workforce.events.on('worker:task-completed', ({ task }) =>
+      analytics.track('worker_task_completed', { task }),
+    ),
+    world.structures.events.on('building:broken', ({ kind }) =>
+      analytics.track('building_broken', { kind }),
+    ),
+    world.structures.events.on('building:repaired', ({ kind }) =>
+      analytics.track('building_repaired', { kind }),
+    ),
 
     // --- progression funnel ------------------------------------------------
+    careerDirector.events.on('career:milestone-ready', ({ milestone }) =>
+      analytics.track('milestone_ready', { milestoneId: milestone.id }),
+    ),
     careerDirector.events.on('career:season-review', ({ summary }) =>
       analytics.track('run_completed', {
         outcome: summary.outcome,
@@ -170,6 +208,16 @@ export function bindAnalytics(
     careerDirector.events.on('career:restructured', () =>
       analytics.track('career_restructured', { elapsedMs: analytics.elapsedMs() }),
     ),
+    careerDirector.events.on('career:contract-failed', ({ buyerId }) =>
+      analytics.track('contract_failed', { buyerId }),
+    ),
+    careerDirector.events.on('career:project-completed', ({ projectId }) =>
+      analytics.track('town_project_completed', { projectId }),
+    ),
+    career.events.on('career:unlocked', ({ unlocks }) =>
+      analytics.track('unlock_granted', { unlocks: unlocks.join(',') }),
+    ),
+    career.events.on('career:town-grew', ({ stage }) => analytics.track('town_grew', { stage })),
     career.events.on('career:specialization-chosen', ({ specialization }) =>
       analytics.track('specialization_chosen', { specialization }),
     ),

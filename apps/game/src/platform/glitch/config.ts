@@ -35,9 +35,23 @@ export interface GlitchLaunchContext {
   readonly sessionId: string | null;
   readonly gameVersion: string;
   readonly buildType: 'production' | 'demo' | 'playtest';
+  readonly attribution: Readonly<Record<string, string>>;
+  readonly deviceId: string | null;
 }
 
-const QUERY_KEYS = ['title_id', 'game_id', 'install_id', 'user_install_id', 'session_id'] as const;
+const QUERY_KEYS = [
+  'title_id',
+  'game_id',
+  'install_id',
+  'user_install_id',
+  'session_id',
+  'short_link_click_id',
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_term',
+  'utm_content',
+] as const;
 
 function readQuery(): Partial<Record<(typeof QUERY_KEYS)[number], string>> {
   if (typeof location === 'undefined') return {};
@@ -81,6 +95,19 @@ export function resolveGlitchContext(): GlitchLaunchContext | null {
     sessionId: query.session_id ?? null,
     gameVersion: env('VITE_APP_VERSION') ?? '0.1.0',
     buildType: ['production', 'demo', 'playtest'].includes(buildType) ? buildType : 'production',
+    attribution: Object.fromEntries(
+      [
+        'short_link_click_id',
+        'utm_source',
+        'utm_medium',
+        'utm_campaign',
+        'utm_term',
+        'utm_content',
+      ].flatMap((key) =>
+        query[key as keyof typeof query] ? [[key, query[key as keyof typeof query]!]] : [],
+      ),
+    ),
+    deviceId: readCookie('device_id'),
   };
 }
 
@@ -118,4 +145,14 @@ export function loadOrCreateUserInstallId(supplied?: string | null): string {
     /* ephemeral for this session only */
   }
   return created;
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const prefix = `${encodeURIComponent(name)}=`;
+  const pair = document.cookie
+    .split(';')
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(prefix));
+  return pair ? decodeURIComponent(pair.slice(prefix.length)).slice(0, 255) : null;
 }

@@ -5,7 +5,7 @@
  * mass a player should collide with (roof overhangs and the coop ramp are not
  * walls). They rasterise once into TileGrid's 0.5 m collision mask.
  */
-import type { BuildingKind } from '@farmrise/shared';
+import { normalizeBuildingRotation, type BuildingKind } from '@farmrise/shared';
 import type { TileGrid } from '@engine/physics/TileGrid.js';
 
 interface CollisionRect {
@@ -36,11 +36,24 @@ export function addBuildingCollision(
   kind: BuildingKind,
   tileX: number,
   tileZ: number,
+  rotation: number = 0,
 ): void {
   const profiles = BUILDING_COLLIDERS[kind];
   if (!profiles) return;
   const center = grid.tileToWorld(tileX, tileZ);
-  for (const profile of profiles) addRect(grid, center.x, center.z, profile);
+  const rotationY = normalizeBuildingRotation(rotation) * (Math.PI / 2);
+  const cos = Math.cos(rotationY);
+  const sin = Math.sin(rotationY);
+  for (const profile of profiles) {
+    const offsetX = profile.offsetX ?? 0;
+    const offsetZ = profile.offsetZ ?? 0;
+    addRect(grid, center.x, center.z, {
+      ...profile,
+      offsetX: offsetX * cos + offsetZ * sin,
+      offsetZ: -offsetX * sin + offsetZ * cos,
+      rotationY: (profile.rotationY ?? 0) + rotationY,
+    });
+  }
 }
 
 export function addShelterCollision(grid: TileGrid, tileX: number, tileZ: number): void {

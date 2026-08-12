@@ -24,7 +24,7 @@ changes use that value; gameplay code does not branch on device names.
 | Crop choice | **Seed** cycles the selected crop. |
 | Warned event | **Protect** pays the normal prevention cost when a response window is active. |
 | Management | The illustrated Market, Build, Office and Town buttons open the same panels as desktop. |
-| Placement | Tap open ground to commit the preview; **Cancel** exits without spending. |
+| Placement | Tap open ground to place repeated copies; **Rotate** turns the preview and **Cancel** exits. |
 | Pause | The compact `Ⅱ` control opens the existing pause screen. |
 
 `apps/game/src/ui/hud/TouchControls.ts` owns touch pointer ids and pointer capture. It never emits
@@ -37,7 +37,9 @@ on `pointerdown`. Pointer ownership still controls the pressed visual, while the
 longer depends on Safari preserving pointer capture through the end of a touch gesture.
 
 Touch taps may have no hover or `pointermove` event. `InputSystem` records contact coordinates on
-`pointerdown`, which is required for a single canvas tap to position and confirm a building.
+`pointerdown`, which is required for a single canvas tap to position and confirm a building. A
+successful tap keeps placement active so roads, fences and other repeated items do not require
+reopening Build between every tile.
 
 Panels and coach marks remain DOM interfaces and carry `data-engine-input-ignore`; touching them
 must not move the player, work a plot or commit a placement behind the interface.
@@ -84,9 +86,10 @@ not mark those gates PASS from source estimates; profile them on a constrained p
 - Short landscape must be tested at the physical Safari viewport, not only the nominal device
   resolution. The iPhone 12 mini exposes 812 × 311 CSS pixels with browser chrome; force the
   management dock into compact icon/key-cap tiles there and keep Pause beside rather than over it.
-- During placement, hide gameplay controls and show only the explicit Cancel action. The canvas owns
-  the placement tap.
-- Mobile copy says **joystick**, **tap Work**, the visible management-button names and **Cancel**.
+- During placement, hide gameplay controls and show the explicit **Rotate** and **Cancel** actions.
+  The canvas owns placement taps.
+- Mobile copy says **joystick**, **tap Work**, the visible management-button names, **Rotate** and
+  **Cancel**.
   Desktop copy continues to name WASD, keys, clicks and Escape.
 
 ## Lifecycle ownership
@@ -128,8 +131,8 @@ npm run test:e2e
 It builds and previews the production client, serializes software-WebGL sessions for stability, and
 runs desktop Chromium/Firefox/WebKit plus mobile Chrome and mobile WebKit projects. Mobile-specific
 coverage lives in `tests/e2e/mobile.spec.ts` and includes the render cap, joystick hold, Work state
-change, all four management panels, portrait/landscape target bounds and hit-test ownership, and
-touch building placement.
+change, all four management panels, portrait/landscape target bounds and hit-test ownership, plus
+rotated, repeated touch building placement and explicit cancellation.
 
 ## Measured device result
 
@@ -152,7 +155,7 @@ touch building placement.
 | Physical short landscape | PASS at Safari's 812 × 311 viewport — dock 183 × 121 at x=58/y=8, joystick 126 × 126 at x=62/y=153, Pause at x=246/y=123 and actions at the right; no target center was covered, trusted joystick movement reached a plot and trusted Work changed Plant to Tend |
 | Trusted joystick | PASS on the exact production snapshot — a held touch moved the player into plot range and released to center |
 | Trusted Work | PASS on that snapshot — balance decreased by the current $0.80 wheat cost and prompt changed from Plant Wheat to Tend |
-| Trusted placement | PASS on hardware and mobile WebKit/Chrome — a canvas touch placed a road, exited placement and charged the current $4.00 road cost |
+| Trusted placement | The captured hardware snapshot placed one road and charged the current $4.00 road cost. The newer rotate-and-repeat flow has browser coverage and still requires a focused hardware retest. |
 | Pause/settings | PASS on hardware — trusted Pause opened the screen; the 345 × 636 settings panel stayed inside the 375 × 664 viewport and exposed all five music choices |
 | Foreground soak | PASS for more than 10 minutes on the immediately preceding runtime-identical snapshot, after separate trusted movement, Work and placement checks; every one-minute sample stayed at 60 FPS. The final change is short-landscape CSS and received focused hardware/browser retesting rather than a second soak. |
 | Safari tab background/resume | PASS on the preceding runtime-identical snapshot for more than one minute — the engine tick advanced only 199 ticks after returning, input was released, the dock/canvas layout stayed fixed and rendering resumed at 60 FPS |
@@ -168,6 +171,8 @@ pass is claimed.
   verify no held movement, no catch-up burst and resumed audio.
 - Physical multi-touch (joystick held while Work is tapped) is **not conclusively tested**. Pointer
   ownership has unit coverage; repeat it on hardware.
+- The current **Rotate**, repeated placement and explicit **Cancel** sequence has not yet been
+  repeated on physical hardware after replacing the older one-placement-and-exit behavior.
 - Offline/reconnect, WebGL context loss, lock/unlock, low-memory recovery, battery and thermal
   behavior are **not tested** on hardware.
 - Only one physical iPhone was available. Test an older constrained iPhone, an iPad and at least one

@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import type { RenderContext } from '@engine/core/types.js';
 import type { RenderPipeline } from '@engine/render/RenderPipeline.js';
-import { BUILDINGS, type IncidentInstance } from '@farmrise/shared';
+import { buildingFootprint, type IncidentInstance } from '@farmrise/shared';
 import type { Player } from '../../player/Player.js';
 import type { FarmWorld } from '../FarmWorld.js';
 import { PooledWorldEffects } from './PooledWorldEffects.js';
@@ -191,11 +191,11 @@ export class FarmImpactEffects {
       if (!resolved) {
         const building = world.structures.get(targetId);
         if (building) {
-          const definition = BUILDINGS[building.kind].footprint;
+          const footprint = buildingFootprint(building.kind, building.rotation);
           target.set(
-            structureCenterX(world, building.tileX, definition.width),
+            structureCenterX(world, building.tileX, footprint.width),
             0.05,
-            structureCenterZ(world, building.tileZ, definition.depth),
+            structureCenterZ(world, building.tileZ, footprint.depth),
           );
           resolved = true;
         }

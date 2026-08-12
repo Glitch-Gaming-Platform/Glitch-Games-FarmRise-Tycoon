@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { cents } from '@farmrise/shared';
 import { Hud, type HudSnapshot } from '@ui/hud/Hud.js';
+import { saleToastMessage } from '../../src/bootstrap/bindHud.js';
 
 const BASE: Omit<HudSnapshot, 'warning'> = {
   balance: cents(5_000),
@@ -68,5 +69,16 @@ describe('context prompt', () => {
     expect(hud.root.textContent).toContain('Tend  ·  press E');
     expect(hud.root.textContent).toContain("You can't carry anymore. Store some items first.");
     hud.dispose();
+  });
+});
+
+describe('sale feedback', () => {
+  it('states the exact payout and resulting balance', () => {
+    expect(saleToastMessage('wheat', 9, cents(522), cents(2_047), false)).toBe(
+      'Paid $5.22 for 9 Wheat. Balance $20.47.',
+    );
+    expect(saleToastMessage('eggs', 1, cents(85), cents(2_132), true)).toBe(
+      'Paid $0.85 for 1 Egg on contract. Balance $21.32.',
+    );
   });
 });

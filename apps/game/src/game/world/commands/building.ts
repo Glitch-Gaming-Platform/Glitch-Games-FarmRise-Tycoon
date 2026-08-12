@@ -7,14 +7,17 @@
 import {
   ANIMALS,
   BUILDINGS,
+  buildingFootprint,
   cents,
   getAnimal,
   isAnimalSpecies,
+  normalizeBuildingRotation,
   ok,
   processorBuildCost,
   ruleViolation,
   validateLandPurchase,
   type BuildingKind,
+  type BuildingRotation,
   type ProcessorKind,
   type Result,
 } from '@farmrise/shared';
@@ -34,6 +37,7 @@ export function build(
   kind: BuildingKind,
   tileX: number,
   tileZ: number,
+  rotation: number = 0,
 ): Result<{ id: string }> {
   const world = career.world;
   const definition = BUILDINGS[kind];
@@ -46,7 +50,8 @@ export function build(
   if (career.balance < cost) {
     return ruleViolation(`Not enough money to build a ${definition.displayName.toLowerCase()}.`);
   }
-  const siteProblem = buildingSiteProblem(career, kind, tileX, tileZ);
+  const normalizedRotation = normalizeBuildingRotation(rotation);
+  const siteProblem = buildingSiteProblem(career, kind, tileX, tileZ, normalizedRotation);
   if (siteProblem) return ruleViolation(siteProblem);
 
   career.adjustBalance(cents(-cost), 'construction');
@@ -56,7 +61,7 @@ export function build(
     kind,
     tileX,
     tileZ,
-    rotation: 0,
+    rotation: normalizedRotation,
     remainingBuildTicks: definition.buildTicks,
     broken: false,
   });
@@ -70,11 +75,18 @@ export function buildingSiteProblem(
   kind: BuildingKind,
   tileX: number,
   tileZ: number,
+  rotation: BuildingRotation = 0,
 ): string | null {
   const definition = BUILDINGS[kind];
   if (!definition) return `Unknown building "${kind}".`;
-  const { width, depth } = definition.footprint;
+  const { width, depth } = buildingFootprint(kind, rotation);
   const world = career.world;
+  if (
+    !world.grid.inBounds(tileX, tileZ) ||
+    !world.grid.inBounds(tileX + width - 1, tileZ + depth - 1)
+  ) {
+    return 'That would extend beyond the farm.';
+  }
   if (!world.grid.canPlace(tileX, tileZ, width, depth)) return 'Something is already there.';
 
   for (let dz = 0; dz < depth; dz += 1) {

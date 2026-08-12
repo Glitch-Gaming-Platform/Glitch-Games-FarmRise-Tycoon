@@ -41,12 +41,24 @@ describe('TouchControls', () => {
     ]);
   });
 
-  it('shows only cancellation while placing', () => {
-    const controls = new TouchControls({ setAction: vi.fn(), setActionValue: vi.fn() });
+  it('shows rotation and cancellation while placing', () => {
+    const setAction = vi.fn();
+    const controls = new TouchControls({ setAction, setActionValue: vi.fn() });
     controls.setMode('placement');
 
     expect(controls.root.hidden).toBe(false);
     expect(controls.root.querySelector<HTMLElement>('.fr-touch-gameplay')?.hidden).toBe(true);
     expect(controls.root.querySelector<HTMLElement>('.fr-touch-placement')?.hidden).toBe(false);
+    const rotate = controls.root.querySelector<HTMLButtonElement>('[data-testid="touch-rotate"]')!;
+    rotate.dispatchEvent(pointer('pointerdown', 3));
+    rotate.dispatchEvent(pointer('pointerup', 3));
+    const cancel = controls.root.querySelector<HTMLButtonElement>('[data-testid="touch-cancel"]')!;
+    cancel.dispatchEvent(pointer('pointerdown', 4));
+    expect(setAction.mock.calls).toEqual([
+      ['rotatePlacement', true],
+      ['rotatePlacement', false],
+      ['cancel', true],
+      ['cancel', false],
+    ]);
   });
 });

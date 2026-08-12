@@ -23,6 +23,10 @@ import { OutcomeScreen, type OutcomeCallbacks } from './outcome/OutcomeScreen.js
 import { AccountPanel, type AccountCallbacks } from './account/AccountPanel.js';
 import { el } from './core/dom.js';
 import { TouchControls, type TouchControlCallbacks } from './hud/TouchControls.js';
+import {
+  AnalyticsConsentBanner,
+  type AnalyticsConsentBannerOptions,
+} from './privacy/AnalyticsConsentBanner.js';
 
 export type ScreenName = 'none' | 'menu' | 'loading' | 'pause' | 'settings' | 'outcome';
 
@@ -39,6 +43,7 @@ export interface UiRootOptions {
   readonly account: AccountCallbacks;
   readonly shortcuts: MenuShortcutCallbacks;
   readonly touchControls?: TouchControlCallbacks;
+  readonly privacy?: AnalyticsConsentBannerOptions;
 }
 
 export class UiRoot {
@@ -60,6 +65,7 @@ export class UiRoot {
   readonly shortcuts: MenuShortcutDock;
   readonly touchControls: TouchControls | null;
   readonly outcome: OutcomeScreen;
+  readonly privacy: AnalyticsConsentBanner | null;
   readonly #placing: HTMLElement;
   readonly #screens = new Map<ScreenName, Screen>();
   readonly #layer: HTMLElement;
@@ -91,6 +97,7 @@ export class UiRoot {
     this.town = new TownPanel(options.town);
     this.outcome = new OutcomeScreen(options.outcome);
     this.account = new AccountPanel(options.account);
+    this.privacy = options.privacy ? new AnalyticsConsentBanner(options.privacy) : null;
     this.shortcuts = new MenuShortcutDock(options.shortcuts);
     this.#placing = el('div', { class: 'fr-placing', testId: 'placing-banner' });
     this.#placing.hidden = true;
@@ -111,6 +118,7 @@ export class UiRoot {
     );
     if (this.touchControls) this.#layer.append(this.touchControls.root);
     this.#layer.append(this.coach.root, this.#placing);
+    if (this.privacy) this.#layer.append(this.privacy.root);
     this.show('none');
   }
 
@@ -159,6 +167,10 @@ export class UiRoot {
 
   closeSettings(): void {
     this.show(this.#settingsReturnTo);
+  }
+
+  openPrivacyPreferences(): void {
+    this.privacy?.showPreferences();
   }
 
   /** The build-placement banner. Null hides it. */

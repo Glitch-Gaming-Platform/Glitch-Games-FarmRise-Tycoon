@@ -29,7 +29,8 @@ expected to work inside.
 | A review render pass | `tools/blender/review_render.py` |
 | A Blender-rendered DOM interface illustration | Compose it in `tools/blender/render_ui_icons.py`; output goes to `apps/game/public/assets/ui/icons/` |
 | A network call | `apps/game/src/net/GameApi.ts` |
-| An analytics event | `apps/game/src/analytics/events.ts`, recorded from `bootstrap/bindAnalytics.ts` |
+| An analytics event | `apps/game/src/analytics/events.ts`, recorded from `bootstrap/bindAnalytics.ts` or app-wide `bootstrap/bindRuntimeAnalytics.ts` |
+| An analytics provider or production gate | `apps/game/src/analytics/WebAnalytics.ts`; preference state stays in `analytics/consent.ts` |
 | An onboarding beat | `apps/game/src/game/onboarding/beats.ts` |
 | A run-level rule (win, loss, goal price) | `packages/shared/src/rules/outcome.ts` — the server evaluates it too |
 | Session orchestration (panels, placement, outcome) | `apps/game/src/game/systems/SessionController.ts` |
@@ -120,6 +121,7 @@ thresholds and secrets are not. See [NETWORKING.md](NETWORKING.md).
 | An engine system | Unit test with `createManualScheduler()` |
 | Game logic | Unit test in `apps/game/tests/unit/`, no rendering |
 | A cross-cutting behaviour | Integration test in `apps/game/tests/integration/` |
+| Analytics/provider behavior | Unit tests for production gating, privacy, payloads and provider failure; Playwright for visible privacy controls |
 | A wire schema | Contract test in `packages/shared/tests/protocol.test.ts` |
 | An API route | Route test covering **anonymous access, another user's resource, invalid input**, and a replayed request if money moves |
 | A money path | Test that the server ignores any client-supplied amount |

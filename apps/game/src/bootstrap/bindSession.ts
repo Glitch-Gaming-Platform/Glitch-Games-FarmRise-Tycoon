@@ -439,23 +439,25 @@ export function bindSession(
     // --- build placement ------------------------------------------------
     session.placement.events.on('placement:started', ({ kind }) => {
       ui.setPlacing(
-        `Placing ${BUILDINGS[kind].displayName} — ${touch ? 'tap to build, Cancel to stop' : 'click to build, Esc to cancel'}`,
+        `Placing ${BUILDINGS[kind].displayName} — ${touch ? 'tap to build more, Rotate to turn, Cancel to stop' : 'click to build more, R to rotate, WASD to move, Esc to stop'}`,
       );
-      scene.setPlacementPreview(kind, 0, 0, true);
       playUi(SOUND.uiOpen, 0.7);
     }),
-    session.placement.events.on('placement:moved', ({ kind, tileX, tileZ, valid }) => {
-      scene.setPlacementPreview(kind, tileX, tileZ, valid);
-      ui.setPlacing(
-        valid
-          ? `Placing ${BUILDINGS[kind].displayName} — ${touch ? 'tap to build, Cancel to stop' : 'click to build, Esc to cancel'}`
-          : `Cannot build here — ${touch ? 'tap another spot or Cancel' : 'move the cursor, Esc to cancel'}`,
-        !valid,
-      );
-    }),
+    session.placement.events.on(
+      'placement:moved',
+      ({ kind, tileX, tileZ, rotation, valid, problem }) => {
+        scene.setPlacementPreview(kind, tileX, tileZ, valid, rotation);
+        ui.setPlacing(
+          valid
+            ? `Placing ${BUILDINGS[kind].displayName} — ${touch ? 'tap to build more, Rotate to turn, Cancel to stop' : 'click to build more, R to rotate, WASD to move, Esc to stop'}`
+            : `${problem ?? 'Cannot build here.'} — ${touch ? 'tap another spot, Rotate, or Cancel' : 'WASD to move, R to rotate, Esc to stop'}`,
+          !valid,
+        );
+      },
+    ),
     session.placement.events.on('placement:placed', () => {
-      ui.setPlacing(null);
-      scene.setPlacementPreview(null);
+      // Placement stays active so one selection can build a run. The
+      // controller emits a fresh moved event for the now-occupied tile.
       refresh();
     }),
     session.placement.events.on('placement:cancelled', () => {

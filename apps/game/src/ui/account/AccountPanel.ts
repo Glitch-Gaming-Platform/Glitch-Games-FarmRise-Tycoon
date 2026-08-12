@@ -40,7 +40,7 @@ export class AccountPanel {
       {
         class: 'fr-panel-layer',
         testId: 'account-panel',
-        attrs: { role: 'dialog', 'aria-label': 'Account' },
+        attrs: { role: 'dialog', 'aria-label': 'Account', 'data-clarity-mask': 'true' },
       },
       el(
         'div',

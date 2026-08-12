@@ -223,9 +223,7 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
     // a new player concludes a game is broken.
     session.events.on('session:refused', ({ reason }) => hud.toast(reason, 'warn')),
     session.events.on('session:sold', ({ quantity, itemId, payout, viaContract }) => {
-      hud.toast(
-        `Sold ${quantity} ${itemId} for ${formatCents(payout)}${viaContract ? ' on contract' : ''}`,
-      );
+      hud.toast(saleToastMessage(itemId, quantity, payout, career.balance, viaContract));
       for (const definition of Object.values(ANIMALS)) {
         if (definition.feedItemId !== itemId) continue;
         const count = world.livestock.countOf(definition.id);
@@ -268,6 +266,17 @@ export function bindHud(scene: FarmScene, hud: Hud, session: SessionController):
     clearInterval(interval);
     for (const unsubscribe of unsubscribes) unsubscribe();
   };
+}
+
+/** Explicitly confirms both the payout and the resulting wallet balance. */
+export function saleToastMessage(
+  itemId: string,
+  quantity: number,
+  payout: Cents,
+  balance: Cents,
+  viaContract: boolean,
+): string {
+  return `Paid ${formatCents(payout)} for ${formatItemQuantity(itemId, quantity)}${viaContract ? ' on contract' : ''}. Balance ${formatCents(balance)}.`;
 }
 
 function animalName(species: keyof typeof ANIMALS, count: number): string {

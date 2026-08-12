@@ -57,14 +57,14 @@ describe('player animation state', () => {
     const walking = makeController({ moveForward: true });
     walking.controller.fixedUpdate(context);
     expect(walking.player.activity).toBe('walking');
-    expect(walking.player.locomotionIntensity).toBeCloseTo(1 / 7);
+    expect(walking.player.locomotionIntensity).toBeCloseTo(0.2 / walking.player.walkSpeed);
     advance(walking.controller, 29);
     expect(walking.player.locomotionIntensity).toBe(1);
 
     const sprinting = makeController({ moveForward: true, sprint: true });
     sprinting.controller.fixedUpdate(context);
     expect(sprinting.player.activity).toBe('walking');
-    expect(sprinting.player.locomotionIntensity).toBeCloseTo(1 / 7);
+    expect(sprinting.player.locomotionIntensity).toBeCloseTo(0.2 / sprinting.player.walkSpeed);
     advance(sprinting.controller, 29);
     expect(sprinting.player.locomotionIntensity).toBe(sprinting.player.sprintMultiplier);
 

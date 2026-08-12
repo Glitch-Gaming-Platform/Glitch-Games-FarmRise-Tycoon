@@ -12,18 +12,26 @@ import { GlitchSession } from './GlitchSession.js';
 import { GlitchCloudSave } from './GlitchCloudSave.js';
 import { GlitchProgression } from './GlitchProgression.js';
 import { GlitchEvents } from './GlitchEvents.js';
+import { GlitchPurchases } from './GlitchPurchases.js';
+import type { GlitchAnalyticsConsent } from './GlitchSession.js';
 
 export class GlitchPlatform implements Disposable {
   readonly session: GlitchSession;
   readonly cloudSave: GlitchCloudSave;
   readonly progression: GlitchProgression;
   readonly events: GlitchEvents;
+  readonly purchases: GlitchPurchases;
 
   private constructor(context: GlitchLaunchContext) {
     this.session = new GlitchSession(context);
     this.cloudSave = new GlitchCloudSave(this.session.client, context.titleId);
     this.progression = new GlitchProgression(this.session.client, context.titleId);
     this.events = new GlitchEvents(this.session.client, context.titleId);
+    this.purchases = new GlitchPurchases(
+      this.session.client,
+      context.titleId,
+      context.buildType === 'production',
+    );
 
     // Events can only be delivered once an install exists.
     this.session.events.on('glitch:ready', ({ installId }) => this.events.start(installId));
@@ -51,8 +59,12 @@ export class GlitchPlatform implements Disposable {
     return Boolean(this.session.installId) && this.session.isLoginBacked;
   }
 
-  async start(email: string | null, isActive: () => boolean): Promise<void> {
-    await this.session.start(email, isActive);
+  async start(
+    email: string | null,
+    isActive: () => boolean,
+    consent?: GlitchAnalyticsConsent,
+  ): Promise<void> {
+    await this.session.start(email, isActive, consent);
   }
 
   async setAccountEmail(email: string | null): Promise<void> {

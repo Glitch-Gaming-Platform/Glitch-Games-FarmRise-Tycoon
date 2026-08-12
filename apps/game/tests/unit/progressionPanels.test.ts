@@ -6,6 +6,35 @@ import { MarketPanel } from '@ui/panels/MarketPanel.js';
 import { TownPanel } from '@ui/panels/TownPanel.js';
 
 describe('progression management panels', () => {
+  it('releases keyboard focus when building placement closes the build panel', () => {
+    const panel = new BuildPanel({
+      onSelectBuilding: vi.fn(),
+      onBuyAnimal: vi.fn(),
+      onBuyLand: vi.fn(),
+      onBuyCarrier: vi.fn(),
+      onClose: vi.fn(),
+    });
+    panel.update({
+      balance: cents(1_000),
+      options: [{ kind: 'road', cost: cents(400), affordable: true }],
+      animals: [],
+      shelterFree: 0,
+      land: [],
+      carriers: [],
+    });
+    document.body.append(panel.root);
+
+    const roadButton = panel.root.querySelector<HTMLButtonElement>('[data-testid="build-road"]')!;
+    panel.setVisible(true);
+    roadButton.focus();
+    expect(document.activeElement).toBe(roadButton);
+
+    panel.setVisible(false);
+    expect(document.activeElement).not.toBe(roadButton);
+
+    panel.root.remove();
+  });
+
   it('exposes unlocked livestock and carriers as real purchase actions', () => {
     const onBuyAnimal = vi.fn();
     const onBuyCarrier = vi.fn();

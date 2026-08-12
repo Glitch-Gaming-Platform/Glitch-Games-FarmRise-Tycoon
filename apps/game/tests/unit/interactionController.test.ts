@@ -214,6 +214,7 @@ describe('InteractionController prompts', () => {
     const world = career.world;
     const placement = world.fields.placements[0]!;
     world.dropAt(placement.tileX, placement.tileZ, 'pea', 5, 1);
+    world.carry.pickUp('wheat', 3, 1);
     career.setIncidents([
       {
         id: 'drought-with-peas',
@@ -251,7 +252,92 @@ describe('InteractionController prompts', () => {
     interaction.fixedUpdate(STEP);
 
     expect(labels).toEqual(['Pick up 5 Peas']);
-    expect(world.carry.items.pea).toBe(5);
+    expect(world.carry.items).toMatchObject({ wheat: 3, pea: 5 });
+    expect(incidents.mostUrgent?.responseProgress).toBe(0);
+  });
+
+  it('picks up an old harvest before tending the new crop growing underneath it', () => {
+    const career = makeCareer();
+    const world = career.world;
+    const placement = world.fields.placements[0]!;
+    plant(career, placement.id, 'corn');
+    world.dropAt(placement.tileX, placement.tileZ, 'cranberry', 4, 1);
+    world.carry.pickUp('wheat', 2, 1);
+    const at = world.grid.tileToWorld(placement.tileX, placement.tileZ);
+    const player = new Player(at.x, at.z);
+    let presses = 1;
+    const input = {
+      wasPressed: (action: GameAction) => action === 'interact' && presses-- > 0,
+      isDown: () => false,
+      axis: () => 0,
+    } as unknown as InputSystem<GameAction>;
+    const interaction = new InteractionController(
+      career,
+      player,
+      new PlayerController(player, world, world.physics, input),
+      new IncidentDirector(career),
+      input,
+    );
+    const labels: Array<string | null> = [];
+    interaction.events.on('interaction:prompt', ({ label }) => labels.push(label));
+
+    interaction.fixedUpdate(STEP);
+    interaction.fixedUpdate(STEP);
+
+    expect(labels).toEqual(['Pick up 4 Cranberries', 'Tend']);
+    expect(world.carry.items).toMatchObject({ wheat: 2, cranberry: 4 });
+    expect(world.getPlot(placement.id)?.cropId).toBe('corn');
+  });
+
+  it('offers Harvest instead of drought tending when the targeted crop is already mature', () => {
+    const career = makeCareer();
+    const world = career.world;
+    const placement = world.fields.placements[0]!;
+    plant(career, placement.id, 'wheat');
+    const plot = world.getPlot(placement.id)!;
+    world.setPlot(placement.id, {
+      ...plot,
+      grownTicks: requireCrop('wheat').growthTicks,
+      water: 0.1,
+    });
+    career.setIncidents([
+      {
+        id: 'drought-ready-crop',
+        definitionId: 'incident-drought',
+        siteId: world.id,
+        severity: 'minor',
+        warnedTick: 0,
+        impactTick: 600,
+        endsTick: 1_200,
+        targetIds: [placement.id],
+        responseKind: null,
+        responseProgress: 0,
+        resolved: false,
+        appliedMultiplier: null,
+      },
+    ]);
+    const at = world.grid.tileToWorld(placement.tileX, placement.tileZ);
+    const player = new Player(at.x, at.z);
+    const input = {
+      wasPressed: (action: GameAction) => action === 'interact',
+      isDown: () => false,
+      axis: () => 0,
+    } as unknown as InputSystem<GameAction>;
+    const incidents = new IncidentDirector(career);
+    const interaction = new InteractionController(
+      career,
+      player,
+      new PlayerController(player, world, world.physics, input),
+      incidents,
+      input,
+    );
+    const labels: Array<string | null> = [];
+    interaction.events.on('interaction:prompt', ({ label }) => labels.push(label));
+
+    interaction.fixedUpdate(STEP);
+
+    expect(labels).toEqual(['Harvest']);
+    expect(world.getPlot(placement.id)?.cropId).toBeNull();
     expect(incidents.mostUrgent?.responseProgress).toBe(0);
   });
 
@@ -468,6 +554,7 @@ describe('proximity meters', () => {
     expect(growth?.value).toBe(1);
     expect(growth?.detail).toBe('Ready now');
     expect(growth?.urgent).toBe(true);
+    expect(interaction.proximityMeters().some((meter) => meter.kind === 'water')).toBe(false);
   });
 
   it('shows a freshness meter for a pile left in the field', () => {

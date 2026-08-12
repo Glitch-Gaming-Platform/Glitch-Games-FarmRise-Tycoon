@@ -14,6 +14,12 @@ const context = {
   sessionId: 'session-test',
   protocolVersion: '1.0',
   appVersion: '0.1.0',
+  buildType: 'development' as const,
+  platform: 'web' as const,
+  deviceType: 'desktop' as const,
+  operatingSystem: 'test',
+  inputMethod: 'keyboard_mouse' as const,
+  locale: 'en-US',
 };
 
 const makeClient = (batchSize = 1000) =>
@@ -90,7 +96,7 @@ describe('AnalyticsClient', () => {
 
   it('collects no personal data', () => {
     const client = makeClient();
-    client.track('session_start', { referrer: '', viewport: '800x600', touch: false });
+    client.track('session_start', { referrerHost: '', viewport: '800x600', touch: false });
     const serialised =
       JSON.stringify(client.buffered.map((e) => e.payload)) + JSON.stringify(client.context);
     // Ids are random and nothing is derived from a person. Checked against

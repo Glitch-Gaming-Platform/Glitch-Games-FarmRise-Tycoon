@@ -3,7 +3,7 @@
  * Continuous exhaust and local operation lights live in StructureOperationEffects.
  */
 import * as THREE from 'three';
-import { BUILDINGS, type BuildingKind } from '@farmrise/shared';
+import { buildingFootprint, type BuildingKind } from '@farmrise/shared';
 import type { RenderPipeline } from '@engine/render/RenderPipeline.js';
 import type { WorkAction } from '../../player/Player.js';
 import type { FarmWorld, PlacedBuilding } from '../FarmWorld.js';
@@ -40,8 +40,9 @@ export class StructureEffectsView {
     this.#operations = new StructureOperationEffects(world, pipeline);
     this.object.add(this.#bursts.object, this.#operations.object);
     this.#unsubscribes.push(
-      world.structures.events.on('building:completed', ({ kind, tileX, tileZ }) => {
-        this.#triggerCompletion(kind, tileX, tileZ);
+      world.structures.events.on('building:completed', ({ id, kind, tileX, tileZ }) => {
+        const building = world.structures.get(id);
+        this.#triggerCompletion(kind, tileX, tileZ, building?.rotation ?? 0);
       }),
       world.structures.events.on('building:repaired', ({ id }) => {
         this.#pendingRepairId = id;
@@ -95,8 +96,8 @@ export class StructureEffectsView {
     this.object.clear();
   }
 
-  #triggerCompletion(kind: BuildingKind, tileX: number, tileZ: number): void {
-    const footprint = BUILDINGS[kind].footprint;
+  #triggerCompletion(kind: BuildingKind, tileX: number, tileZ: number, rotation: number): void {
+    const footprint = buildingFootprint(kind, rotation);
     const x = structureCenterX(this.world, tileX, footprint.width);
     const z = structureCenterZ(this.world, tileZ, footprint.depth);
     const radius = Math.max(footprint.width, footprint.depth) * this.world.grid.tileSize * 0.34;
@@ -128,7 +129,7 @@ export class StructureEffectsView {
   }
 
   #triggerRepair(building: PlacedBuilding): void {
-    const footprint = BUILDINGS[building.kind].footprint;
+    const footprint = buildingFootprint(building.kind, building.rotation);
     const x = structureCenterX(this.world, building.tileX, footprint.width);
     const z = structureCenterZ(this.world, building.tileZ, footprint.depth);
     this.#bursts.emitBurst({
@@ -159,7 +160,7 @@ export class StructureEffectsView {
   }
 
   #triggerBreakdown(building: PlacedBuilding): void {
-    const footprint = BUILDINGS[building.kind].footprint;
+    const footprint = buildingFootprint(building.kind, building.rotation);
     const x = structureCenterX(this.world, building.tileX, footprint.width);
     const z = structureCenterZ(this.world, building.tileZ, footprint.depth);
     this.#bursts.emitBurst({

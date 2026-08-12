@@ -18,6 +18,7 @@ import { GlitchEvents } from '@platform/glitch/GlitchEvents.js';
 import { GlitchProgression } from '@platform/glitch/GlitchProgression.js';
 import type { GlitchPlatform } from '@platform/glitch/GlitchPlatform.js';
 import { GlitchSession } from '@platform/glitch/GlitchSession.js';
+import { GlitchPurchases } from '@platform/glitch/GlitchPurchases.js';
 import { SaveDirector } from '@platform/save/SaveDirector.js';
 import { cents, newCareer } from '@farmrise/shared';
 import type { AuthClient } from '@net/AuthClient.js';
@@ -109,6 +110,8 @@ describe('required cloud startup order', () => {
       sessionId: 'session-1',
       gameVersion: '0.1.0',
       buildType: 'production',
+      attribution: {},
+      deviceId: null,
     });
 
     await session.start(null, () => false);
@@ -123,6 +126,46 @@ describe('required cloud startup order', () => {
       `https://api.glitch.fun/api/titles/${TITLE}/installs/install-1/validate`,
       `https://api.glitch.fun/api/titles/${TITLE}/installs/install-1/saves?include_payload=1`,
     ]);
+  });
+
+  it('marks automatic analytics as non-explicit consent without claiming fingerprint consent', async () => {
+    fetchMock
+      .mockImplementationOnce(always({ data: { id: 'install-1' } }, 201))
+      .mockImplementationOnce(
+        always({
+          valid: true,
+          user_id: null,
+          user_name: null,
+          license_type: 'free',
+          trial_time_remaining: null,
+          disable_playtime_tracking: false,
+        }),
+      );
+    const session = new GlitchSession({
+      titleId: TITLE,
+      titleToken: 'runtime-title-token',
+      installId: null,
+      userInstallId: 'stable-user-install',
+      sessionId: 'session-1',
+      gameVersion: '0.1.0',
+      buildType: 'production',
+      attribution: { utm_source: 'newsletter' },
+      deviceId: 'web-device-1',
+    });
+
+    await session.start(null, () => false, { given: false, version: '1.0' });
+    session.dispose();
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(body).toMatchObject({
+      user_install_id: 'stable-user-install',
+      session_id: 'session-1',
+      consent_given: false,
+      consent_version: '1.0',
+      device_id: 'web-device-1',
+      utm_source: 'newsletter',
+    });
+    expect(body.fingerprint_components).toBeUndefined();
   });
 });
 
@@ -477,6 +520,43 @@ describe('behavioural events', () => {
   });
 });
 
+describe('verified purchases', () => {
+  it('uses the Glitch install UUID and exact purchase route after verification', async () => {
+    fetchMock.mockImplementation(always({ data: { id: 'purchase-1' } }, 201));
+    const purchases = new GlitchPurchases(new GlitchClient('title-token'), TITLE, true);
+
+    await purchases.recordVerified('install-1', {
+      purchase_type: 'in_app',
+      purchase_amount: 4.99,
+      currency: 'USD',
+      transaction_id: 'store-transaction-1',
+      item_sku: 'starter_pack',
+      quantity: 1,
+    });
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `https://api.glitch.fun/api/titles/${TITLE}/purchases`,
+    );
+    expect(JSON.parse(fetchMock.mock.calls[0]![1]!.body as string)).toEqual({
+      game_install_id: 'install-1',
+      purchase_type: 'in_app',
+      purchase_amount: 4.99,
+      currency: 'USD',
+      transaction_id: 'store-transaction-1',
+      item_sku: 'starter_pack',
+      quantity: 1,
+    });
+  });
+
+  it('sends nothing before an install exists or from a non-revenue build', () => {
+    const production = new GlitchPurchases(new GlitchClient('t'), TITLE, true);
+    const playtest = new GlitchPurchases(new GlitchClient('t'), TITLE, false);
+    expect(production.recordVerified(null, { transaction_id: 'x' })).toBeNull();
+    expect(playtest.recordVerified('install-1', { transaction_id: 'x' })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('failure never reaches the player', () => {
   it('turns a network error into a result rather than an exception', async () => {
     fetchMock.mockRejectedValue(new TypeError('offline'));
@@ -503,6 +583,11 @@ describe('analytics bridge', () => {
       expect(mapping!.action).toBeTruthy();
       expect(mapping!.actionLabel.length).toBeLessThanOrEqual(60);
     }
+  });
+
+  it('maps every typed event instead of silently dropping new telemetry', async () => {
+    const { EVENT_NAMES } = await import('@analytics/eventNames.js');
+    expect(Object.keys(GLITCH_EVENT_MAP).sort()).toEqual([...EVENT_NAMES].sort());
   });
 
   it('covers every stage of the core loop', () => {

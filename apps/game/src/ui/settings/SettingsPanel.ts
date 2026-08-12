@@ -67,6 +67,7 @@ export interface SettingsCallbacks {
   readonly onMusicTrackEnabledChange: (trackId: MusicId, enabled: boolean) => void;
   readonly onDebugToggle: (enabled: boolean) => void;
   readonly onClose: () => void;
+  readonly onPrivacy?: () => void;
   /**
    * Optional: fired after the new tier is persisted.
    *
@@ -240,7 +241,18 @@ export class SettingsPanel implements Screen {
           el('span', { text: 'Performance overlay' }),
           debugToggle,
         ),
-        el('div', { class: 'fr-actions' }, button('Back', callbacks.onClose, { class: 'fr-btn' })),
+        el(
+          'div',
+          { class: 'fr-actions' },
+          ...(callbacks.onPrivacy
+            ? [
+                button('Privacy choices', callbacks.onPrivacy, {
+                  class: 'fr-btn fr-btn--secondary',
+                }),
+              ]
+            : []),
+          button('Back', callbacks.onClose, { class: 'fr-btn' }),
+        ),
       ),
     );
   }

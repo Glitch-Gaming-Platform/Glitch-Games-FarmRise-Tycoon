@@ -63,7 +63,7 @@ Run another season (skips onboarding) or back to menu
 | `Shift` | Sprint |
 | `E` / left click | Perform the action named by the context prompt: plant, tend, harvest, transfer, collect, repair or respond; confirm a building placement |
 | `Q` | Cycle seed; shown beside `E` while standing on an empty bed |
-| `R` | Pick up or deposit goods at the current stack/store |
+| `R` | Rotate while placing; otherwise pick up or deposit goods at the current stack/store |
 | `M` / Market icon | Market |
 | `B` / Build icon | Build & Reinvest — roads, barns, irrigation, fences, chickens and land |
 | `F` | Pay to prevent the warned event |
@@ -72,8 +72,8 @@ Run another season (skips onboarding) or back to menu
 
 Touch-primary mobile devices replace movement keys with an analog joystick. **Work** performs the
 same plot action as `E`, **Seed** cycles crop, **Protect** maps to prevention, and Market/Build retain
-their illustrated buttons. Placement is a canvas tap with an explicit **Cancel** action. Desktop
-keeps the table above unchanged.
+their illustrated buttons. Placement uses repeated canvas taps with explicit **Rotate** and
+**Cancel** actions. Desktop keeps the table above unchanged.
 
 ## What was deliberately excluded from the original slice
 
@@ -179,8 +179,10 @@ No personal data is collected. There is a random anonymous id in localStorage to
 return visit from a new one, and a per-session id. Neither is derived from anything about the person,
 and a test asserts no email, IP or credential shapes appear in any payload.
 
-There is **no analytics vendor wired up.** A console sink runs in development and a memory sink in
-tests; choosing a destination is a business decision and is one file's worth of work.
+The typed stream now feeds production-only GA4, Clarity and Glitch adapters when their public build
+identifiers are configured. A console sink runs in development and a memory sink in tests. Provider
+configuration, default-on/opt-out behavior and the current coverage matrix live in
+`docs/ANALYTICS.md`.
 
 ## Known risks
 

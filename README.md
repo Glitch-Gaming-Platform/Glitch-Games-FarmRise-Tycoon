@@ -44,11 +44,11 @@ Vitest worker crash. See `AGENTS.md` for the smoke check and recovery guidance.
 | `Shift` | Sprint |
 | `E` / left click | Context action: field work, pickup/deposit, repair; confirm a placement |
 | `Q` | Cycle the selected crop |
+| `R` | Rotate during placement; otherwise pick up or deposit goods |
 | `M` / Market icon | Market — sell at spot or fulfil a contract |
 | `B` / Build icon | Build & Reinvest — structures, livestock, carriers and neighbouring land |
 | `C` / Office icon | Farm Office — milestones, specialization, processing, workers, loans and insurance |
 | `T` / Town icon | Millbrook — prosperity and community projects |
-| `R` | Pickup/deposit shortcut at the current stack or store |
 | `F` | Pay to prevent the warned event |
 | `Esc` | Pause |
 | `` ` `` | Toggle the debug overlay (also `?debug=overlay`) |
@@ -56,8 +56,9 @@ Vitest worker crash. See `AGENTS.md` for the smoke check and recovery guidance.
 On touch-primary phones and tablets, movement uses the bottom-left analog joystick. **Work** handles
 the contextual action in reach, including field work and putting down a carried load. **Seed**
 changes crop, **Protect** answers a warning, the illustrated Market, Build, Office and Town buttons
-open their panels, and a building is placed by tapping open ground. These controls and the
-lower-memory render/audio profile are mobile-only; desktop controls and quality remain unchanged.
+open their panels, and buildings are rotated and placed repeatedly with **Rotate**, canvas taps and
+**Cancel**. These controls and the lower-memory render/audio profile are mobile-only; desktop
+controls and quality remain unchanged.
 
 ## Commands
 
@@ -123,6 +124,7 @@ tests/e2e/           Playwright specs.
 | Understand what the server is authoritative for | [docs/NETWORKING.md](docs/NETWORKING.md) |
 | Run, extend or troubleshoot the backend | [docs/BACKEND.md](docs/BACKEND.md) |
 | Deploy Distribution or Webhosting on Glitch | [docs/GLITCH_DEPLOYMENT.md](docs/GLITCH_DEPLOYMENT.md) |
+| Configure or extend analytics and telemetry | [docs/ANALYTICS.md](docs/ANALYTICS.md) |
 | Add a crop, building, event or system | [docs/ADDING_A_FEATURE.md](docs/ADDING_A_FEATURE.md) |
 | Work on this repo as an AI agent | [docs/AI_INSTRUCTIONS.md](docs/AI_INSTRUCTIONS.md) |
 | Know why a decision was made | [docs/decisions/](docs/decisions/) |

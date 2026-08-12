@@ -43,7 +43,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run build --workspace @farmrise/shared && npm run build --workspace @farmrise/game && npm run preview --workspace @farmrise/game -- --host 127.0.0.1 --port ${PORT} --strictPort`,
+    command: `npm run build --workspace @farmrise/shared && VITE_ANALYTICS_TEST_MODE=1 npm run build --workspace @farmrise/game && npm run preview --workspace @farmrise/game -- --host 127.0.0.1 --port ${PORT} --strictPort`,
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

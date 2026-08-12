@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { BUILDINGS } from '@farmrise/shared';
+import { buildingFootprint, type BuildingKind } from '@farmrise/shared';
 import type { ProximityMeter } from '../../systems/InteractionController.js';
 import type { FarmWorld } from '../FarmWorld.js';
 
@@ -83,10 +83,10 @@ export function proximityMeterAnchor(
   if (store.buildingId) {
     const building = world.structures.get(store.buildingId);
     if (building) {
-      const definition = BUILDINGS[building.kind];
+      const footprint = buildingFootprint(building.kind, building.rotation);
       const at = world.grid.tileToWorld(
-        building.tileX + (definition.footprint.width - 1) / 2,
-        building.tileZ + (definition.footprint.depth - 1) / 2,
+        building.tileX + (footprint.width - 1) / 2,
+        building.tileZ + (footprint.depth - 1) / 2,
       );
       return { x: at.x, y: buildingMeterHeight(building.kind), z: at.z };
     }
@@ -303,17 +303,23 @@ function roundedRect(
   context.roundRect(x, y, width, height, safeRadius);
 }
 
-function buildingMeterHeight(kind: keyof typeof BUILDINGS): number {
+function buildingMeterHeight(kind: BuildingKind): number {
   switch (kind) {
     case 'barn':
+      return 3.45;
     case 'cold_store':
+      return 3.05;
     case 'mill':
+      return 3.85;
     case 'creamery':
+      return 3.25;
     case 'preserve_kitchen':
-      return 4.8;
+      return 2.65;
     case 'worker_hut':
-      return 4.2;
+      return 2.85;
+    case 'loading_pad':
+      return 0.9;
     default:
-      return 2.8;
+      return 2.1;
   }
 }

@@ -12,8 +12,9 @@ import type { Vec2 } from '@engine/physics/PhysicsPort.js';
  * open issue. The farmer is 1.60 m tall with 0.4 m legs. A leg that short can
  * put its foot down 0.185 m in front of the hip and 0.185 m behind it, which is
  * 0.60 m of ground per walk cycle and 1.10 m per run cycle, flight phase
- * included. At a believable 2.3 cycles/s walking and 3.1 running, that is
- * exactly 1.4 and 3.4 m/s.
+ * included. At a believable 2.3 cycles/s walking and 3.1 running, that is a
+ * baseline of about 1.4 and 3.4 m/s. The shipped walk speed adds a small 10%
+ * responsiveness allowance.
  *
  * The previous numbers were 6.5 and 10.4 - a walk faster than a human sprint,
  * on legs less than half a human's. Nothing in the renderer could make that
@@ -28,7 +29,7 @@ import type { Vec2 } from '@engine/physics/PhysicsPort.js';
  * time. `Fox.speed` is scaled by the same factor so that intercepting a raider
  * takes the same chase it always did.
  */
-const DEFAULT_WALK_SPEED = 1.4;
+const DEFAULT_WALK_SPEED = 1.54;
 const DEFAULT_SPRINT_MULTIPLIER = 2.45;
 
 export type PlayerActivity = 'idle' | 'walking' | 'working';

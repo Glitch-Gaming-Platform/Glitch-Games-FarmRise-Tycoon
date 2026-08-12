@@ -1,6 +1,6 @@
 /** Fixed-budget processor exhaust and localized, non-shadowing operation lights. */
 import * as THREE from 'three';
-import { BUILDINGS, type BuildingKind } from '@farmrise/shared';
+import { buildingFootprint, type BuildingKind } from '@farmrise/shared';
 import type { RenderPipeline } from '@engine/render/RenderPipeline.js';
 import type { FarmWorld, PlacedBuilding } from '../FarmWorld.js';
 
@@ -102,7 +102,7 @@ export class StructureOperationEffects {
         building.broken,
       );
       if (!motion.active && !building.broken) continue;
-      const footprint = BUILDINGS[building.kind].footprint;
+      const footprint = buildingFootprint(building.kind, building.rotation);
       const x = structureCenterX(this.world, building.tileX, footprint.width);
       const z = structureCenterZ(this.world, building.tileZ, footprint.depth);
       const count = building.broken ? 2 : queue > 0 ? 3 : 1;
@@ -175,7 +175,7 @@ export class StructureOperationEffects {
     elapsedSeconds: number,
     broken: boolean,
   ): void {
-    const footprint = BUILDINGS[building.kind].footprint;
+    const footprint = buildingFootprint(building.kind, building.rotation);
     light.position.set(
       structureCenterX(this.world, building.tileX, footprint.width),
       structureEmitterHeight(building.kind) * 0.72,

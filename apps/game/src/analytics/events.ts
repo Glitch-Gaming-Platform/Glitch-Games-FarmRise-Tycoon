@@ -27,14 +27,39 @@ export interface AnalyticsContext {
   readonly sessionId: string;
   readonly protocolVersion: string;
   readonly appVersion: string;
+  readonly buildType: 'production' | 'demo' | 'playtest' | 'development';
+  readonly platform: 'web';
+  readonly deviceType: 'desktop' | 'mobile' | 'tablet';
+  readonly operatingSystem: string;
+  readonly inputMethod: 'keyboard_mouse' | 'touch' | 'hybrid';
+  /** Browser locale only; never inferred geolocation. */
+  readonly locale: string;
 }
 
 /** Discriminated by `name`. Payloads are flat and JSON-serialisable. */
 export type AnalyticsEvent =
   // --- session --------------------------------------------------------
-  | { name: 'session_start'; payload: { referrer: string; viewport: string; touch: boolean } }
-  | { name: 'session_end'; payload: { durationMs: number; reason: 'unload' | 'manual' } }
+  | {
+      name: 'session_start';
+      payload: { referrerHost: string; viewport: string; touch: boolean };
+    }
+  | {
+      name: 'session_end';
+      payload: { durationMs: number; reason: 'unload' | 'manual' | 'quit' };
+    }
   | { name: 'scene_ready'; payload: { loadMs: number; artLoaded: boolean } }
+  | {
+      name: 'screen_viewed';
+      payload: { screen: string; previous: string; reason: string };
+    }
+  | {
+      name: 'visibility_changed';
+      payload: { state: 'backgrounded' | 'resumed'; backgroundMs: number };
+    }
+  | {
+      name: 'consent_updated';
+      payload: { granted: boolean; source: 'default' | 'banner' | 'settings' | 'stored' };
+    }
 
   // --- onboarding funnel ----------------------------------------------
   | { name: 'onboarding_start'; payload: { adaptive: boolean } }
@@ -64,6 +89,7 @@ export type AnalyticsEvent =
       name: 'crop_planted';
       payload: { cropId: string; plotId: string; balance: number; cycle: number };
     }
+  | { name: 'crop_selected'; payload: { cropId: string } }
   | { name: 'crop_tended'; payload: { plotId: string } }
   | {
       name: 'crop_harvested';
@@ -86,6 +112,8 @@ export type AnalyticsEvent =
       payload: { parcels: number; parcelId: string; elapsedMs: number };
     }
   | { name: 'goods_hauled'; payload: { stored: number; refused: number; carrier: string } }
+  | { name: 'goods_spoiled'; payload: { lost: number; inTheOpen: boolean } }
+  | { name: 'carrier_changed'; payload: { carrier: string } }
   | {
       name: 'animal_purchased';
       payload: { species: string; count: number; cost: number; balance: number };
@@ -96,11 +124,38 @@ export type AnalyticsEvent =
     }
   | { name: 'cycle_completed'; payload: { cycle: number; elapsedMs: number; balance: number } }
 
+  // --- menus, settings, saves and account conversions -----------------
+  | {
+      name: 'panel_viewed';
+      payload: { panel: string; action: 'opened' | 'closed' };
+    }
+  | {
+      name: 'setting_changed';
+      payload: { setting: string; value: string | number | boolean };
+    }
+  | { name: 'career_action_completed'; payload: { action: string } }
+  | { name: 'processing_completed'; payload: { itemId: string; quantity: number } }
+  | { name: 'worker_task_completed'; payload: { task: string } }
+  | { name: 'save_completed'; payload: { tiers: string } }
+  | { name: 'save_failed'; payload: { tier: string; reasonCode: string } }
+  | {
+      name: 'account_action';
+      payload: {
+        action: 'register' | 'login' | 'logout';
+        outcome: 'started' | 'succeeded' | 'failed';
+      };
+    }
+
   // --- career progression -----------------------------------------------
   | {
       name: 'milestone_claimed';
       payload: { milestoneId: string; stage: number; elapsedMs: number };
     }
+  | { name: 'milestone_ready'; payload: { milestoneId: string } }
+  | { name: 'unlock_granted'; payload: { unlocks: string } }
+  | { name: 'town_grew'; payload: { stage: number } }
+  | { name: 'town_project_completed'; payload: { projectId: string } }
+  | { name: 'contract_failed'; payload: { buyerId: string } }
   | { name: 'career_restructured'; payload: { elapsedMs: number } }
   | { name: 'specialization_chosen'; payload: { specialization: string } }
 
@@ -108,6 +163,8 @@ export type AnalyticsEvent =
   | { name: 'farm_event_warned'; payload: { kind: string; targets: number; balance: number } }
   | { name: 'farm_event_prevented'; payload: { kind: string; cost: number } }
   | { name: 'farm_event_impacted'; payload: { kind: string; mitigated: boolean } }
+  | { name: 'building_broken'; payload: { kind: string } }
+  | { name: 'building_repaired'; payload: { kind: string } }
   | { name: 'fox_scared_off'; payload: { remaining: number } }
   | {
       name: 'animal_hungry';
@@ -116,9 +173,24 @@ export type AnalyticsEvent =
   | { name: 'animal_lost'; payload: { species: string; count: number; remaining: number } }
 
   // --- friction --------------------------------------------------------
-  | { name: 'action_refused'; payload: { action: string; reason: string } }
+  | { name: 'action_refused'; payload: { action: string; reasonCode: string } }
   | { name: 'storage_overflowed'; payload: { itemId: string; spilled: number } }
   | { name: 'idle_detected'; payload: { seconds: number; phase: string } }
+  | {
+      name: 'runtime_error';
+      payload: { area: 'engine' | 'scene' | 'window' | 'promise'; code: string };
+    }
+  | {
+      name: 'performance_sample';
+      payload: {
+        phase: string;
+        fps: number;
+        drawCalls: number;
+        triangles: number;
+        quality: string;
+      };
+    }
+  | { name: 'performance_overrun'; payload: { phase: string; droppedSteps: number } }
 
   // --- outcome ----------------------------------------------------------
   | {

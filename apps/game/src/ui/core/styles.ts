@@ -56,6 +56,17 @@ export const UI_STYLES = `
 }
 .fr-panel--outcome { max-width: min(92vw, 560px); }
 
+.fr-consent {
+  position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+  box-sizing: border-box; padding: calc(18px + env(safe-area-inset-top))
+    calc(18px + env(safe-area-inset-right)) calc(18px + env(safe-area-inset-bottom))
+    calc(18px + env(safe-area-inset-left)); pointer-events: auto; background: rgba(42, 36, 32, 0.72);
+  font-family: "Trebuchet MS", ui-rounded, system-ui, -apple-system, sans-serif;
+}
+.fr-consent[hidden] { display: none; }
+.fr-consent__panel { width: min(94vw, 520px); }
+.fr-consent__note { margin: -8px 0 18px; color: rgba(42, 36, 32, 0.7); font-size: 12.5px; line-height: 1.45; }
+
 .fr-title { margin: 6px 0 8px; color: var(--fr-timber-dark); font-size: 29px; line-height: 1.05; letter-spacing: 0.01em; }
 .fr-title--hero { font-size: clamp(34px, 5vw, 54px); max-width: 480px; }
 .fr-subtitle { margin: 0 0 22px; color: rgba(42, 36, 32, 0.76); font-size: 15px; line-height: 1.48; }
@@ -272,7 +283,7 @@ export const UI_STYLES = `
 }
 .fr-touch-placement {
   position: absolute; right: calc(14px + env(safe-area-inset-right));
-  bottom: calc(14px + env(safe-area-inset-bottom)); pointer-events: auto;
+  bottom: calc(14px + env(safe-area-inset-bottom)); display: flex; gap: 8px; pointer-events: auto;
 }
 .fr-touch-button {
   appearance: none; box-sizing: border-box; min-width: 50px; min-height: 50px; padding: 6px;

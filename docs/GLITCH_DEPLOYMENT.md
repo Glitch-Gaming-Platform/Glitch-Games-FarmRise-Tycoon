@@ -67,6 +67,9 @@ Desktop App do not rewrite relative game API routes. Build that client with:
 VITE_API_BASE_URL="https://farmrise-tycoon.glitch-promotions.glitch.fun" \
 VITE_GLITCH_TITLE_ID="$GLITCH_TITLE_ID" \
 VITE_GLITCH_TITLE_TOKEN="<runtime title token, not the distribution token>" \
+VITE_GLITCH_WEB_TRACKING_TOKEN="<website token from Reports > Code>" \
+VITE_GA_MEASUREMENT_ID="<GA4 measurement id, if configured>" \
+VITE_CLARITY_PROJECT_ID="<Clarity project id, if configured>" \
 VITE_GLITCH_BUILD_TYPE="production" \
 VITE_APP_VERSION="<SAME_VERSION_USED_FOR_DISTRIBUTION>" \
 npm run build --workspace @farmrise/game
@@ -74,6 +77,10 @@ npm run build --workspace @farmrise/game
 
 Only the runtime title token may be compiled into the Distribution client. The hosting, distribution,
 and MCP tokens must remain outside every artifact.
+
+The website tracking token, GA4 measurement ID and Clarity project ID are public browser
+configuration, not server secrets. Analytics are production-only and default-on with an opt-out in
+Settings; see [ANALYTICS.md](ANALYTICS.md) for the consent signal and dashboard validation contract.
 
 ## Cloud-save resume contract
 

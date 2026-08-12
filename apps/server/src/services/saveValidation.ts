@@ -29,6 +29,7 @@ import {
   STARTER_SHELTER,
   YARD_STORE_ID,
   bedsForParcels,
+  buildingFootprint,
   cents,
   claimMilestone,
   getParcel,
@@ -488,9 +489,10 @@ function validateBuildings(
       if (
         before.kind !== building.kind ||
         before.tileX !== building.tileX ||
-        before.tileZ !== building.tileZ
+        before.tileZ !== building.tileZ ||
+        before.rotation !== building.rotation
       ) {
-        return reject(`Building ${building.id} changed identity or location.`);
+        return reject(`Building ${building.id} changed identity, location or rotation.`);
       }
       if (building.remainingBuildTicks > before.remainingBuildTicks) {
         return reject(`Building ${building.id} gained construction time.`);
@@ -500,8 +502,9 @@ function validateBuildings(
       }
     }
 
-    for (let dz = 0; dz < definition.footprint.depth; dz += 1) {
-      for (let dx = 0; dx < definition.footprint.width; dx += 1) {
+    const footprint = buildingFootprint(kind, building.rotation);
+    for (let dz = 0; dz < footprint.depth; dz += 1) {
+      for (let dx = 0; dx < footprint.width; dx += 1) {
         const x = building.tileX + dx;
         const z = building.tileZ + dz;
         const key = tileKey(x, z);

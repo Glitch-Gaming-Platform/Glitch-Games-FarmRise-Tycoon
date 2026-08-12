@@ -17,6 +17,11 @@ import { GlitchClient } from './GlitchClient.js';
 /** Heartbeat cadence from the Glitch retention docs. */
 const HEARTBEAT_MS = 30_000;
 
+export interface GlitchAnalyticsConsent {
+  readonly given: boolean;
+  readonly version: string;
+}
+
 export interface GlitchValidation {
   readonly valid: boolean;
   readonly user_id: string | null;
@@ -47,6 +52,7 @@ export class GlitchSession implements Disposable {
   #heartbeat: ReturnType<typeof setInterval> | null = null;
   #email: string | null = null;
   #isActive = () => true;
+  #consent: GlitchAnalyticsConsent = { given: false, version: 'unknown' };
 
   constructor(context: GlitchLaunchContext) {
     this.#context = context;
@@ -80,9 +86,14 @@ export class GlitchSession implements Disposable {
    * cloud saves and progression. It comes from OUR account system, so a player
    * who signs up in our game gets Glitch features without a second signup.
    */
-  async start(email: string | null, isActive: () => boolean): Promise<void> {
+  async start(
+    email: string | null,
+    isActive: () => boolean,
+    consent: GlitchAnalyticsConsent = { given: true, version: 'legacy' },
+  ): Promise<void> {
     this.#email = email;
     this.#isActive = isActive;
+    this.#consent = consent;
 
     const restored = this.#restoreInstallId();
     // A Desktop-App-supplied install id is authoritative and skips creation.
@@ -178,13 +189,18 @@ export class GlitchSession implements Disposable {
     const body: Record<string, unknown> = {
       user_install_id: this.#userInstallId,
       platform: 'web',
-      device_type: 'desktop',
-      operating_system:
-        typeof navigator === 'undefined' ? 'browser' : navigator.platform || 'browser',
+      device_type: deviceTypeLabel(),
+      operating_system: operatingSystemLabel(),
       game_version: this.#context.gameVersion,
       build_type: this.#context.buildType,
       session_id: this.#sessionId,
+      consent_given: this.#consent.given,
+      consent_version: this.#consent.version,
+      ...this.#context.attribution,
     };
+    if (this.#consent.given) body['fingerprint_components'] = fingerprintComponents();
+    const deviceId = this.#context.deviceId ?? readCookie('device_id');
+    if (deviceId) body['device_id'] = deviceId;
     // Only send an email when we have one; an empty value would fail validation.
     if (this.#email) body['user_email'] = this.#email;
 
@@ -233,4 +249,75 @@ export class GlitchSession implements Disposable {
     this.#heartbeat = null;
     this.events.clear();
   }
+}
+
+function deviceType(): 'desktop' | 'mobile' | 'tablet' {
+  if (typeof navigator === 'undefined') return 'desktop';
+  const touch = navigator.maxTouchPoints > 0;
+  const shortest = Math.min(globalThis.screen?.width ?? 1024, globalThis.screen?.height ?? 768);
+  if (touch && shortest >= 600) return 'tablet';
+  return touch ? 'mobile' : 'desktop';
+}
+
+function deviceTypeLabel(): string {
+  const type = deviceType();
+  return type === 'desktop'
+    ? 'Browser desktop'
+    : type === 'tablet'
+      ? 'Browser tablet'
+      : 'Browser mobile';
+}
+
+function operatingSystem(): { name: string; version: string } {
+  if (typeof navigator === 'undefined') return { name: 'unknown', version: 'unknown' };
+  const source = `${navigator.platform} ${navigator.userAgent}`;
+  if (/iPhone|iPad|iPod/i.test(source)) return { name: 'iOS', version: 'unknown' };
+  if (/Android/i.test(source)) return { name: 'Android', version: 'unknown' };
+  if (/Win/i.test(source)) return { name: 'Windows', version: 'unknown' };
+  if (/Mac/i.test(source)) return { name: 'MacOS', version: 'unknown' };
+  if (/Linux/i.test(source)) return { name: 'Linux', version: 'unknown' };
+  return { name: 'unknown', version: 'unknown' };
+}
+
+function operatingSystemLabel(): string {
+  const os = operatingSystem();
+  return os.version === 'unknown' ? os.name : `${os.name} ${os.version}`;
+}
+
+function fingerprintComponents(): Record<string, unknown> {
+  const os = operatingSystem();
+  const type = deviceType();
+  const optional: Record<string, unknown> = {};
+  if (typeof screen !== 'undefined') {
+    optional['display'] = { resolution: `${screen.width}x${screen.height}` };
+  }
+  if (typeof navigator !== 'undefined' && navigator.hardwareConcurrency > 0) {
+    optional['hardware'] = { cores: navigator.hardwareConcurrency };
+  }
+  if (typeof navigator !== 'undefined') {
+    const environment: Record<string, string> = {};
+    if (navigator.language) environment['language'] = navigator.language;
+    try {
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (timezone) environment['timezone'] = timezone;
+    } catch {
+      // Timezone is optional.
+    }
+    if (Object.keys(environment).length > 0) optional['environment'] = environment;
+  }
+  return {
+    device: { model: 'unknown', type },
+    os,
+    ...optional,
+  };
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const prefix = `${encodeURIComponent(name)}=`;
+  const pair = document.cookie
+    .split(';')
+    .map((value) => value.trim())
+    .find((value) => value.startsWith(prefix));
+  return pair ? decodeURIComponent(pair.slice(prefix.length)).slice(0, 255) : null;
 }

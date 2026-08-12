@@ -324,8 +324,9 @@ export class FarmView {
     tileX?: number,
     tileZ?: number,
     valid?: boolean,
+    rotation?: number,
   ): void {
-    this.#structures.setPlacementPreview(world, kind, tileX, tileZ, valid);
+    this.#structures.setPlacementPreview(world, kind, tileX, tileZ, valid, rotation);
   }
 
   /** Surface under an actor, shared with terrain-colour and scatter logic. */

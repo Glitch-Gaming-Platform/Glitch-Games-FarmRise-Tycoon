@@ -137,7 +137,7 @@ async function reachEggStack(page: Page) {
   // The first plot is north-west of the shelter. The basket is on its east
   // side, and the shelter's solid footprint blocks a straight diagonal. Walk
   // a three-leg route below the building. These durations follow the shipped
-  // 3.43 m/s sprint rather than the old arcade-speed player movement.
+  // 3.773 m/s sprint rather than the old arcade-speed player movement.
   await page.waitForTimeout(1_000);
   await page.keyboard.down('Shift');
   await page.keyboard.down('s');
@@ -174,7 +174,7 @@ async function placeAtFirstValidCanvasPoint(page: Page) {
       const banner = (await page.getByTestId('placing-banner').textContent()) ?? '';
       if (!banner.includes('Cannot') && /click to (build|place)/i.test(banner)) {
         await page.mouse.click(x, y);
-        await expect(page.getByTestId('placing-banner')).toBeHidden({ timeout: 3_000 });
+        await expect(page.getByTestId('placing-banner')).toBeVisible({ timeout: 3_000 });
         return;
       }
     }
@@ -448,7 +448,7 @@ test('the reinvest panel shows every option, including the goal', async ({ page 
 });
 
 test('choosing a building enters placement mode', async ({ page }) => {
-  await enterFarm(page);
+  await enterFarm(page, '/?quality=low');
   await skipTutorial(page);
 
   await page.keyboard.press('KeyB');
@@ -456,19 +456,26 @@ test('choosing a building enters placement mode', async ({ page }) => {
 
   await expect(page.getByTestId('build-panel')).toBeHidden();
   await expect(page.getByTestId('placing-banner')).toBeVisible();
-  await expect(page.getByTestId('placing-banner')).toContainText(/Esc to cancel/i);
+  await expect(page.getByTestId('placing-banner')).toContainText(/R to rotate/i);
+  await expect(page.getByTestId('placing-banner')).toContainText(/WASD to move/i);
+  await expect(page.getByTestId('placing-banner')).toContainText(/Esc to stop/i);
+
+  await page.keyboard.press('KeyR');
+  await expect(page.getByTestId('placing-banner')).toBeVisible();
 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('placing-banner')).toBeHidden();
 });
 
-test('a building can be placed on open ground with a world click', async ({ page }) => {
-  await enterFarm(page);
+test('one selection can place multiple buildings with world clicks', async ({ page }) => {
+  test.setTimeout(180_000);
+  await enterFarm(page, '/?quality=low');
   await skipTutorial(page);
 
   await page.keyboard.press('KeyB');
   await page.getByTestId('build-road').click();
   await placeAtFirstValidCanvasPoint(page);
+  await expect(page.getByTestId('placing-banner')).toBeVisible();
 
   await expect
     .poll(async () => {
@@ -476,10 +483,43 @@ test('a building can be placed on open ground with a world click', async ({ page
       return Number(text.match(/\$([\d.]+)/)?.[1] ?? '50');
     })
     .toBeLessThan(50);
+
+  await placeAtFirstValidCanvasPoint(page);
+  await expect
+    .poll(async () => {
+      const text = await page.getByTestId('hud-balance').innerText();
+      return Number(text.match(/\$([\d.]+)/)?.[1] ?? '50');
+    })
+    .toBeLessThan(46);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('placing-banner')).toBeHidden();
+});
+
+test('WASD movement remains active while a placement cursor is open', async ({ page }) => {
+  await enterFarm(page, '/?quality=low');
+
+  await page.keyboard.press('KeyB');
+  await page.getByTestId('build-road').click();
+  await expect(page.getByTestId('placing-banner')).toBeVisible();
+
+  await page.keyboard.down('Shift');
+  await page.keyboard.down('w');
+  try {
+    await expect(page.getByTestId('coach-mark')).toContainText(/Put something in the ground/i, {
+      timeout: 14_000,
+    });
+  } finally {
+    await page.keyboard.up('w');
+    await page.keyboard.up('Shift');
+  }
+
+  await expect(page.getByTestId('placing-banner')).toBeVisible();
+  await page.keyboard.press('Escape');
 });
 
 test('opening a panel while placing cancels the placement', async ({ page }) => {
-  await enterFarm(page);
+  await enterFarm(page, '/?quality=low');
   await skipTutorial(page);
 
   await page.keyboard.press('KeyB');

@@ -11,20 +11,38 @@
  * inside its footprint.
  */
 import * as THREE from 'three';
-import { BUILDINGS, type BuildingKind } from '@farmrise/shared';
+import {
+  BUILDINGS,
+  buildingFootprint,
+  normalizeBuildingRotation,
+  type BuildingKind,
+  type BuildingRotation,
+} from '@farmrise/shared';
 import { EventBus } from '@engine/core/EventBus.js';
 import type { TileGrid } from '@engine/physics/TileGrid.js';
 import type { InputSystem } from '@engine/input/InputSystem.js';
 import type { RenderContext } from '@engine/core/types.js';
 import type { Career } from '../career/Career.js';
-import { build, buildingSiteProblem } from '../world/FarmCommands.js';
+import { build, buildCostFor, buildingSiteProblem } from '../world/FarmCommands.js';
 import type { GameAction } from '../GameActions.js';
 import type { Player } from '../player/Player.js';
 
 export interface PlacementEvents extends Record<string, unknown> {
-  'placement:started': { kind: BuildingKind };
-  'placement:moved': { kind: BuildingKind; tileX: number; tileZ: number; valid: boolean };
-  'placement:placed': { kind: BuildingKind; tileX: number; tileZ: number };
+  'placement:started': { kind: BuildingKind; rotation: BuildingRotation };
+  'placement:moved': {
+    kind: BuildingKind;
+    tileX: number;
+    tileZ: number;
+    rotation: BuildingRotation;
+    valid: boolean;
+    problem: string | null;
+  };
+  'placement:placed': {
+    kind: BuildingKind;
+    tileX: number;
+    tileZ: number;
+    rotation: BuildingRotation;
+  };
   'placement:cancelled': { kind: BuildingKind; reason: 'player' | 'refused' };
   'placement:refused': { kind: BuildingKind; reason: string };
 }
@@ -37,9 +55,11 @@ export class PlacementController {
   readonly #pointer = new THREE.Vector2();
 
   #kind: BuildingKind | null = null;
+  #rotation: BuildingRotation = 0;
   #tileX = 0;
   #tileZ = 0;
   #valid = false;
+  #problem: string | null = null;
 
   constructor(
     private readonly career: Career,
@@ -54,19 +74,27 @@ export class PlacementController {
   get kind(): BuildingKind | null {
     return this.#kind;
   }
-  get tile(): { x: number; z: number; valid: boolean } {
-    return { x: this.#tileX, z: this.#tileZ, valid: this.#valid };
+  get rotation(): BuildingRotation {
+    return this.#rotation;
+  }
+  get tile(): { x: number; z: number; valid: boolean; problem: string | null } {
+    return { x: this.#tileX, z: this.#tileZ, valid: this.#valid, problem: this.#problem };
   }
 
   begin(kind: BuildingKind): void {
     this.#kind = kind;
-    this.events.emit('placement:started', { kind });
+    this.#rotation = 0;
+    this.#problem = null;
+    this.events.emit('placement:started', { kind, rotation: this.#rotation });
+    this.#refreshPointer(kind, true);
   }
 
   cancel(reason: 'player' | 'refused' = 'player'): void {
     if (!this.#kind) return;
     const kind = this.#kind;
     this.#kind = null;
+    this.#valid = false;
+    this.#problem = null;
     this.events.emit('placement:cancelled', { kind, reason });
   }
 
@@ -80,21 +108,47 @@ export class PlacementController {
       return;
     }
 
+    if (this.input.wasPressed('rotatePlacement')) {
+      this.#rotation = normalizeBuildingRotation(this.#rotation + 1);
+      this.#refreshPointer(kind, true);
+    }
+
     const valid = this.#refreshPointer(kind);
     if (!this.input.wasPressed('interact')) return;
 
     if (!valid) {
-      this.events.emit('placement:refused', { kind, reason: 'That spot is taken.' });
+      this.events.emit('placement:refused', {
+        kind,
+        reason: this.#problem ?? 'Move the pointer over the farm.',
+      });
       return;
     }
 
-    const result = build(this.career, kind, this.#tileX, this.#tileZ);
+    const result = build(this.career, kind, this.#tileX, this.#tileZ, this.#rotation);
     if (!result.ok) {
       this.events.emit('placement:refused', { kind, reason: result.reason });
       return;
     }
-    this.events.emit('placement:placed', { kind, tileX: this.#tileX, tileZ: this.#tileZ });
-    this.#kind = null;
+    this.events.emit('placement:placed', {
+      kind,
+      tileX: this.#tileX,
+      tileZ: this.#tileZ,
+      rotation: this.#rotation,
+    });
+
+    if (this.career.balance < buildCostFor(this.career, kind)) {
+      this.events.emit('placement:refused', {
+        kind,
+        reason: `Not enough money to place another ${BUILDINGS[kind].displayName.toLowerCase()}.`,
+      });
+      this.cancel('refused');
+      return;
+    }
+
+    // Stay in placement mode and immediately re-evaluate the now-occupied
+    // tile. One selection can therefore lay a whole road or fence run without
+    // allowing a double click to overlap the item that was just built.
+    this.#refreshPointer(kind, true);
   }
 
   /**
@@ -107,32 +161,74 @@ export class PlacementController {
     void context;
   }
 
-  #refreshPointer(kind: BuildingKind): boolean {
+  #refreshPointer(kind: BuildingKind, forceEvent = false): boolean {
     const pointer = this.input.pointer;
     this.#pointer.set(pointer.ndcX, pointer.ndcY);
     this.#raycaster.setFromCamera(this.#pointer, this.camera);
-    if (!this.#raycaster.ray.intersectPlane(this.#groundPlane, this.#hit)) return false;
+    if (!this.#raycaster.ray.intersectPlane(this.#groundPlane, this.#hit)) {
+      this.#setValidity(kind, false, 'Move the pointer over the farm.', forceEvent);
+      return false;
+    }
 
     const tile = this.career.world.grid.worldToTile(this.#hit.x, this.#hit.z);
-    const definition = BUILDINGS[kind];
-    const valid =
-      buildingSiteProblem(this.career, kind, tile.x, tile.z) === null &&
-      !footprintOverlapsPlayer(
+    const footprint = buildingFootprint(kind, this.#rotation);
+    const siteProblem = buildingSiteProblem(this.career, kind, tile.x, tile.z, this.#rotation);
+    const problem =
+      siteProblem ??
+      (footprintOverlapsPlayer(
         this.career.world.grid,
         tile.x,
         tile.z,
-        definition.footprint.width,
-        definition.footprint.depth,
+        footprint.width,
+        footprint.depth,
         this.player,
-      );
+      )
+        ? 'Move the farmer clear of that footprint.'
+        : this.career.balance < buildCostFor(this.career, kind)
+          ? `Not enough money to place another ${BUILDINGS[kind].displayName.toLowerCase()}.`
+          : null);
+    const valid = problem === null;
 
-    if (tile.x !== this.#tileX || tile.z !== this.#tileZ || valid !== this.#valid) {
+    if (
+      forceEvent ||
+      tile.x !== this.#tileX ||
+      tile.z !== this.#tileZ ||
+      valid !== this.#valid ||
+      problem !== this.#problem
+    ) {
       this.#tileX = tile.x;
       this.#tileZ = tile.z;
       this.#valid = valid;
-      this.events.emit('placement:moved', { kind, tileX: tile.x, tileZ: tile.z, valid });
+      this.#problem = problem;
+      this.events.emit('placement:moved', {
+        kind,
+        tileX: tile.x,
+        tileZ: tile.z,
+        rotation: this.#rotation,
+        valid,
+        problem,
+      });
     }
     return valid;
+  }
+
+  #setValidity(
+    kind: BuildingKind,
+    valid: boolean,
+    problem: string | null,
+    forceEvent: boolean,
+  ): void {
+    if (!forceEvent && valid === this.#valid && problem === this.#problem) return;
+    this.#valid = valid;
+    this.#problem = problem;
+    this.events.emit('placement:moved', {
+      kind,
+      tileX: this.#tileX,
+      tileZ: this.#tileZ,
+      rotation: this.#rotation,
+      valid,
+      problem,
+    });
   }
 }
 

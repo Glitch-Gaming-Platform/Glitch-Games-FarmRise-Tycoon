@@ -49,6 +49,14 @@ export class TouchControls {
     this.#placement = el(
       'div',
       { class: 'fr-touch-placement' },
+      this.#actionButton(
+        'rotatePlacement',
+        'Rotate placement',
+        'Rotate',
+        'touch-rotate',
+        callbacks,
+        true,
+      ),
       this.#actionButton('cancel', 'Cancel placement', 'Cancel', 'touch-cancel', callbacks, true),
     );
     this.root = el(

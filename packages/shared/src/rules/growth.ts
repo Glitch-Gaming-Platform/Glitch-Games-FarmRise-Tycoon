@@ -182,7 +182,12 @@ export function computeYield(plot: PlotState, specializationYield = 1): number {
     rotationFactor(plot.previousCropId, plot.cropId) *
     Math.max(0, specializationYield) *
     (plot.irrigated ? 1 : 0.7 + 0.3 * clamp01(plot.water));
-  return Math.max(0, Math.floor(raw));
+  // A living crop that reached maturity must always produce something. Tiny
+  // positive event multipliers can otherwise floor an expensive harvest to
+  // zero (the captured drought-damaged avocado did exactly that), clearing the
+  // bed while making the action look broken. A dead crop is filtered out by
+  // plotStage above; every recoverable ready crop keeps this one-unit floor.
+  return Math.max(1, Math.floor(raw));
 }
 
 /** Ticks remaining until harvestable, given the plot's current growth rate. */

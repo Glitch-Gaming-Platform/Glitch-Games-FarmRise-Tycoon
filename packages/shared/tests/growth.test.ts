@@ -97,6 +97,25 @@ describe('computeYield', () => {
     expect(yielded).toBeGreaterThanOrEqual(0);
     expect(Number.isInteger(yielded)).toBe(true);
   });
+
+  it('returns at least one unit for every living crop that reaches maturity', () => {
+    const avocado = requireCrop('avocado');
+    const damaged = advancePlot(
+      {
+        ...plantCrop(emptyPlot(asPlotId('plot-avocado')), 'avocado'),
+        water: 0,
+        eventMultiplier: 0.1225,
+        soil: 0.8876,
+        previousCropId: 'wheat',
+        tendCount: avocado.tendActions,
+      },
+      avocado.growthTicks * 10,
+      'autumn',
+    );
+
+    expect(plotStage(damaged)).toBe('ready');
+    expect(computeYield(damaged)).toBe(1);
+  });
 });
 
 describe('immutability', () => {

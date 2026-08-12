@@ -1,7 +1,7 @@
 /**
  * Forwards the game's analytics stream to Glitch behavioural events.
  *
- * The game already emits 29 typed analytics events through AnalyticsClient.
+ * The game emits one typed analytics stream through AnalyticsClient.
  * Rather than instrumenting gameplay a second time for Glitch, this subscribes
  * to that one stream and translates. Adding a game event automatically makes
  * it visible in Glitch, and there is exactly one place where the two
@@ -31,7 +31,7 @@ interface Mapping {
  * them in reports; a dashboard reading `farm / crop_harvested` is far less
  * useful to a marketer than `The Farm / Harvested a crop`.
  */
-const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
+const MAP = {
   session_start: {
     step: 'boot',
     stepLabel: 'Launch',
@@ -43,6 +43,24 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     stepLabel: 'Launch',
     action: 'scene_ready',
     actionLabel: 'Farm loaded',
+  },
+  screen_viewed: {
+    step: 'navigation',
+    stepLabel: 'Navigation',
+    action: 'screen_viewed',
+    actionLabel: 'Viewed a screen',
+  },
+  visibility_changed: {
+    step: 'session',
+    stepLabel: 'Play Session',
+    action: 'visibility_changed',
+    actionLabel: 'Changed page visibility',
+  },
+  consent_updated: {
+    step: 'privacy',
+    stepLabel: 'Privacy Choice',
+    action: 'consent_updated',
+    actionLabel: 'Updated analytics choice',
   },
 
   onboarding_start: {
@@ -113,6 +131,12 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     action: 'crop_planted',
     actionLabel: 'Planted a crop',
   },
+  crop_selected: {
+    step: 'farm',
+    stepLabel: 'Working the Farm',
+    action: 'crop_selected',
+    actionLabel: 'Selected a crop',
+  },
   crop_tended: {
     step: 'farm',
     stepLabel: 'Working the Farm',
@@ -136,6 +160,24 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     stepLabel: 'Working the Farm',
     action: 'storage_overflowed',
     actionLabel: 'Storage overflowed',
+  },
+  goods_hauled: {
+    step: 'farm',
+    stepLabel: 'Working the Farm',
+    action: 'goods_hauled',
+    actionLabel: 'Hauled goods',
+  },
+  goods_spoiled: {
+    step: 'friction',
+    stepLabel: 'Friction',
+    action: 'goods_spoiled',
+    actionLabel: 'Goods spoiled',
+  },
+  carrier_changed: {
+    step: 'farm',
+    stepLabel: 'Working the Farm',
+    action: 'carrier_changed',
+    actionLabel: 'Changed carrier',
   },
 
   goods_sold: {
@@ -175,6 +217,102 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     action: 'animal_purchased',
     actionLabel: 'Bought livestock',
   },
+  panel_viewed: {
+    step: 'navigation',
+    stepLabel: 'Navigation',
+    action: 'panel_viewed',
+    actionLabel: 'Opened or closed a panel',
+  },
+  setting_changed: {
+    step: 'settings',
+    stepLabel: 'Settings',
+    action: 'setting_changed',
+    actionLabel: 'Changed a setting',
+  },
+  career_action_completed: {
+    step: 'reinvest',
+    stepLabel: 'Reinvesting',
+    action: 'career_action_completed',
+    actionLabel: 'Completed a career action',
+  },
+  processing_completed: {
+    step: 'production',
+    stepLabel: 'Processing',
+    action: 'processing_completed',
+    actionLabel: 'Processing completed',
+  },
+  worker_task_completed: {
+    step: 'production',
+    stepLabel: 'Processing',
+    action: 'worker_task_completed',
+    actionLabel: 'Worker completed a task',
+  },
+  save_completed: {
+    step: 'save',
+    stepLabel: 'Saving',
+    action: 'save_completed',
+    actionLabel: 'Saved progress',
+  },
+  save_failed: {
+    step: 'save',
+    stepLabel: 'Saving',
+    action: 'save_failed',
+    actionLabel: 'Save failed',
+  },
+  account_action: {
+    step: 'account',
+    stepLabel: 'Account',
+    action: 'account_action',
+    actionLabel: 'Account action',
+  },
+  milestone_claimed: {
+    step: 'progression',
+    stepLabel: 'Career Progression',
+    action: 'milestone_claimed',
+    actionLabel: 'Claimed a milestone',
+  },
+  milestone_ready: {
+    step: 'progression',
+    stepLabel: 'Career Progression',
+    action: 'milestone_ready',
+    actionLabel: 'Milestone became ready',
+  },
+  unlock_granted: {
+    step: 'progression',
+    stepLabel: 'Career Progression',
+    action: 'unlock_granted',
+    actionLabel: 'Feature unlocked',
+  },
+  town_grew: {
+    step: 'progression',
+    stepLabel: 'Career Progression',
+    action: 'town_grew',
+    actionLabel: 'Town grew',
+  },
+  town_project_completed: {
+    step: 'progression',
+    stepLabel: 'Career Progression',
+    action: 'town_project_completed',
+    actionLabel: 'Town project completed',
+  },
+  contract_failed: {
+    step: 'market',
+    stepLabel: 'The Market',
+    action: 'contract_failed',
+    actionLabel: 'Contract failed',
+  },
+  career_restructured: {
+    step: 'progression',
+    stepLabel: 'Career Progression',
+    action: 'career_restructured',
+    actionLabel: 'Restructured the farm',
+  },
+  specialization_chosen: {
+    step: 'progression',
+    stepLabel: 'Career Progression',
+    action: 'specialization_chosen',
+    actionLabel: 'Chose a specialization',
+  },
 
   farm_event_warned: {
     step: 'setback',
@@ -193,6 +331,18 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     stepLabel: 'Weather and Threats',
     action: 'event_impacted',
     actionLabel: 'Setback landed',
+  },
+  building_broken: {
+    step: 'setback',
+    stepLabel: 'Weather and Threats',
+    action: 'building_broken',
+    actionLabel: 'Building broke',
+  },
+  building_repaired: {
+    step: 'setback',
+    stepLabel: 'Weather and Threats',
+    action: 'building_repaired',
+    actionLabel: 'Building repaired',
   },
   fox_scared_off: {
     step: 'setback',
@@ -225,6 +375,24 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     action: 'idle_detected',
     actionLabel: 'Player went idle',
   },
+  runtime_error: {
+    step: 'reliability',
+    stepLabel: 'Reliability',
+    action: 'runtime_error',
+    actionLabel: 'Runtime error captured',
+  },
+  performance_sample: {
+    step: 'performance',
+    stepLabel: 'Performance',
+    action: 'performance_sample',
+    actionLabel: 'Performance sampled',
+  },
+  performance_overrun: {
+    step: 'performance',
+    stepLabel: 'Performance',
+    action: 'performance_overrun',
+    actionLabel: 'Simulation fell behind',
+  },
 
   run_completed: {
     step: 'outcome',
@@ -238,7 +406,7 @@ const MAP: Partial<Record<AnalyticsEventName, Mapping>> = {
     action: 'session_end',
     actionLabel: 'Session ended',
   },
-};
+} satisfies Record<AnalyticsEventName, Mapping>;
 
 /**
  * Strips anything that could identify a person before it leaves the game.
@@ -268,7 +436,19 @@ export function bindGlitchAnalytics(
       step_label: mapping.stepLabel,
       action_key: mapping.action,
       event_label: mapping.actionLabel,
-      metadata: { ...safeMetadata(event.payload), session_ms: event.at },
+      metadata: {
+        ...safeMetadata(event.payload),
+        event_id: `${analytics.context.sessionId}:${event.seq}`,
+        session_ms: event.at,
+        app_version: analytics.context.appVersion,
+        protocol_version: analytics.context.protocolVersion,
+        build_type: analytics.context.buildType,
+        platform: analytics.context.platform,
+        device_type: analytics.context.deviceType,
+        operating_system: analytics.context.operatingSystem,
+        input_method: analytics.context.inputMethod,
+        locale: analytics.context.locale,
+      },
     });
   });
 }

@@ -11,7 +11,7 @@
  * the benefit has not arrived yet.
  */
 import * as THREE from 'three';
-import { BUILDINGS, type BuildingKind } from '@farmrise/shared';
+import { BUILDINGS, buildingFootprint, type BuildingKind } from '@farmrise/shared';
 import type { ModelLibrary } from '@assets/registries/ModelLibrary.js';
 import type { RenderPipeline } from '@engine/render/RenderPipeline.js';
 import type { FarmWorld, PlacedBuilding } from '../FarmWorld.js';
@@ -161,7 +161,10 @@ export class StructureView {
 
   sync(world: FarmWorld): void {
     const signature = world.buildings
-      .map((b) => `${b.kind}:${b.tileX}:${b.tileZ}:${b.remainingBuildTicks > 0 ? 'wip' : 'done'}`)
+      .map(
+        (b) =>
+          `${b.kind}:${b.tileX}:${b.tileZ}:${b.rotation}:${b.remainingBuildTicks > 0 ? 'wip' : 'done'}`,
+      )
       .join('|');
     if (signature === this.#signature) return;
     const firstSync = this.#signature === '';
@@ -198,7 +201,13 @@ export class StructureView {
         building.remainingBuildTicks === 0 &&
         !completedNow.has(buildingKey(building))
       ) {
-        const geometry = this.#roadGeometry(world, roadTiles, building.tileX, building.tileZ);
+        const geometry = this.#roadGeometry(
+          world,
+          roadTiles,
+          building.tileX,
+          building.tileZ,
+          building.rotation,
+        );
         const cacheKey = String(geometry.userData['roadCacheKey']);
         const batch = roadBatches.get(cacheKey);
         if (batch) batch.buildings.push(building);
@@ -207,19 +216,19 @@ export class StructureView {
       }
       const visual = this.#makeBuilding(world, building);
       if (!visual) continue;
-      const definition = BUILDINGS[building.kind];
+      const footprint = buildingFootprint(building.kind, building.rotation);
       const tile = world.grid.tileSize;
       const origin = world.grid.tileToWorld(building.tileX, building.tileZ);
       // Multi-tile footprints anchor at their corner tile, so shift by the
       // extra half-tile to centre the mesh over the whole footprint.
       visual.position.set(
-        origin.x + ((definition.footprint.width - 1) * tile) / 2,
+        origin.x + ((footprint.width - 1) * tile) / 2,
         0,
-        origin.z + ((definition.footprint.depth - 1) * tile) / 2,
+        origin.z + ((footprint.depth - 1) * tile) / 2,
       );
       visual.userData['building'] = building;
       visual.userData['baseY'] = visual.position.y;
-      visual.rotation.y = building.rotation * (Math.PI / 2);
+      visual.rotation.y = building.kind === 'road' ? 0 : building.rotation * (Math.PI / 2);
       if (completedNow.has(buildingKey(building))) {
         visual.userData['completionStartedAt'] = this.#elapsedSeconds;
       }
@@ -341,14 +350,15 @@ export class StructureView {
     tileX = 0,
     tileZ = 0,
     valid = true,
+    rotation = 0,
   ): void {
     if (!kind) {
       if (this.#preview) this.#preview.visible = false;
       return;
     }
 
-    const definition = BUILDINGS[kind];
-    const geometry = this.#previewGeometry(world, kind, tileX, tileZ);
+    const footprint = buildingFootprint(kind, rotation);
+    const geometry = this.#previewGeometry(world, kind, tileX, tileZ, rotation);
     if (!this.#preview) {
       this.#preview = new THREE.Mesh(geometry, this.#previewMaterial(true));
       this.#preview.userData['static'] = true;
@@ -365,10 +375,11 @@ export class StructureView {
     const tile = world.grid.tileSize;
     const origin = world.grid.tileToWorld(tileX, tileZ);
     this.#preview.position.set(
-      origin.x + ((definition.footprint.width - 1) * tile) / 2,
+      origin.x + ((footprint.width - 1) * tile) / 2,
       0,
-      origin.z + ((definition.footprint.depth - 1) * tile) / 2,
+      origin.z + ((footprint.depth - 1) * tile) / 2,
     );
+    this.#preview.rotation.y = kind === 'road' ? 0 : rotation * (Math.PI / 2);
     this.#preview.visible = true;
   }
 
@@ -385,6 +396,7 @@ export class StructureView {
     kind: BuildingKind,
     tileX: number,
     tileZ: number,
+    rotation: number,
   ): THREE.BufferGeometry {
     if (kind === 'road') {
       const roads = world.buildings
@@ -393,7 +405,7 @@ export class StructureView {
       if (!roads.some((road) => road.tileX === tileX && road.tileZ === tileZ)) {
         roads.push({ tileX, tileZ });
       }
-      return this.#roadGeometry(world, roads, tileX, tileZ);
+      return this.#roadGeometry(world, roads, tileX, tileZ, rotation);
     }
     const meshName = BUILDING_MESH[kind];
     const cached = meshName ? this.library?.get(meshName) : undefined;
@@ -448,16 +460,21 @@ export class StructureView {
     roads: readonly RoadTileLike[],
     tileX: number,
     tileZ: number,
+    rotation = 0,
   ): THREE.BufferGeometry {
     const connections = roadConnectionMask(roads, tileX, tileZ);
     const variant = roadSurfaceVariant(tileX, tileZ);
-    const key = `${connections}:${variant}`;
+    // Once a road connects, its neighbours define the silhouette. A standalone
+    // road still honours the player's horizontal/vertical orientation.
+    const isolatedRotation = connections === 0 ? Math.abs(Math.trunc(rotation)) % 2 : 0;
+    const key = `${connections}:${variant}:${isolatedRotation}`;
     const cached = this.#roadGeometryCache.get(key);
     if (cached) return cached;
     const geometry = createRoadGeometry({
       tileSize: world.grid.tileSize,
       connections,
       variant,
+      rotation: isolatedRotation,
     });
     geometry.userData['roadCacheKey'] = key;
     this.#roadGeometryCache.set(key, geometry);
@@ -497,7 +514,7 @@ export class StructureView {
         (candidate): candidate is PlacedBuilding & RoadTileLike => candidate.kind === 'road',
       );
       return new THREE.Mesh(
-        this.#roadGeometry(world, roads, building.tileX, building.tileZ),
+        this.#roadGeometry(world, roads, building.tileX, building.tileZ, building.rotation),
         this.library?.material ?? this.materials.road,
       );
     }
@@ -678,8 +695,10 @@ export class StructureView {
   }
 }
 
-function buildingKey(building: Pick<PlacedBuilding, 'kind' | 'tileX' | 'tileZ'>): string {
-  return `${building.kind}:${building.tileX}:${building.tileZ}`;
+function buildingKey(
+  building: Pick<PlacedBuilding, 'kind' | 'tileX' | 'tileZ' | 'rotation'>,
+): string {
+  return `${building.kind}:${building.tileX}:${building.tileZ}:${building.rotation}`;
 }
 
 function createWaterPlaneGeometry(): THREE.PlaneGeometry {

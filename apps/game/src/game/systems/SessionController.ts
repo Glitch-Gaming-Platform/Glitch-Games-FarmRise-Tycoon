@@ -237,6 +237,7 @@ export class SessionController {
     }
     this.#reinvestments += 1;
     useCarrier(this.career, kind);
+    this.events.emit('session:career-changed', { action: 'buyCarrier' });
   }
 
   claimMilestone(milestoneId: string): void {
@@ -345,6 +346,7 @@ export class SessionController {
     // Placement confirmation must see the input edge on this fixed tick.
     // Reading it later from render loses clicks when one slow frame performs
     // several catch-up steps.
+    const placementWasActive = this.placement.active;
     this.placement.fixedUpdate(this.#now());
 
     // Panel keys are read here rather than in InteractionController because
@@ -354,8 +356,11 @@ export class SessionController {
     if (this.input.wasPressed('openBuild')) this.togglePanel('build');
     if (this.input.wasPressed('openCareer')) this.togglePanel('career');
     if (this.input.wasPressed('openTown')) this.togglePanel('town');
-    if (this.input.wasPressed('prevent')) this.respondToIncident();
-    if (this.input.wasPressed('haul')) this.haul();
+    // R is contextually Rotate during placement and Haul during ordinary play.
+    // Other world actions are suppressed for the same reason plot interaction
+    // is: placement owns the action layer until it is cancelled or exhausted.
+    if (!placementWasActive && this.input.wasPressed('prevent')) this.respondToIncident();
+    if (!placementWasActive && this.input.wasPressed('haul')) this.haul();
     if (this.input.wasPressed('cancel') && this.#panel !== 'none' && !this.placement.active) {
       this.openPanel('none');
     }

@@ -15,6 +15,7 @@ export type GameAction =
   | 'sprint'
   | 'interact'
   | 'cancel'
+  | 'rotatePlacement'
   | 'cycleCrop'
   | 'openBuild'
   | 'openMarket'
@@ -35,6 +36,9 @@ export const DEFAULT_BINDINGS: ActionMap<GameAction> = {
   sprint: { keys: ['ShiftLeft', 'ShiftRight'] },
   interact: { keys: ['KeyE', 'Space'], mouseButtons: [0] },
   cancel: { keys: ['Escape'] },
+  // R rotates only while a placement cursor is active. Outside placement it
+  // keeps its hauling role, so the repeated logistics key does not move.
+  rotatePlacement: { keys: ['KeyR'] },
   cycleCrop: { keys: ['KeyQ'] },
   openBuild: { keys: ['KeyB'] },
   openMarket: { keys: ['KeyM'] },

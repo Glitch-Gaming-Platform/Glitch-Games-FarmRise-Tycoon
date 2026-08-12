@@ -25,6 +25,14 @@ export type CoreBuildingKind =
 
 export type BuildingKind = CoreBuildingKind | ProcessorKind;
 
+/** Clockwise quarter-turns from the authored/default orientation. */
+export type BuildingRotation = 0 | 1 | 2 | 3;
+
+export interface BuildingFootprint {
+  readonly width: number;
+  readonly depth: number;
+}
+
 export interface BuildingDefinition {
   readonly id: BuildingKind;
   readonly displayName: string;
@@ -32,7 +40,7 @@ export interface BuildingDefinition {
   /** Construction time. Building is not free in the moment-to-moment loop. */
   readonly buildTicks: Ticks;
   /** Footprint on the farm grid, in tiles. */
-  readonly footprint: { readonly width: number; readonly depth: number };
+  readonly footprint: BuildingFootprint;
   /** Upkeep charged per in-game day once complete. */
   readonly upkeepPerDay: Cents;
   /** Career unlock required before this appears in the build menu. */
@@ -149,6 +157,20 @@ export const BUILDINGS: Readonly<Record<BuildingKind, BuildingDefinition>> = Obj
 });
 
 export const BUILDING_KINDS = Object.keys(BUILDINGS) as readonly BuildingKind[];
+
+/** Keeps runtime input and migrated/defaulted saves inside the persisted 0..3 contract. */
+export function normalizeBuildingRotation(rotation: number): BuildingRotation {
+  const wholeTurns = Number.isFinite(rotation) ? Math.trunc(rotation) : 0;
+  return (((wholeTurns % 4) + 4) % 4) as BuildingRotation;
+}
+
+/** The occupied grid rectangle after applying a building's quarter-turn. */
+export function buildingFootprint(kind: BuildingKind, rotation: number = 0): BuildingFootprint {
+  const footprint = BUILDINGS[kind].footprint;
+  return normalizeBuildingRotation(rotation) % 2 === 0
+    ? footprint
+    : { width: footprint.depth, depth: footprint.width };
+}
 
 export function getBuilding(id: string): BuildingDefinition | undefined {
   return (BUILDINGS as Record<string, BuildingDefinition>)[id];

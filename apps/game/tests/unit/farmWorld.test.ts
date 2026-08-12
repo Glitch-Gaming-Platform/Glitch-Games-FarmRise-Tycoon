@@ -3,6 +3,7 @@ import {
   ANIMALS,
   GAME_DAY_TICKS,
   BUILDINGS,
+  ITEM_IDS,
   CROPS,
   RECIPES_BY_ID,
   actionTicks,
@@ -294,6 +295,25 @@ describe('livestock and persistence', () => {
     expect(sellableInventory(career).eggs).toBe(8);
     expect(sellSpot(career, 'eggs', 8).ok).toBe(true);
     expect(career.world.carry.items.eggs).toBe(0);
+  });
+
+  it('lists and pays for every tradeable item, including cranberries and animal products', () => {
+    for (const itemId of ITEM_IDS) {
+      const itemCareer = fundedCareer();
+      const existing = sellableInventory(itemCareer)[itemId] ?? 0;
+      addToYard(itemCareer, itemId, 2);
+      const before = itemCareer.balance;
+
+      expect(sellableInventory(itemCareer)[itemId]).toBe(existing + 2);
+      const result = sellSpot(itemCareer, itemId, 2);
+
+      expect(result.ok, itemId).toBe(true);
+      if (!result.ok) continue;
+      expect(result.value.payout, itemId).toBeGreaterThan(0);
+      expect(itemCareer.balance, itemId).toBe(before + result.value.payout);
+      expect(sellableInventory(itemCareer)[itemId] ?? 0, itemId).toBe(existing);
+      expect(itemCareer.statistics.itemsSold, itemId).toBe(2);
+    }
   });
 
   it('charges for purchased animals and adds them to the existing herd', () => {

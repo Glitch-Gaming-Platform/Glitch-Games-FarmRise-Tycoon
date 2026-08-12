@@ -27,7 +27,7 @@ export interface PlayerControllerEvents extends Record<string, unknown> {
  * speed, one frame apart.
  *
  * These ramps are short enough to keep the controls crisp (0 to walking in
- * 0.12 s, to sprinting in 0.29 s, stopped in 0.14 s) and long enough that the
+ * 0.13 s, to sprinting in 0.32 s, stopped in 0.16 s) and long enough that the
  * rig's start/stop lean, the walk-to-run blend and the contact dust all have
  * something real to key off. The walk clip in particular now gets screen time:
  * every sprint passes through walking speed on the way up and on the way down.

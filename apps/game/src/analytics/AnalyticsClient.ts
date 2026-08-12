@@ -26,6 +26,8 @@ export interface AnalyticsClientEvents extends Record<string, unknown> {
 
 export interface AnalyticsOptions {
   readonly context: AnalyticsContext;
+  /** Disabled clients are a true no-op and retain no event payloads. */
+  readonly enabled?: boolean;
   /** Flush when this many events are buffered. */
   readonly batchSize?: number;
   /** Or when this long has passed, whichever comes first. */
@@ -43,12 +45,14 @@ export class AnalyticsClient implements Disposable {
   readonly #maxBuffer: number;
   readonly #startedAt = Date.now();
   #seq = 0;
+  #enabled: boolean;
   #timer: ReturnType<typeof setInterval> | null = null;
   /** Names already recorded, so "first_*" events can only fire once. */
   readonly #once = new Set<string>();
 
   constructor(options: AnalyticsOptions) {
     this.#context = options.context;
+    this.#enabled = options.enabled ?? true;
     this.#batchSize = options.batchSize ?? 25;
     this.#maxBuffer = options.maxBuffer ?? 500;
     const interval = options.flushIntervalMs ?? 15_000;
@@ -65,12 +69,30 @@ export class AnalyticsClient implements Disposable {
     return this.#buffer;
   }
 
+  get enabled(): boolean {
+    return this.#enabled;
+  }
+
+  setEnabled(enabled: boolean): void {
+    if (this.#enabled === enabled) return;
+    this.#enabled = enabled;
+    if (!enabled) {
+      this.#buffer.length = 0;
+      this.#once.clear();
+    }
+  }
+
   addSink(sink: AnalyticsSink): void {
     this.#sinks.push(sink);
   }
 
   /** Records an event. Typed so a payload cannot drift from its name. */
   track<E extends AnalyticsEvent>(name: E['name'], payload: E['payload']): void {
+    if (!this.#enabled) return;
+    if (!isSafePayload(payload as Record<string, unknown>)) {
+      console.warn(`[analytics] rejected unsafe payload for "${name}"`);
+      return;
+    }
     const recorded: RecordedEvent = {
       name,
       payload: payload as Record<string, unknown>,
@@ -93,6 +115,7 @@ export class AnalyticsClient implements Disposable {
    * meaningless.
    */
   trackOnce<E extends AnalyticsEvent>(name: E['name'], payload: E['payload']): boolean {
+    if (!this.#enabled) return false;
     if (this.#once.has(name)) return false;
     this.#once.add(name);
     this.track(name, payload);
@@ -172,13 +195,13 @@ export function createMemorySink(): AnalyticsSink & { readonly all: RecordedEven
  * regenerated silently if storage is unavailable. Its only purpose is to
  * distinguish a returning player from a new one.
  */
-export function resolveAnonId(): string {
+export function resolveAnonId(persist = true): string {
   const key = 'farmrise:anon';
   try {
     const existing = globalThis.localStorage?.getItem(key);
     if (existing) return existing;
     const created = randomId();
-    globalThis.localStorage?.setItem(key, created);
+    if (persist) globalThis.localStorage?.setItem(key, created);
     return created;
   } catch {
     return randomId();
@@ -188,4 +211,17 @@ export function resolveAnonId(): string {
 export function randomId(): string {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `a_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+const FORBIDDEN_PAYLOAD_KEY = /email|password|token|authorization|cookie|chat|message|user_?id/i;
+
+/** Runtime guard for JavaScript callers and future provider bridges. */
+export function isSafePayload(payload: Record<string, unknown>): boolean {
+  for (const [key, value] of Object.entries(payload)) {
+    if (FORBIDDEN_PAYLOAD_KEY.test(key)) return false;
+    if (typeof value === 'string' && value.length > 160) return false;
+    if (typeof value === 'number' && !Number.isFinite(value)) return false;
+    if (!['string', 'number', 'boolean'].includes(typeof value)) return false;
+  }
+  return true;
 }

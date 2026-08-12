@@ -54,6 +54,37 @@ describe('world animation state', () => {
     });
     expect(stackAnchor).toEqual({ x: stackAt.x, y: 1.15, z: stackAt.z });
 
+    world.structures.add({
+      id: 'building-meter-barn',
+      kind: 'barn',
+      tileX: 10,
+      tileZ: 18,
+      rotation: 0,
+      remainingBuildTicks: 0,
+      broken: false,
+    });
+    world.stores.add({
+      id: 'store-meter-barn',
+      buildingId: 'building-meter-barn',
+      tileX: 10,
+      tileZ: 18,
+      capacity: 120,
+      preserving: false,
+      items: { wheat: 1 },
+      quality: { wheat: 1 },
+      spoilageRemainder: {},
+    });
+    const barnAt = world.grid.tileToWorld(10.5, 18.5);
+    const barnAnchor = proximityMeterAnchor(world, {
+      kind: 'storage',
+      target: { kind: 'store', id: 'store-meter-barn' },
+      label: 'Barn storage',
+      value: 1,
+      detail: '1/120 used',
+      urgent: false,
+    });
+    expect(barnAnchor).toEqual({ x: barnAt.x, y: 3.45, z: barnAt.z });
+
     const animalAnchor = proximityMeterAnchor(world, {
       kind: 'animal',
       target: { kind: 'animal', id: 'chicken', x: 4, y: 1.25, z: 7 },

@@ -364,12 +364,13 @@ export class FarmScene implements GameScene {
     const career = this.#career;
     if (!this.#running || !career) return;
 
-    const worldInputEnabled = this.#session?.panel === 'none' && !this.#session?.placement.active;
-    this.#playerController?.fixedUpdate(context, worldInputEnabled);
-    // Placement is a modal cursor: while it is active the plot-level
-    // interaction must not also fire, or one click both places a barn and
-    // plants a seed.
-    if (worldInputEnabled) this.#interaction?.fixedUpdate(context);
+    const movementEnabled = this.#session?.panel === 'none';
+    const interactionEnabled = movementEnabled && !this.#session?.placement.active;
+    this.#playerController?.fixedUpdate(context, movementEnabled);
+    // Placement owns the context click/key but not locomotion. The farmer can
+    // keep walking with WASD while positioning a long road or fence run, while
+    // plot work stays suppressed so one click cannot both build and plant.
+    if (interactionEnabled) this.#interaction?.fixedUpdate(context);
     this.#session?.fixedUpdate(context);
     const onboarding = this.#session?.onboarding;
     const eggLessonActive = onboarding?.active && onboarding.currentBeat?.id === 'eggs';
@@ -443,9 +444,10 @@ export class FarmScene implements GameScene {
     tileX?: number,
     tileZ?: number,
     valid?: boolean,
+    rotation?: number,
   ): void {
     const world = this.#career?.world;
-    if (world) this.#farmView?.setPlacementPreview(world, kind, tileX, tileZ, valid);
+    if (world) this.#farmView?.setPlacementPreview(world, kind, tileX, tileZ, valid, rotation);
   }
 
   /** False when the scene fell back to procedural primitives. */

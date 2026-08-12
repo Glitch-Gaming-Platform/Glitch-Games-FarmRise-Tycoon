@@ -52,6 +52,7 @@ interface LeadLegSnapshot {
   readonly kneeForward: number;
   readonly ankleForward: number;
   readonly shinWorldAngle: number;
+  readonly footAngle: number;
 }
 
 function leadLegSnapshot(phase: number): LeadLegSnapshot {
@@ -64,6 +65,7 @@ function leadLegSnapshot(phase: number): LeadLegSnapshot {
     kneeForward: Math.sin(thigh) * THIGH_LENGTH,
     ankleForward: ankleFromHip(thigh, shin).forward,
     shinWorldAngle: thigh + shin,
+    footAngle: pose[BONE_INDEX['foot.L']! * 3]!,
   };
 }
 
@@ -348,6 +350,12 @@ describe('gait measurements', () => {
       expect(pose.kneeForward - pose.ankleForward).toBeGreaterThan(0.01);
       expect(pose.shinWorldAngle).toBeLessThan(-0.05);
     }
+  });
+
+  it('kicks the boot backward without changing the knee path', () => {
+    const cycle = WALK.keys.map((key) => leadLegSnapshot(key.t));
+
+    for (const pose of cycle) expect(pose.footAngle).toBeGreaterThanOrEqual(0.4);
   });
 
   it('measures world-space foot slip through a held walk and sprint', () => {

@@ -116,6 +116,12 @@ export class BuildPanel {
   }
 
   setVisible(visible: boolean): void {
+    if (!visible) {
+      const activeElement = this.root.ownerDocument.activeElement;
+      if (activeElement instanceof HTMLElement && this.root.contains(activeElement)) {
+        activeElement.blur();
+      }
+    }
     this.#visible = visible;
     this.root.hidden = !visible;
   }

@@ -15,6 +15,7 @@ import {
   CROPS,
   ANIMALS,
   BUILDINGS,
+  buildingFootprint,
   FIELD_SPOILAGE_MULTIPLIER,
   STORED_SPOILAGE_MULTIPLIER,
   THIRSTY_WATER,
@@ -190,6 +191,22 @@ export class InteractionController {
   #resolveTarget(): ContextTarget | null {
     const world = this.career.world;
     const tile = world.grid.worldToTile(this.player.position.x, this.player.position.z);
+    const stack = world.stores.nearestStack(tile.x, tile.z, 2);
+    if (stack && stackHasItemThatFits(stack, world.carry.free)) {
+      const item = Object.entries(stack.items).find(
+        ([itemId, quantity]) =>
+          quantity > 0 && world.carry.free >= (getItem(itemId)?.storageWeight ?? 1),
+      );
+      const itemId = item?.[0] ?? '';
+      const quantity = item?.[1] ?? 0;
+      return {
+        verb: 'collect',
+        id: stack.id,
+        label: quantity > 0 ? `Pick up ${formatItemQuantity(itemId, quantity)}` : 'Pick up',
+        meters: this.#storeMeters(stack),
+      };
+    }
+
     if (!world.carry.isEmpty) {
       const store = world.stores.nearestStored(tile.x, tile.z, 2);
       if (store) {
@@ -197,22 +214,6 @@ export class InteractionController {
           verb: 'deposit',
           id: store.id,
           label: `Put down (${world.carry.used})`,
-          meters: this.#storeMeters(store),
-        };
-      }
-    } else {
-      // A collectible pile wins over the nearby yard. Previously the yard at
-      // the shelter masked the egg basket one tile away, making E appear to do
-      // nothing unless the player stood on exactly the right pixel.
-      const store = world.stores.nearestStack(tile.x, tile.z, 2);
-      if (store) {
-        const item = Object.entries(store.items).find(([, quantity]) => quantity > 0);
-        const itemId = item?.[0] ?? '';
-        const quantity = item?.[1] ?? 0;
-        return {
-          verb: 'collect',
-          id: store.id,
-          label: quantity > 0 ? `Pick up ${formatItemQuantity(itemId, quantity)}` : 'Pick up',
           meters: this.#storeMeters(store),
         };
       }
@@ -309,11 +310,11 @@ export class InteractionController {
       if (!store.buildingId || store.capacity <= 0) continue;
       const building = world.structures.get(store.buildingId);
       if (!building || building.remainingBuildTicks > 0) continue;
-      const definition = BUILDINGS[building.kind];
+      const footprint = buildingFootprint(building.kind, building.rotation);
       const minX = building.tileX;
-      const maxX = building.tileX + definition.footprint.width - 1;
+      const maxX = building.tileX + footprint.width - 1;
       const minZ = building.tileZ;
-      const maxZ = building.tileZ + definition.footprint.depth - 1;
+      const maxZ = building.tileZ + footprint.depth - 1;
       const dx = tileX < minX ? minX - tileX : tileX > maxX ? tileX - maxX : 0;
       const dz = tileZ < minZ ? minZ - tileZ : tileZ > maxZ ? tileZ - maxZ : 0;
       const distance = dx + dz;
@@ -491,6 +492,7 @@ export class InteractionController {
 
     const world = this.career.world;
     const plotId = this.playerController.plotInReach();
+    const targetPlot = plotId ? world.getPlot(plotId) : undefined;
     const shelter = shelterDoorPoint(
       world.grid,
       world.level.shelter.tileX,
@@ -502,7 +504,15 @@ export class InteractionController {
       let relevant = false;
       switch (response.kind) {
         case 'tend_targets':
-          relevant = Boolean(plotId && instance.targetIds.includes(plotId));
+          // Once a targeted crop is mature, watering it is no longer a valid
+          // action. Let Harvest own E instead of letting an active drought mask
+          // the only action that can clear the ready bed.
+          relevant = Boolean(
+            plotId &&
+            instance.targetIds.includes(plotId) &&
+            targetPlot &&
+            plotStage(targetPlot) !== 'ready',
+          );
           break;
         case 'move_animals':
         case 'haul_to_shelter':
@@ -657,6 +667,11 @@ function plotMeters(plotId: string, plot: PlotState, season: Season): readonly P
           },
         ];
 
+  // Water can no longer improve a mature crop, so showing a thirsty card beside
+  // "Ready now" suggests an action the rules reject. At maturity the harvest
+  // card is the complete status for the bed.
+  if (stage === 'ready') return growth;
+
   if (plot.irrigated) {
     return [
       {
@@ -694,3 +709,9 @@ function plotMeters(plotId: string, plot: PlotState, season: Season): readonly P
 
 /** Exported so the HUD test can assert the threshold it draws against. */
 export { THIRSTY_WATER };
+
+function stackHasItemThatFits(store: StoreState, freeCapacity: number): boolean {
+  return Object.entries(store.items).some(
+    ([itemId, quantity]) => quantity > 0 && freeCapacity >= (getItem(itemId)?.storageWeight ?? 1),
+  );
+}

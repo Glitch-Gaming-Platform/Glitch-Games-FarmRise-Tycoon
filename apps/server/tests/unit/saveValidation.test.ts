@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BUILDINGS,
   COMMUNITY_PROJECTS_BY_ID,
   INSURANCE_POLICIES,
   LOAN_OFFERS,
@@ -366,6 +367,107 @@ describe('validateSaveTransition', () => {
       carried: { ...site.carried, items: { wheat: 9 } },
     }));
     expect(validateSaveTransition(base, overloaded, overloaded.tick).reason).toMatch(/overloaded/i);
+  });
+
+  it('validates the rotated footprint of a new non-square building', () => {
+    const base = fresh();
+    base.unlocks = ['hauling'];
+    const cost = BUILDINGS.loading_pad.buildCost;
+    const rotated = updateSite(
+      later(base, {
+        balance: cents(base.balance - cost),
+        statistics: {
+          ...base.statistics,
+          lifetimeSpent: base.statistics.lifetimeSpent + cost,
+        },
+      }),
+      (site) => ({
+        ...site,
+        buildings: [
+          ...site.buildings,
+          {
+            id: 'building-rotated-pad',
+            kind: 'loading_pad',
+            tileX: 22,
+            tileZ: 22,
+            rotation: 1,
+            remainingBuildTicks: BUILDINGS.loading_pad.buildTicks,
+            broken: false,
+          },
+        ],
+      }),
+    );
+
+    expect(validateSaveTransition(base, rotated, rotated.tick)).toEqual({ ok: true });
+  });
+
+  it('rejects overlap on the second tile of a rotated footprint', () => {
+    const base = fresh();
+    base.unlocks = ['hauling'];
+    const cost = BUILDINGS.loading_pad.buildCost + BUILDINGS.road.buildCost;
+    const overlapped = updateSite(
+      later(base, {
+        balance: cents(base.balance - cost),
+        statistics: {
+          ...base.statistics,
+          lifetimeSpent: base.statistics.lifetimeSpent + cost,
+        },
+      }),
+      (site) => ({
+        ...site,
+        buildings: [
+          ...site.buildings,
+          {
+            id: 'building-rotated-pad',
+            kind: 'loading_pad',
+            tileX: 22,
+            tileZ: 22,
+            rotation: 1,
+            remainingBuildTicks: BUILDINGS.loading_pad.buildTicks,
+            broken: false,
+          },
+          {
+            id: 'building-overlap',
+            kind: 'road',
+            tileX: 22,
+            tileZ: 23,
+            rotation: 0,
+            remainingBuildTicks: BUILDINGS.road.buildTicks,
+            broken: false,
+          },
+        ],
+      }),
+    );
+
+    expect(validateSaveTransition(base, overlapped, overlapped.tick).reason).toMatch(/overlap/i);
+  });
+
+  it('rejects rotating an existing building through a save transition', () => {
+    const base = fresh();
+    base.unlocks = ['hauling'];
+    const previous = updateSite(base, (site) => ({
+      ...site,
+      buildings: [
+        ...site.buildings,
+        {
+          id: 'building-fixed-rotation',
+          kind: 'loading_pad',
+          tileX: 22,
+          tileZ: 22,
+          rotation: 0,
+          remainingBuildTicks: 0,
+          broken: false,
+        },
+      ],
+    }));
+    const rotated = updateSite(later(previous), (site) => ({
+      ...site,
+      buildings: site.buildings.map((building) =>
+        building.id === 'building-fixed-rotation' ? { ...building, rotation: 1 } : building,
+      ),
+    }));
+
+    expect(validateSaveTransition(previous, rotated, rotated.tick).reason).toMatch(/rotation/i);
   });
 
   it('keeps the animal-product collection tile clear on saved farms', () => {
