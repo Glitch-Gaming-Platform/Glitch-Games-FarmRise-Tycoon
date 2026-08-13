@@ -35,6 +35,7 @@ import {
   type Season,
   getCrop,
   getItem,
+  isProducingAnimal,
   getIncident,
   plantableCrops,
   plotStage,
@@ -283,10 +284,11 @@ export class InteractionController {
           };
         }
         if (stage === 'ready') {
+          const crop = plot.cropId ? getCrop(plot.cropId) : undefined;
           return {
             verb: 'harvest',
             id: plotId,
-            label: 'Harvest',
+            label: `Harvest ${crop?.displayName ?? 'Crop'}`,
             meters: plotMeters(plotId, plot, this.career.season),
           };
         }
@@ -591,6 +593,7 @@ export class InteractionController {
 
     if (!nearest || nearest.distance > 2.6) return null;
     const definition = ANIMALS[nearest.species];
+    if (!isProducingAnimal(definition)) return null;
     const count = nearest.count;
     const needed = definition.feedPerCycle * count;
     const available = world.stores.storedTotalOf(definition.feedItemId);
@@ -841,6 +844,7 @@ export class InteractionController {
 function animalGroupLabel(species: AnimalSpecies, count: number): string {
   if (species === 'chicken') return `${count} ${count === 1 ? 'Hen' : 'Hens'}`;
   if (species === 'cow') return `${count} ${count === 1 ? 'Dairy cow' : 'Dairy cows'}`;
+  if (species === 'dog') return `${count} ${count === 1 ? 'Farm dog' : 'Farm dogs'}`;
   return `${count} Sheep`;
 }
 
@@ -876,7 +880,7 @@ function plotMeters(plotId: string, plot: PlotState, season: Season): readonly P
           {
             kind: 'growth',
             target: { kind: 'plot', id: plotId },
-            label: 'Harvest',
+            label: `Harvest ${crop.displayName}`,
             value: stage === 'ready' ? 1 : Math.min(1, plot.grownTicks / crop.growthTicks),
             detail:
               stage === 'ready'

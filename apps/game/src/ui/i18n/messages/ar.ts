@@ -6,6 +6,7 @@ const messages = {
   'time.secondsShort': '{value}ث',
   'time.minutesShort': '{value}د',
   'time.minutesSecondsShort': '{minutes}د {seconds}ث',
+  'time.remaining': 'متبقٍ {time}',
   'menu.ribbon': 'يبدأ موسم جديد',
   'menu.subtitle':
     'اعمل في الأرض، واقرأ السوق، وحوّل الحيازة الصغيرة إلى مزرعة تستحق الحفاظ عليها.',
@@ -116,6 +117,7 @@ const messages = {
   'objective.runEstate': 'إدارة الضيعة',
   'interaction.changeSeed': 'تغيير البذور',
   'interaction.harvest': 'حصاد',
+  'interaction.harvestCrop': 'احصد {crop}',
   'interaction.tend': 'اعتناء',
   'interaction.repair': 'إصلاح',
   'interaction.pickUp': 'التقاط',

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { cents } from '@farmrise/shared';
+import { BUILDING_KINDS, cents } from '@farmrise/shared';
 import { Hud, type HudSnapshot } from '@ui/hud/Hud.js';
-import { saleToastMessage } from '../../src/bootstrap/bindHud.js';
+import { createEnglishLocalization } from '@ui/i18n/gameI18n.js';
+import { playerBuildingName, saleToastMessage } from '../../src/bootstrap/bindHud.js';
 
 const BASE: Omit<HudSnapshot, 'warning'> = {
   balance: cents(5_000),
@@ -80,5 +81,17 @@ describe('sale feedback', () => {
     expect(saleToastMessage('eggs', 1, cents(85), cents(2_132), true)).toBe(
       'Paid $0.85 for 1 Egg on contract. Balance $21.32.',
     );
+  });
+});
+
+describe('building feedback', () => {
+  it('uses player-readable names for every building kind', () => {
+    const i18n = createEnglishLocalization();
+    for (const kind of BUILDING_KINDS) {
+      const name = playerBuildingName(i18n, kind);
+      expect(name, kind).not.toContain('_');
+      expect(name, kind).not.toBe(kind);
+    }
+    expect(playerBuildingName(i18n, 'animal_shelter')).toBe('Animal Shelter');
   });
 });

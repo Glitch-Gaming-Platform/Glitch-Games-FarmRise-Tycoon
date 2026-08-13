@@ -38,6 +38,15 @@ export function localizeGameText(
     });
   }
 
+  const harvest = /^Harvest (.+)$/.exec(text);
+  if (harvest) {
+    const fallbackCrop = harvest[1] ?? '';
+    const crop = Object.values(CROPS).find((candidate) => candidate.displayName === fallbackCrop);
+    return i18n.t('interaction.harvestCrop', {
+      crop: crop ? cropName(i18n, crop.id, crop.displayName) : fallbackCrop,
+    });
+  }
+
   const putDown = /^Put down \((\d+)\)$/.exec(text);
   if (putDown) return i18n.t('interaction.putDown', { quantity: putDown[1] ?? '0' });
 

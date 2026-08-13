@@ -136,6 +136,10 @@ PALETTE: dict[str, str] = {
     "sheep_face": "#5B5149",
     "sheep_inner_ear": "#C78F88",
     "sheep_hoof": "#3D342F",
+    "dog_coat": "#765039",
+    "dog_chest": "#F5EBDC",
+    "dog_dark": "#342B26",
+    "dog_collar": "#4C78A7",
 
     # --- Environment dressing --------------------------------------------
     # Trees and flowers are still built from broad colour masses rather than

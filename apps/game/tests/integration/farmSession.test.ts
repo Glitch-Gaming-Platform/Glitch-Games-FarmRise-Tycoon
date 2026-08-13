@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { BUILDINGS, getIncident, requireCrop, type IncidentInstance } from '@farmrise/shared';
+import {
+  BUILDINGS,
+  STARTER_SHELTER_ID,
+  getIncident,
+  requireCrop,
+  type IncidentInstance,
+} from '@farmrise/shared';
 import { IncidentDirector } from '@game/events/IncidentDirector.js';
 import { Career } from '@game/career/Career.js';
 import { createIncidentReviewCareer } from '@game/debug/incidentReview.js';
@@ -15,6 +21,23 @@ function drought(careerTick: number, targetIds: readonly string[]): IncidentInst
     warnedTick: careerTick,
     impactTick: careerTick + 5,
     endsTick: careerTick + 15,
+    targetIds: [...targetIds],
+    responseKind: null,
+    responseProgress: 0,
+    resolved: false,
+    appliedMultiplier: null,
+  };
+}
+
+function foxRaid(careerTick: number, targetIds: readonly string[]): IncidentInstance {
+  return {
+    id: `test-fox-${careerTick}`,
+    definitionId: 'incident-fox-raid',
+    siteId: 'site-millbrook',
+    severity: 'minor',
+    warnedTick: careerTick,
+    impactTick: careerTick + 1,
+    endsTick: careerTick + 10,
     targetIds: [...targetIds],
     responseKind: null,
     responseProgress: 0,
@@ -82,6 +105,62 @@ describe('warned incidents', () => {
     expect(director.mostUrgentActionable).toBeNull();
   });
 
+  it("applies farm-dog protection only to livestock at the dog's assigned shelter", () => {
+    const career = fundedCareer();
+    const world = career.world;
+    world.structures.add({
+      id: 'shelter-remote',
+      kind: 'animal_shelter',
+      tileX: 20,
+      tileZ: 18,
+      rotation: 0,
+      remainingBuildTicks: 0,
+      broken: false,
+    });
+    world.livestock.hydrate([
+      {
+        id: 'animals-protected',
+        species: 'chicken',
+        shelterId: STARTER_SHELTER_ID,
+        count: 6,
+        cycleTicks: 0,
+        tileX: world.level.shelter.tileX,
+        tileZ: world.level.shelter.tileZ,
+        sheltered: false,
+      },
+      {
+        id: 'dog-protected',
+        species: 'dog',
+        shelterId: STARTER_SHELTER_ID,
+        count: 1,
+        cycleTicks: 0,
+        tileX: world.level.shelter.tileX,
+        tileZ: world.level.shelter.tileZ,
+        sheltered: false,
+      },
+      {
+        id: 'animals-exposed',
+        species: 'chicken',
+        shelterId: 'shelter-remote',
+        count: 6,
+        cycleTicks: 0,
+        tileX: 20,
+        tileZ: 18,
+        sheltered: false,
+      },
+    ]);
+    career.setIncidents([
+      foxRaid(career.tick, ['animals-protected', 'animals-exposed', 'dog-protected']),
+    ]);
+    const director = new IncidentDirector(career);
+
+    advance(career, director, 1);
+
+    expect(world.livestock.get('animals-protected')?.count).toBe(6);
+    expect(world.livestock.get('animals-exposed')?.count).toBe(3);
+    expect(world.livestock.get('dog-protected')?.count).toBe(1);
+  });
+
   it('persists a warning window before impact and targets only named plots', () => {
     const career = makeCareer();
     const plotId = firstPlotId(career);
@@ -100,6 +179,45 @@ describe('warned incidents', () => {
     expect(career.world.getPlot(plotId)?.eventMultiplier).toBeLessThan(1);
   });
 
+  it.each(['irrigation', 'well'] as const)(
+    'automatically blunts drought damage for beds supplied by %s',
+    (kind) => {
+      const career = fundedCareer();
+      if (kind === 'well') career.grant(['utilities']);
+      const placement = career.world.fields.placements[0]!;
+      expect(build(career, kind, placement.tileX + 1, placement.tileZ).ok).toBe(true);
+      career.advance(BUILDINGS[kind].buildTicks + 1);
+      expect(plant(career, placement.id, 'wheat').ok).toBe(true);
+      expect(career.world.getPlot(placement.id)?.irrigated).toBe(true);
+
+      const incident = drought(career.tick, [placement.id]);
+      career.setIncidents([incident]);
+      const director = new IncidentDirector(career);
+      advance(career, director, 5);
+
+      expect(career.world.getPlot(placement.id)?.eventMultiplier).toBe(0.85);
+      expect(career.incidents[0]?.appliedMultiplier).toBe(0.85);
+    },
+  );
+
+  it('applies irrigation protection per bed and records the mixed drought outcome', () => {
+    const career = fundedCareer();
+    const protectedBed = career.world.fields.placements[0]!;
+    const exposedBed = career.world.fields.placements[2]!;
+    expect(build(career, 'irrigation', protectedBed.tileX + 1, protectedBed.tileZ).ok).toBe(true);
+    career.advance(BUILDINGS.irrigation.buildTicks + 1);
+    expect(plant(career, protectedBed.id, 'wheat').ok).toBe(true);
+    expect(plant(career, exposedBed.id, 'wheat').ok).toBe(true);
+
+    career.setIncidents([drought(career.tick, [protectedBed.id, exposedBed.id])]);
+    const director = new IncidentDirector(career);
+    advance(career, director, 5);
+
+    expect(career.world.getPlot(protectedBed.id)?.eventMultiplier).toBe(0.85);
+    expect(career.world.getPlot(exposedBed.id)?.eventMultiplier).toBe(0.35);
+    expect(career.incidents[0]?.appliedMultiplier).toBe(0.6);
+  });
+
   it('lets the player pay during warning and records partial or complete mitigation', () => {
     const career = fundedCareer();
     const plotId = firstPlotId(career);
@@ -111,7 +229,9 @@ describe('warned incidents', () => {
     expect(career.balance).toBe(before - getIncident('incident-drought')!.responses[0]!.cost);
 
     advance(career, director, 5);
-    expect(career.world.getPlot(plotId)?.eventMultiplier).toBeGreaterThan(0.35);
+    expect(career.world.getPlot(plotId)?.eventMultiplier).toBe(
+      getIncident('incident-drought')!.responses[0]!.mitigatedMultiplier,
+    );
   });
 
   it('refuses a response after the incident has ended', () => {

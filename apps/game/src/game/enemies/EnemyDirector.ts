@@ -18,6 +18,7 @@ import { Fox } from './Fox.js';
 export interface EnemyDirectorEvents extends Record<string, unknown> {
   'enemy:spawned': { count: number };
   'enemy:scared-off': { remaining: number };
+  'enemy:dog-defended': { count: number; shelterId: string };
   'enemy:raid-succeeded': { losses: number };
 }
 
@@ -27,6 +28,7 @@ const FOX_SPEED = 1.3;
 export class EnemyDirector {
   readonly events = new EventBus<EnemyDirectorEvents>();
   readonly #foxes: Fox[] = [];
+  readonly #dogInterceptionsUsed = new Map<string, number>();
   #nextFoxId = 0;
 
   constructor(
@@ -41,10 +43,14 @@ export class EnemyDirector {
       // A mitigated raid still shows up, with fewer of them: the player should
       // see that driving the animals in worked, not that nothing happened.
       const mitigated = instance.responseProgress > 0;
-      this.#spawnRaid(mitigated ? 1 : 3, instance.targetIds);
+      const spawned = this.#spawnRaid(instance.id, mitigated ? 1 : 3, instance.targetIds);
+      this.#applyDogDefense(spawned);
+      const activeSpawned = spawned.filter((fox) => fox.state !== 'gone').length;
+      this.#prune();
+      if (activeSpawned > 0) this.events.emit('enemy:spawned', { count: activeSpawned });
     });
-    incidents.events.on('incident:resolved', ({ definition }) => {
-      if (definition.id === 'incident-fox-raid') this.#retireAll();
+    incidents.events.on('incident:resolved', ({ instance, definition }) => {
+      if (definition.id === 'incident-fox-raid') this.#retireRaid(instance.id);
     });
   }
 
@@ -53,6 +59,9 @@ export class EnemyDirector {
   }
 
   fixedUpdate(context: FixedUpdateContext): void {
+    if (this.#foxes.length === 0) return;
+    this.#applyDogDefense(this.#foxes);
+    this.#prune();
     if (this.#foxes.length === 0) return;
     let losses = 0;
 
@@ -75,12 +84,13 @@ export class EnemyDirector {
     this.#prune();
   }
 
-  #spawnRaid(count: number, targetIds: readonly string[]): void {
+  #spawnRaid(raidId: string, count: number, targetIds: readonly string[]): Fox[] {
     const targets = targetIds
       .map((id) => this.world.livestock.get(id))
-      .filter((group) => group !== undefined && group.count > 0);
-    if (targets.length === 0) return;
+      .filter((group) => group !== undefined && this.world.livestock.isPredatorTarget(group.id));
+    if (targets.length === 0) return [];
     const halfWidth = (this.world.grid.width * this.world.grid.tileSize) / 2;
+    const spawned: Fox[] = [];
 
     for (let i = 0; i < count; i += 1) {
       const target = targets[i % targets.length];
@@ -101,14 +111,44 @@ export class EnemyDirector {
           180,
           `fox-${this.#nextFoxId++}`,
           target.id,
+          raidId,
+          target.shelterId,
         ),
       );
+      spawned.push(this.#foxes[this.#foxes.length - 1]!);
     }
-    this.events.emit('enemy:spawned', { count });
+    return spawned;
   }
 
-  #retireAll(): void {
-    for (const fox of this.#foxes) fox.state = 'gone';
+  #applyDogDefense(foxes: readonly Fox[]): void {
+    const defendedByShelter = new Map<string, number>();
+    for (const fox of foxes) {
+      if ((fox.state !== 'approaching' && fox.state !== 'raiding') || !fox.targetShelterId) {
+        continue;
+      }
+      const capacity = this.world.livestock.foxProtectionAt(fox.targetShelterId);
+      const key = `${fox.raidId}:${fox.targetShelterId}`;
+      const used = this.#dogInterceptionsUsed.get(key) ?? 0;
+      if (used >= capacity) continue;
+      this.#dogInterceptionsUsed.set(key, used + 1);
+      fox.state = 'gone';
+      defendedByShelter.set(
+        fox.targetShelterId,
+        (defendedByShelter.get(fox.targetShelterId) ?? 0) + 1,
+      );
+    }
+    for (const [shelterId, count] of defendedByShelter) {
+      this.events.emit('enemy:dog-defended', { shelterId, count });
+    }
+  }
+
+  #retireRaid(raidId: string): void {
+    for (const fox of this.#foxes) {
+      if (fox.raidId === raidId) fox.state = 'gone';
+    }
+    for (const key of this.#dogInterceptionsUsed.keys()) {
+      if (key.startsWith(`${raidId}:`)) this.#dogInterceptionsUsed.delete(key);
+    }
     this.#prune();
   }
 

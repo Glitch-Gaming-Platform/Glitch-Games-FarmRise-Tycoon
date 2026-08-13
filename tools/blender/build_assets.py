@@ -65,6 +65,7 @@ FAMILIES = {
 # catalog totals or compression comparison with duplicate geometry.
 LOW_SUPPLEMENTS = {
     "animals-sheep": "ANIMALS_SHEEP",
+    "animals-dog": "ANIMALS_DOG",
 }
 
 
@@ -208,6 +209,8 @@ def audit_palette() -> list[str]:
         # is a deliberate design choice, recorded here rather than hidden.
         ("fox_belly", "ground_scrub", "the fox's white markings carry its read"),
         ("fox_belly", "soil_tilled", "likewise on tilled ground"),
+        ("dog_chest", "ground_scrub", "the farm dog's pale chest carries its read"),
+        ("dog_chest", "soil_tilled", "likewise on tilled ground"),
     ]
     progression = [
         ("crop_seedling", "crop_young", "wheat/corn stage 1 -> 2"),

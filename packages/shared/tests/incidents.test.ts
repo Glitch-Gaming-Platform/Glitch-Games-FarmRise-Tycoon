@@ -67,6 +67,13 @@ describe('the incident catalogue', () => {
       }
     }
   });
+
+  it('keeps standing irrigation protection meaningful without making drought harmless', () => {
+    const drought = getIncident(DROUGHT);
+    if (!drought?.irrigatedMultiplier) throw new Error('Missing drought irrigation protection.');
+    expect(drought.irrigatedMultiplier).toBeGreaterThan(drought.unmitigatedMultiplier);
+    expect(drought.irrigatedMultiplier).toBeLessThan(1);
+  });
 });
 
 describe('eligibleIncidents', () => {

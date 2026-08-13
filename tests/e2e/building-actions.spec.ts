@@ -124,6 +124,9 @@ for (const recipe of RECIPES) {
 
     await expect(page.getByTestId('hud-carry')).toHaveCount(0);
     await expect(page.getByTestId('career-options')).toContainText('1/');
+    const wait = page.getByTestId(`career-wait-processor-action-${recipe.processor}-${recipe.id}`);
+    await expect(wait).toContainText(/Processing · .* remaining/i);
+    await expect(wait.getByRole('progressbar')).toHaveAttribute('aria-valuenow', /\d+/);
   });
 }
 
@@ -144,6 +147,25 @@ test('animal shelter prompt opens livestock management and buys into that shelte
   await page.getByTestId('build-animal-chicken').click();
 
   await expect(page.getByTestId('build-animal-row-chicken')).toContainText('3 shelter space free');
+});
+
+test('Stage 3 buys a farm dog into the shelter being managed', async ({ page }) => {
+  const state = preparedCareer((site, career) => {
+    career.stage = 3;
+    career.unlocks = [...new Set([...career.unlocks, 'animal_shelters', 'farm_dog'])];
+    addBuilding(site, 'animal_shelter');
+  });
+
+  await enterSavedFarm(page, state);
+  await expect(page.getByTestId('hud-prompt')).toContainText('Manage Animal Shelter');
+  await page.keyboard.press('e');
+
+  const dog = page.getByTestId('build-animal-row-dog');
+  await expect(dog).toContainText(/Farm dog.*\$100\.00.*1 shelter space.*10 foxes per raid/i);
+  await expect(dog.locator('img')).toHaveAttribute('src', /dog\.webp$/);
+  await dog.getByRole('button', { name: 'Buy' }).click();
+
+  await expect(page.getByTestId('build-animal-row-dog')).toContainText('3 shelter space free');
 });
 
 test('worker hut prompt opens workforce management and hires into that hut', async ({ page }) => {

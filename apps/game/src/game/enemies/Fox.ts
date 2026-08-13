@@ -24,6 +24,8 @@ export class Fox {
     readonly raidTicks = 180,
     readonly collisionId = 'fox',
     readonly targetGroupId: string | null = null,
+    readonly raidId = 'fox-raid',
+    readonly targetShelterId: string | null = null,
   ) {
     this.position = { x: startX, z: startZ };
   }

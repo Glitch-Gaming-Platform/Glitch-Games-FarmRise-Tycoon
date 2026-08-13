@@ -6,6 +6,7 @@ const messages = {
   'time.secondsShort': '{value} s',
   'time.minutesShort': '{value} min',
   'time.minutesSecondsShort': '{minutes} min {seconds} s',
+  'time.remaining': 'Noch {time}',
   'menu.ribbon': 'Eine neue Jahreszeit beginnt',
   'menu.subtitle':
     'Bestelle den Boden, beobachte den Markt und mache aus einem kleinen Hof einen Betrieb mit Zukunft.',
@@ -123,6 +124,7 @@ const messages = {
   'objective.runEstate': 'Den Hof führen',
   'interaction.changeSeed': 'Saatgut wechseln',
   'interaction.harvest': 'Ernten',
+  'interaction.harvestCrop': '{crop} ernten',
   'interaction.tend': 'Pflegen',
   'interaction.repair': 'Reparieren',
   'interaction.pickUp': 'Aufheben',

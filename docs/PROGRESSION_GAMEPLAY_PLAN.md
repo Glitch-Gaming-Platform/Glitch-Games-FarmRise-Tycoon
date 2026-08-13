@@ -662,6 +662,13 @@ Workers have:
 
 The player remains better at urgent, specialized and ambiguous work.
 
+### Farm dog
+
+Local Supplier status unlocks the farm dog as shelter-local resilience. A dog costs $100, occupies
+one animal-shelter slot, produces no goods and needs no production-cycle feed. Each dog guards only
+the shelter it is assigned to and can drive off up to ten foxes during one raid; dogs at other
+shelters do not contribute, and multiple dogs at the same shelter stack their protection.
+
 ### Automation ladder
 
 | Step | Capability | New cost or limitation |

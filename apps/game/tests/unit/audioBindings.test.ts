@@ -109,6 +109,7 @@ describe('audio bindings', () => {
     world.emit('world:animal-purchased', { species: 'chicken', count: 1 });
     world.emit('world:animal-purchased', { species: 'sheep', count: 1 });
     world.emit('world:animal-purchased', { species: 'cow', count: 1 });
+    world.emit('world:animal-purchased', { species: 'dog', count: 1 });
     world.emit('world:parcel-acquired', {
       parcelId: 'parcel-north-field',
       displayName: 'North Field',
@@ -147,6 +148,7 @@ describe('audio bindings', () => {
     carry.carrier = 'handcart';
     player.emit('player:stepped', { sprinting: true });
     enemies.emit('enemy:scared-off', { remaining: 1 });
+    enemies.emit('enemy:dog-defended', { count: 3, shelterId: 'shelter-starter' });
     enemies.emit('enemy:raid-succeeded', { losses: 1 });
     enemies.emit('enemy:spawned', { count: 3 });
 
@@ -175,6 +177,7 @@ describe('audio bindings', () => {
       SOUND.chicken,
       SOUND.sheep,
       SOUND.cow,
+      'animal.dog_1',
       SOUND.goalReached,
       SOUND.uiDeny,
       SOUND.uiDeny,
@@ -188,12 +191,13 @@ describe('audio bindings', () => {
       SOUND.footstep,
       SOUND.cartRoll,
       SOUND.foxFlee,
+      'animal.dog_2',
       SOUND.foxAlert,
     ]);
 
     fixture.unsubscribe();
     interaction.emit('interaction:performed', { target: 'plot-1', action: 'harvest' });
-    expect(played).toHaveLength(38);
+    expect(played).toHaveLength(40);
   });
 
   it('gives every implemented incident a distinct warning and impact identity', () => {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ANIMALS,
   BUYER_DEFINITIONS,
@@ -214,6 +214,33 @@ describe('livestock and persistence', () => {
 
     career.world.stores.advance(GAME_DAY_TICKS * 20, 1, 6);
     expect(career.world.stores.totalOf('wool')).toBe(4);
+  });
+
+  it('buys a Stage 3 farm dog into one shelter without creating feed or produce cycles', () => {
+    career.world.livestock.hydrate([]);
+    expect(buyAnimal(career, 'dog').ok).toBe(false);
+    career.grant(['farm_dog']);
+    const beforeBalance = career.balance;
+    const produced = vi.fn();
+    const hungry = vi.fn();
+    career.world.events.on('world:produce', produced);
+    career.world.events.on('world:animal-hungry', hungry);
+
+    expect(
+      buyAnimal(career, 'dog', 1, {
+        tileX: career.world.level.shelter.tileX,
+        tileZ: career.world.level.shelter.tileZ,
+        shelterId: STARTER_SHELTER_ID,
+      }).ok,
+    ).toBe(true);
+    expect(career.balance).toBe(beforeBalance - ANIMALS.dog.purchaseCost);
+    expect(career.world.livestock.countOf('dog')).toBe(1);
+    expect(career.world.shelterSlotsUsedAt(STARTER_SHELTER_ID)).toBe(1);
+    expect(career.world.livestock.foxProtectionAt(STARTER_SHELTER_ID)).toBe(10);
+
+    career.advance(GAME_DAY_TICKS * 2);
+    expect(produced).not.toHaveBeenCalled();
+    expect(hungry).not.toHaveBeenCalled();
   });
 
   it('assigns new livestock to the nearest completed shelter and drops produce there', () => {

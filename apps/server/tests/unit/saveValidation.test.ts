@@ -825,6 +825,63 @@ describe('validateSaveTransition', () => {
 
     expect(validateSaveTransition(base, purchased, purchased.tick)).toEqual({ ok: true });
   });
+
+  it('rejects farm dogs before Stage 3 and charges the authoritative $100 price after unlock', () => {
+    const lockedBase = fresh();
+    lockedBase.stage = 2;
+    const locked = updateSite(later(lockedBase), (site) => ({
+      ...site,
+      animals: [
+        ...site.animals,
+        {
+          id: 'animals-locked-dog',
+          species: 'dog',
+          count: 0,
+          cycleTicks: 0,
+          shelterId: STARTER_SHELTER_ID,
+          tileX: 19,
+          tileZ: 16,
+          sheltered: false,
+        },
+      ],
+    }));
+    expect(validateSaveTransition(lockedBase, locked, locked.tick).reason).toMatch(
+      /before.*unlocked/i,
+    );
+
+    const base = fresh();
+    base.stage = 3;
+    base.unlocks = ['farm_dog'];
+    const cost = ANIMALS.dog.purchaseCost;
+    const purchased = updateSite(
+      later(base, {
+        balance: cents(base.balance - cost),
+        statistics: {
+          ...base.statistics,
+          lifetimeSpent: base.statistics.lifetimeSpent + cost,
+        },
+      }),
+      (site) => ({
+        ...site,
+        animals: [
+          ...site.animals,
+          {
+            id: 'animals-dog',
+            species: 'dog',
+            count: 1,
+            cycleTicks: 0,
+            shelterId: STARTER_SHELTER_ID,
+            tileX: 19,
+            tileZ: 16,
+            sheltered: false,
+          },
+        ],
+      }),
+    );
+
+    expect(cost).toBe(10_000);
+    expect(validateSaveTransition(base, purchased, purchased.tick)).toEqual({ ok: true });
+  });
 });
 
 function PARCEL(id: string) {

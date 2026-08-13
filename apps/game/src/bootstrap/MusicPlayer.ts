@@ -17,7 +17,7 @@ import type { AudioHandle, AudioSystem } from '@engine/audio/AudioSystem.js';
 import { EventBus } from '@engine/core/EventBus.js';
 import type { Disposable } from '@engine/core/types.js';
 
-const PLAYS_BEFORE_ROTATION = 5;
+const PLAYS_BEFORE_ROTATION = 3;
 const DESKTOP_MUSIC_VOLUME = 0.9;
 const PROCEDURAL_SEED_STEP = 0x1f123bb5;
 

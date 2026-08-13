@@ -4,6 +4,7 @@ import { RenderPipeline } from '../../src/engine/render/RenderPipeline.js';
 import {
   createChickenMotionMaterial,
   createCowMotionMaterial,
+  createDogMotionMaterial,
   createFoxMotionMaterial,
   createSheepMotionMaterial,
   createWaterMaterial,
@@ -94,10 +95,12 @@ describe('procedural animation materials', () => {
     const chicken = createChickenMotionMaterial(base);
     const cow = createCowMotionMaterial(base);
     const sheep = createSheepMotionMaterial(base);
+    const dog = createDogMotionMaterial(base);
     const fox = createFoxMotionMaterial(base);
     const chickenShader = compile(chicken.material);
     const cowShader = compile(cow.material);
     const sheepShader = compile(sheep.material);
+    const dogShader = compile(dog.material);
     const foxShader = compile(fox.material);
 
     // The gait helper is the thing that distinguishes an authored cycle from an
@@ -106,6 +109,7 @@ describe('procedural animation materials', () => {
     expect(chickenShader.vertexShader).toContain('void farmGait(');
     expect(cowShader.vertexShader).toContain('void farmGait(');
     expect(sheepShader.vertexShader).toContain('void farmGait(');
+    expect(dogShader.vertexShader).toContain('void farmGait(');
     expect(foxShader.vertexShader).toContain('void farmGait(');
     expect(chickenShader.vertexShader).toContain('attribute float farmMotion');
     expect(chickenShader.vertexShader).toContain('farmGait(farmAnimalPhase');
@@ -118,6 +122,9 @@ describe('procedural animation materials', () => {
     expect(sheepShader.vertexShader).toContain('farmSheepGrazeAngle');
     expect(sheepShader.vertexShader).toContain('float farmSheepTail');
     expect(sheepShader.vertexShader).toContain('float farmSheepWool');
+    expect(dogShader.vertexShader).toContain('farmDogDiagonal');
+    expect(dogShader.vertexShader).toContain('float farmDogTail');
+    expect(dogShader.vertexShader).toContain('float farmDogEar');
     expect(foxShader.vertexShader).toContain('farmFoxDiagonal');
     expect(chickenShader.vertexShader).toContain('float farmChickenLeg');
     expect(chickenShader.vertexShader).toContain('float farmChickenWing');
@@ -128,11 +135,13 @@ describe('procedural animation materials', () => {
     chicken.setTime(2.5);
     cow.setTime(3.0);
     sheep.setTime(3.25);
+    dog.setTime(3.4);
     fox.setTime(3.5);
     fox.setMotion(1, 0.4, 1, 3.1, 0.7);
     expect(chickenShader.uniforms['uAnimalTime']?.value).toBe(2.5);
     expect(cowShader.uniforms['uAnimalTime']?.value).toBe(3.0);
     expect(sheepShader.uniforms['uAnimalTime']?.value).toBe(3.25);
+    expect(dogShader.uniforms['uAnimalTime']?.value).toBe(3.4);
     expect(foxShader.uniforms['uAnimalTime']?.value).toBe(3.5);
     expect(foxShader.uniforms['uFoxMotion']?.value).toBe(1);
     expect(foxShader.uniforms['uFoxRaid']?.value).toBe(0.4);
@@ -141,6 +150,7 @@ describe('procedural animation materials', () => {
     chicken.dispose();
     cow.dispose();
     sheep.dispose();
+    dog.dispose();
     fox.dispose();
     base.dispose();
   });

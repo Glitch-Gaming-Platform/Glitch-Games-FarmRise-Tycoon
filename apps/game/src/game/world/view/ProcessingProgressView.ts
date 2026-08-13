@@ -1,5 +1,12 @@
 import * as THREE from 'three';
-import { BUILDINGS, buildingFootprint, formatTicks, type BuildingKind } from '@farmrise/shared';
+import {
+  batchTicksFor,
+  buildingFootprint,
+  formatTicks,
+  getRecipe,
+  type QueueEntry,
+  type SpecializationId,
+} from '@farmrise/shared';
 import type { FarmWorld } from '../FarmWorld.js';
 
 interface ProgressEntry {
@@ -9,43 +16,54 @@ interface ProgressEntry {
   key: string;
 }
 
-export interface ConstructionProgressState {
+export interface ProcessingProgressState {
   readonly progress: number;
   readonly label: string;
+  readonly paused: boolean;
 }
 
-export function constructionProgressState(
-  kind: BuildingKind,
-  remainingBuildTicks: number,
-): ConstructionProgressState {
-  const definition = BUILDINGS[kind];
-  const total = Math.max(1, definition.buildTicks);
+export function processingProgressState(
+  entry: QueueEntry,
+  specialization: SpecializationId | null,
+  broken: boolean,
+): ProcessingProgressState | null {
+  const recipe = getRecipe(entry.recipeId);
+  if (!recipe) return null;
+  const total = Math.max(1, batchTicksFor(recipe, specialization));
+  const remaining = entry.remainingTicks > 0 ? entry.remainingTicks : total;
+  const pause = broken ? 'Paused · ' : '';
   return {
-    progress: Math.min(1, Math.max(0, 1 - remainingBuildTicks / total)),
-    label: `${definition.displayName} · ${formatTicks(remainingBuildTicks as never)} remaining`,
+    progress: Math.min(1, Math.max(0, 1 - remaining / total)),
+    label: `${recipe.displayName} · ${pause}${formatTicks(remaining)} remaining`,
+    paused: broken,
   };
 }
 
-/** Camera-facing construction bars with an explicit remaining-time label. */
-export class ConstructionProgressView {
+/** Camera-facing processor bars that remain readable when the management panel is closed. */
+export class ProcessingProgressView {
   readonly object = new THREE.Group();
   readonly #entries = new Map<string, ProgressEntry>();
 
   constructor() {
-    this.object.name = 'ConstructionProgress';
+    this.object.name = 'ProcessingProgress';
   }
 
-  sync(world: FarmWorld): void {
+  sync(world: FarmWorld, specialization: SpecializationId | null): void {
     const active = new Set<string>();
-    for (const building of world.buildings) {
-      if (building.remainingBuildTicks <= 0) continue;
-      active.add(building.id);
-      let entry = this.#entries.get(building.id);
+    for (const processor of world.processing.processors) {
+      const building = world.structures.get(processor.buildingId);
+      const head = processor.queue[0];
+      if (!building || building.remainingBuildTicks > 0 || !head) continue;
+      const state = processingProgressState(head, specialization, building.broken);
+      if (!state) continue;
+
+      active.add(processor.id);
+      let entry = this.#entries.get(processor.id);
       if (!entry) {
         const created = this.#createEntry();
         if (!created) continue;
         entry = created;
-        this.#entries.set(building.id, entry);
+        this.#entries.set(processor.id, entry);
         this.object.add(entry.sprite);
       }
 
@@ -54,10 +72,9 @@ export class ConstructionProgressView {
         building.tileX + (footprint.width - 1) / 2,
         building.tileZ + (footprint.depth - 1) / 2,
       );
-      entry.sprite.position.set(center.x, progressHeight(building.kind), center.z);
+      entry.sprite.position.set(center.x, processingHeight(building.kind), center.z);
 
-      const state = constructionProgressState(building.kind, building.remainingBuildTicks);
-      const key = `${state.label}:${Math.round(state.progress * 100)}`;
+      const key = `${state.label}:${Math.round(state.progress * 100)}:${state.paused}`;
       if (entry.key !== key) {
         entry.key = key;
         drawProgress(entry.canvas, state);
@@ -101,7 +118,7 @@ export class ConstructionProgressView {
       toneMapped: false,
     });
     const sprite = new THREE.Sprite(material);
-    sprite.name = 'ConstructionProgressBar';
+    sprite.name = 'ProcessingProgressBar';
     sprite.scale.set(3.6, 0.9, 1);
     sprite.renderOrder = 20;
     sprite.frustumCulled = false;
@@ -109,7 +126,7 @@ export class ConstructionProgressView {
   }
 }
 
-function drawProgress(canvas: HTMLCanvasElement, state: ConstructionProgressState): void {
+function drawProgress(canvas: HTMLCanvasElement, state: ProcessingProgressState): void {
   const context = canvas.getContext('2d');
   if (!context) return;
   context.clearRect(0, 0, canvas.width, canvas.height);
@@ -124,24 +141,19 @@ function drawProgress(canvas: HTMLCanvasElement, state: ConstructionProgressStat
   context.fillText(state.label, 256, 42, 452);
   context.fillStyle = '#c8aa72';
   context.fillRect(38, 76, 436, 22);
-  context.fillStyle = '#4fb3c4';
+  context.fillStyle = state.paused ? '#c9893c' : '#4fb3c4';
   context.fillRect(38, 76, Math.max(8, 436 * state.progress), 22);
 }
 
-function progressHeight(kind: BuildingKind): number {
+function processingHeight(kind: string): number {
   switch (kind) {
-    case 'barn':
-    case 'cold_store':
     case 'mill':
+      return 5.2;
     case 'creamery':
+      return 4.9;
     case 'preserve_kitchen':
-      return 4.7;
-    case 'worker_hut':
-      return 4.1;
-    case 'irrigation':
-    case 'well':
-      return 3.2;
+      return 4.3;
     default:
-      return 2.25;
+      return 3.5;
   }
 }

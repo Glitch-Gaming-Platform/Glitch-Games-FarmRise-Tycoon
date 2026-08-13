@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ANIMALS, getItem, purchasableAnimals, spotPriceFor } from '../src/index.js';
+import {
+  ANIMALS,
+  getItem,
+  isGuardianAnimal,
+  purchasableAnimals,
+  spotPriceFor,
+  unlocksUpToStage,
+} from '../src/index.js';
 
 describe('sheep progression and economy', () => {
   it('unlocks sheep with the Stage 1 animal-shelter capability', () => {
@@ -18,5 +25,21 @@ describe('sheep progression and economy', () => {
 
   it('prices one wool unit at exactly twice one egg unit', () => {
     expect(spotPriceFor('wool')).toBe(spotPriceFor('eggs') * 2);
+  });
+});
+
+describe('farm dog progression and protection', () => {
+  it('unlocks at Stage 3, costs $100 and occupies one shelter slot', () => {
+    expect(purchasableAnimals(unlocksUpToStage(2)).map((animal) => animal.id)).not.toContain('dog');
+    expect(purchasableAnimals(unlocksUpToStage(3)).map((animal) => animal.id)).toContain('dog');
+    expect(ANIMALS.dog.purchaseCost).toBe(10_000);
+    expect(ANIMALS.dog.shelterSlots).toBe(1);
+  });
+
+  it('is a productless guardian that can deter ten foxes per raid', () => {
+    expect(isGuardianAnimal(ANIMALS.dog)).toBe(true);
+    if (!isGuardianAnimal(ANIMALS.dog)) return;
+    expect(ANIMALS.dog.foxesDeterredPerRaid).toBe(10);
+    expect(getItem('dog')).toBeUndefined();
   });
 });

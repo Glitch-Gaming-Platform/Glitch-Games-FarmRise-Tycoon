@@ -239,7 +239,9 @@ test('the first-time loop reaches harvest, sale and reinvestment without a long 
   await expect(page.getByTestId('coach-mark')).toContainText(/(press E|tap Work).*water/i);
 
   await tendFirstCrop(page);
-  await expect(page.getByTestId('hud-prompt')).toContainText('Harvest', { timeout: 30_000 });
+  await expect(page.getByTestId('hud-prompt')).toContainText('Harvest Wheat', {
+    timeout: 30_000,
+  });
 
   await harvestFirstCrop(page);
   await carryFirstHarvestHome(page);

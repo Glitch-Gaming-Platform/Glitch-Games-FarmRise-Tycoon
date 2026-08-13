@@ -18,7 +18,7 @@ import {
   type BuyerId,
   type TrustTier,
 } from '../domain/buyers.js';
-import { ANIMALS } from '../domain/animals.js';
+import { ANIMALS, isProducingAnimal } from '../domain/animals.js';
 import { getCrop } from '../domain/crops.js';
 import { cents, type Cents } from '../domain/ids.js';
 import { getItem, isProcessedItem } from '../domain/items.js';
@@ -94,7 +94,9 @@ export function isContractItemUnlocked(itemId: string, unlocks: readonly string[
   const crop = getCrop(itemId);
   if (crop) return crop.requiresUnlock === null || unlocks.includes(crop.requiresUnlock);
 
-  const animal = Object.values(ANIMALS).find((definition) => definition.producesItemId === itemId);
+  const animal = Object.values(ANIMALS).find(
+    (definition) => isProducingAnimal(definition) && definition.producesItemId === itemId,
+  );
   if (animal) {
     return animal.requiresUnlock === null || unlocks.includes(animal.requiresUnlock);
   }

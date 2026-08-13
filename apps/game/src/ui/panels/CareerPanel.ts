@@ -3,6 +3,7 @@ import { button, clear, el } from '../core/dom.js';
 import { uiIcon } from '../core/icons.js';
 import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
 import { localizedButton, localizedText } from '../i18n/localizedDom.js';
+import { timedProgress, type TimedProgressSnapshot } from '../core/TimedProgress.js';
 
 export interface CareerMilestoneSnapshot {
   readonly id: string;
@@ -21,6 +22,7 @@ export interface CareerActionRow {
   readonly action: string;
   readonly enabled: boolean;
   readonly selected?: boolean;
+  readonly wait?: TimedProgressSnapshot;
 }
 
 export interface ProcessorActionRow extends CareerActionRow {
@@ -239,6 +241,7 @@ export class CareerPanel {
             { class: 'fr-market__info' },
             el('strong', { text: row.title }),
             el('span', { class: 'fr-market__meta', text: row.meta }),
+            ...(row.wait ? [timedProgress(this.i18n, row.wait, `career-wait-${row.id}`)] : []),
           ),
           button(row.action, () => onAction(row), {
             class: 'fr-btn fr-btn--small',

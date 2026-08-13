@@ -34,6 +34,7 @@ export type UnlockId =
   | 'quality_grading'
   | 'buyer_restaurant'
   | 'insurance'
+  | 'farm_dog'
   | 'workers'
   | 'scheduled_delivery'
   | 'town_projects'
@@ -121,7 +122,14 @@ export const MILESTONES: readonly MilestoneDefinition[] = Object.freeze([
     displayName: 'Ship your own processed goods',
     roleName: 'Licensed producer',
     requirement: { goodsProcessed: 40, seasonsCompleted: 2, lifetimeEarned: cents(80_000) },
-    unlocks: ['quality_grading', 'buyer_restaurant', 'insurance', 'workers', 'town_projects'],
+    unlocks: [
+      'quality_grading',
+      'buyer_restaurant',
+      'insurance',
+      'farm_dog',
+      'workers',
+      'town_projects',
+    ],
     reward: cents(5_000),
     summary:
       'Your processed goods carry your name, and a restaurant that grades what it buys is willing to talk.',

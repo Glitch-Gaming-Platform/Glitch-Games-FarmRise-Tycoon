@@ -1,8 +1,9 @@
-import { ticksToSeconds, type Cents } from '@farmrise/shared';
+import type { Cents } from '@farmrise/shared';
 import { button, clear, el } from '../core/dom.js';
 import { uiIcon } from '../core/icons.js';
 import { createEnglishLocalization, type GameLocalization } from '../i18n/gameI18n.js';
 import { localizedButton, localizedText } from '../i18n/localizedDom.js';
+import { timedProgress } from '../core/TimedProgress.js';
 
 export interface TownProjectRow {
   readonly id: string;
@@ -19,7 +20,11 @@ export interface TownPanelSnapshot {
   readonly population: string;
   readonly prosperity: number;
   readonly summary: string;
-  readonly activeProject: { readonly title: string; readonly remainingTicks: number } | null;
+  readonly activeProject: {
+    readonly title: string;
+    readonly remainingTicks: number;
+    readonly totalTicks: number;
+  } | null;
   readonly projectsUnlocked: boolean;
   readonly projects: readonly TownProjectRow[];
 }
@@ -115,14 +120,16 @@ export class TownPanel {
             'div',
             { class: 'fr-market__info' },
             el('strong', { text: snapshot.activeProject.title }),
-            el('span', {
-              class: 'fr-market__meta',
-              text: this.i18n.t('town.remaining', {
-                time: this.i18n.formatDurationSeconds(
-                  ticksToSeconds(snapshot.activeProject.remainingTicks),
-                ),
-              }),
-            }),
+            timedProgress(
+              this.i18n,
+              {
+                state: this.i18n.t('common.building'),
+                progress:
+                  1 - snapshot.activeProject.remainingTicks / snapshot.activeProject.totalTicks,
+                remainingTicks: snapshot.activeProject.remainingTicks,
+              },
+              'town-project-wait',
+            ),
           ),
           localizedButton(this.i18n, 'common.building', () => {}, {
             class: 'fr-btn fr-btn--small',

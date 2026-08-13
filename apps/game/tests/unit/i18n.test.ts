@@ -96,6 +96,7 @@ describe('game localization', () => {
     const i18n = await createGameLocalization({ initialLocale: 'es', detect: false });
 
     expect(localizeGameText(i18n, 'Plant Wheat')).toBe('Plantar Trigo');
+    expect(localizeGameText(i18n, 'Harvest Wheat')).toBe('Cosechar Trigo');
     expect(localizeGameText(i18n, 'Choose seed')).toBe('Cambiar semilla');
     expect(localizeGameText(i18n, 'Put down (4)')).toBe('Dejar (4)');
   });

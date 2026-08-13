@@ -45,7 +45,7 @@ describe('InteractionController prompts', () => {
     world.setPlot(placement.id, { ...plot, grownTicks: requireCrop('wheat').growthTicks });
     interaction.fixedUpdate(STEP);
 
-    expect(labels).toEqual(['Plant Wheat', 'Tend', 'Harvest']);
+    expect(labels).toEqual(['Plant Wheat', 'Tend', 'Harvest Wheat']);
   });
 
   it('deposits a carried load instead of offering an overlapping empty plot', () => {
@@ -368,7 +368,7 @@ describe('InteractionController prompts', () => {
 
     interaction.fixedUpdate(STEP);
 
-    expect(labels).toEqual(['Harvest']);
+    expect(labels).toEqual(['Harvest Wheat']);
     expect(world.getPlot(placement.id)?.cropId).toBeNull();
     expect(incidents.mostUrgent?.responseProgress).toBe(0);
   });

@@ -1,7 +1,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CROP_IDS } from '@farmrise/shared';
+import { ANIMAL_SPECIES, CROP_IDS } from '@farmrise/shared';
 import { CORE_MANIFEST } from '../../src/assets/manifests/core.manifest.js';
 import { UI_ICON_ASSETS, UI_ICON_URLS } from '../../src/assets/manifests/uiIcons.manifest.js';
 
@@ -19,6 +19,15 @@ describe('UI icon catalog', () => {
       expect(UI_ICON_URLS).toHaveProperty(cropId);
       expect(UI_ICON_URLS[cropId as keyof typeof UI_ICON_URLS]).toBe(
         `assets/ui/icons/${cropId}.webp`,
+      );
+    }
+  });
+
+  it('gives every purchasable animal an authored icon', () => {
+    for (const species of ANIMAL_SPECIES) {
+      expect(UI_ICON_URLS).toHaveProperty(species);
+      expect(UI_ICON_URLS[species as keyof typeof UI_ICON_URLS]).toBe(
+        `assets/ui/icons/${species}.webp`,
       );
     }
   });

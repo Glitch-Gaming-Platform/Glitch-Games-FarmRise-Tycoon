@@ -19,6 +19,7 @@ import {
   bedsForParcels,
   getItem,
   type AnimalSpecies,
+  type BuildingKind,
   type FarmSiteSaveState,
   type Inventory,
   type PlotState,
@@ -69,8 +70,8 @@ export interface FarmWorldEvents extends Record<string, unknown> {
   'world:plot-changed': { plotId: string };
   'world:plots-added': { plotIds: readonly string[] };
   'world:harvested': { plotId: string; itemId: string; quantity: number; carried: number };
-  'world:building-placed': { kind: string; tileX: number; tileZ: number };
-  'world:building-completed': { kind: string; tileX: number; tileZ: number };
+  'world:building-placed': { kind: BuildingKind; tileX: number; tileZ: number };
+  'world:building-completed': { kind: BuildingKind; tileX: number; tileZ: number };
   'world:animal-purchased': { species: AnimalSpecies; count: number };
   'world:animal-hungry': {
     species: AnimalSpecies;

@@ -8,15 +8,19 @@
  */
 import {
   ANIMALS,
+  BUILDINGS,
   ESTATE_PARCELS,
   SEASON_DEFINITIONS,
   getCrop,
   getIncident,
   getItem,
   incidentPhase,
+  isGuardianAnimal,
   isMitigated,
+  isProducingAnimal,
   itemNameForQuantity,
   storageUsed,
+  type BuildingKind,
   type Cents,
 } from '@farmrise/shared';
 import type { FarmScene } from '@game/scenes/FarmScene.js';
@@ -45,6 +49,7 @@ export function bindHud(
   const world = scene.world;
   const interaction = scene.interaction;
   const incidents = scene.incidents;
+  const enemies = scene.enemyDirector;
   const careerDirector = scene.careerDirector;
   if (!career || !world || !interaction || !incidents || !careerDirector) {
     throw new Error('bindHud requires a loaded FarmScene.');
@@ -167,7 +172,7 @@ export function bindHud(
     world.events.on('world:building-completed', ({ kind }) =>
       hud.toast(
         i18n.t('toast.buildingFinished', {
-          building: buildingName(i18n, kind, kind),
+          building: playerBuildingName(i18n, kind),
         }),
       ),
     ),
@@ -196,6 +201,17 @@ export function bindHud(
     world.events.on('world:animal-purchased', ({ species, count }) => {
       const definition = ANIMALS[species];
       const name = animalCountName(i18n, species, count);
+      if (isGuardianAnimal(definition)) {
+        hud.toast(
+          i18n.t('toast.guardianAdded', {
+            count: i18n.formatNumber(count),
+            animal: name,
+            foxes: i18n.formatNumber(definition.foxesDeterredPerRaid * count),
+          }),
+        );
+        render();
+        return;
+      }
       const feedDefinition = getItem(definition.feedItemId);
       const productDefinition = getItem(definition.producesItemId);
       const feed = itemName(
@@ -221,6 +237,7 @@ export function bindHud(
     }),
     world.events.on('world:animal-hungry', ({ species, feedItemId, needed, available }) => {
       const definition = ANIMALS[species];
+      if (!isProducingAnimal(definition)) return;
       const productDefinition = getItem(definition.producesItemId);
       const feedDefinition = getItem(feedItemId);
       hud.toast(
@@ -362,6 +379,7 @@ export function bindHud(
     session.events.on('session:sold', ({ quantity, itemId, payout, viaContract }) => {
       hud.toast(saleToastMessage(itemId, quantity, payout, career.balance, viaContract, i18n));
       for (const definition of Object.values(ANIMALS)) {
+        if (!isProducingAnimal(definition)) continue;
         if (definition.feedItemId !== itemId) continue;
         const count = world.livestock.countOf(definition.id);
         const available = world.stores.storedTotalOf(itemId);
@@ -410,7 +428,7 @@ export function bindHud(
     world.events.on('world:building-placed', ({ kind }) => {
       hud.toast(
         i18n.t('toast.buildingStarted', {
-          building: buildingName(i18n, kind, kind),
+          building: playerBuildingName(i18n, kind),
         }),
       );
       render();
@@ -422,6 +440,18 @@ export function bindHud(
     }),
   );
 
+  if (enemies) {
+    unsubscribes.push(
+      enemies.events.on('enemy:dog-defended', ({ count }) =>
+        hud.toast(
+          i18n.t('toast.dogDefended', {
+            count: i18n.formatNumber(count),
+          }),
+        ),
+      ),
+    );
+  }
+
   // A low-frequency tick keeps the countdown and money readable without
   // rebuilding DOM every frame.
   const interval = setInterval(render, 250);
@@ -432,6 +462,11 @@ export function bindHud(
     clearInterval(interval);
     for (const unsubscribe of unsubscribes) unsubscribe();
   };
+}
+
+/** Resolves a building id before it reaches any toast or player-facing status copy. */
+export function playerBuildingName(i18n: GameLocalization, kind: BuildingKind): string {
+  return buildingName(i18n, kind, BUILDINGS[kind].displayName);
 }
 
 /** Explicitly confirms both the payout and the resulting wallet balance. */
@@ -468,8 +503,12 @@ function animalCountName(
         : 'hens'
       : species === 'sheep'
         ? 'sheep'
-        : count === 1
-          ? 'cow'
-          : 'cows';
+        : species === 'dog'
+          ? count === 1
+            ? 'dog'
+            : 'dogs'
+          : count === 1
+            ? 'cow'
+            : 'cows';
   return i18n.t(`domain.animal.${species}.name`, { count }, fallback);
 }

@@ -1605,6 +1605,51 @@ def animal_sheep():
     return obj
 
 
+def animal_dog():
+    """Alert farm guardian with a shepherd silhouette and unmistakable collar."""
+    b = MeshBuilder("SM_animal_dog", budget="animal")
+    b.sphere("dog_coat", 0.28, loc=(0, 0.04, 0.43),
+             scale=(0.92, 1.48, 0.82), u=8, v=5)
+    b.sphere("dog_coat", 0.22, loc=(0, -0.25, 0.48),
+             scale=(1.0, 0.98, 1.10), u=6, v=4)
+    b.sphere("dog_coat", 0.22, loc=(0, 0.29, 0.43),
+             scale=(1.02, 1.04, 0.95), u=6, v=4)
+    b.sphere("dog_chest", 0.15, loc=(0, -0.31, 0.39),
+             scale=(0.86, 0.52, 1.18), u=6, v=4)
+    b.sphere("dog_coat", 0.17, loc=(0, -0.43, 0.59),
+             scale=(0.92, 0.90, 1.16), u=6, v=4)
+    b.sphere("dog_coat", 0.19, loc=(0, -0.61, 0.66),
+             scale=(1.02, 1.04, 0.88), u=7, v=4)
+    b.sphere("dog_chest", 0.095, loc=(0, -0.77, 0.60),
+             scale=(1.02, 0.88, 0.62), u=6, v=3)
+    b.sphere("dog_dark", 0.030, loc=(0, -0.865, 0.605),
+             scale=(1.08, 0.78, 0.82), u=5, v=3)
+    for sx in (-1, 1):
+        b.cylinder("dog_dark", 0.075, 0.19,
+                   loc=(sx * 0.105, -0.59, 0.82),
+                   rot=(0.05, sx * 0.20, sx * 0.09), segments=4,
+                   radius_top=0.012)
+        b.sphere("eye_dark", 0.020, loc=(sx * 0.082, -0.785, 0.685),
+                 scale=(0.88, 0.52, 1.0), u=5, v=3)
+    b.cylinder("dog_collar", 0.172, 0.055, loc=(0, -0.43, 0.55),
+               segments=9, caps=False)
+    b.box("dog_collar", size=(0.065, 0.028, 0.075),
+          loc=(0, -0.605, 0.535), rot=(0.18, 0, 0))
+    for sx in (-1, 1):
+        for fy in (-0.22, 0.27):
+            paw_y = fy - 0.055 if fy < 0 else fy + 0.055
+            b.cylinder_between("dog_dark", (sx * 0.15, fy, 0.34),
+                               (sx * 0.165, paw_y, 0.085), 0.052,
+                               segments=5, radius_top=0.040)
+            b.box("dog_dark", size=(0.11, 0.17, 0.065),
+                  loc=(sx * 0.165, paw_y - 0.025, 0.0325))
+    b.cylinder_between("dog_coat", (0, 0.43, 0.52), (0.06, 0.66, 0.68),
+                       0.070, segments=6, radius_top=0.045)
+    b.sphere("dog_chest", 0.075, loc=(0.075, 0.70, 0.72),
+             rot=(0.38, 0, -0.22), scale=(0.78, 1.12, 0.76), u=6, v=3)
+    return b.build(collection("ANIMALS_DOG"), smooth=True)
+
+
 def animal_fox():
     """
     Fox: the only threat in the game, so it must read as a threat instantly.
@@ -2359,6 +2404,7 @@ BUILD_ORDER = (
         ("animal_chicken", animal_chicken),
         ("animal_cow", animal_cow),
         ("animal_sheep", animal_sheep),
+        ("animal_dog", animal_dog),
         ("animal_fox", animal_fox),
         ("prop_rock", prop_rock),
         ("prop_grass_tuft", prop_grass_tuft),

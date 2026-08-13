@@ -30,14 +30,17 @@ import type { FarmWorld } from '../FarmWorld.js';
 import type { Fox, FoxState } from '../../enemies/Fox.js';
 import {
   ANIMALS,
+  isProducingAnimal,
   ticksToSeconds,
   type AnimalSpecies,
   type IncidentInstance,
+  type SpecializationId,
 } from '@farmrise/shared';
 import { chickenPose, createChickenPose } from '../../animals/chickenMotion.js';
 import { cowPose, createCowPose } from '../../animals/cowMotion.js';
 import { visibleAnimalCountForGroup } from '../../animals/visibleAnimalInstances.js';
 import { SheepView } from './SheepView.js';
+import { DogView } from './DogView.js';
 import {
   addAnimalInstanceAttributes,
   getAnimalInstanceAttributes,
@@ -48,6 +51,7 @@ import type { Player } from '../../player/Player.js';
 import { CarryView } from './CarryView.js';
 import { GroundGoodsView } from './GroundGoodsView.js';
 import { ConstructionProgressView } from './ConstructionProgressView.js';
+import { ProcessingProgressView } from './ProcessingProgressView.js';
 import { ProximityStatusView } from './ProximityStatusView.js';
 import { ParcelView } from './ParcelView.js';
 import { WorkerView } from './WorkerView.js';
@@ -106,6 +110,7 @@ export class FarmView {
   readonly #carry = new CarryView();
   readonly #groundGoods = new GroundGoodsView();
   readonly #constructionProgress = new ConstructionProgressView();
+  readonly #processingProgress = new ProcessingProgressView();
   readonly #proximityStatus = new ProximityStatusView();
   readonly #impactEffects: FarmImpactEffects;
   readonly #foxMeshes: THREE.Mesh[] = [];
@@ -119,6 +124,7 @@ export class FarmView {
   readonly #chickenMotion: TimeMaterial | null;
   readonly #cowMotion: TimeMaterial | null;
   readonly #sheep: SheepView;
+  readonly #dogs: DogView;
   readonly #foxPrevious = new WeakMap<Fox, { x: number; z: number }>();
   readonly #foxFacing = new WeakMap<Fox, number>();
   readonly #foxStates = new WeakMap<Fox, FoxState>();
@@ -195,6 +201,7 @@ export class FarmView {
     this.#chickenMotion = library ? createChickenMotionMaterial(library.material) : null;
     this.#cowMotion = library ? createCowMotionMaterial(library.material) : null;
     this.#sheep = new SheepView(library, this.#materials.animal, options.pipeline ?? null);
+    this.#dogs = new DogView(library, this.#materials.animal, options.pipeline ?? null);
 
     const worldWidth = world.grid.width * world.grid.tileSize;
     this.#groundOptions = createFarmGroundOptions(world);
@@ -261,8 +268,10 @@ export class FarmView {
       this.#groundGoods.object,
       this.#carry.object,
       this.#constructionProgress.object,
+      this.#processingProgress.object,
       this.#proximityStatus.object,
       this.#sheep.object,
+      this.#dogs.object,
       this.#impactEffects.object,
     );
     this.#addLighting(worldWidth);
@@ -277,7 +286,7 @@ export class FarmView {
       }),
       world.events.on('world:produce', ({ itemId }) => {
         const species = Object.values(ANIMALS).find(
-          (definition) => definition.producesItemId === itemId,
+          (definition) => isProducingAnimal(definition) && definition.producesItemId === itemId,
         )?.id;
         if (species) this.#animalPulse = { kind: 'produce', species, startedAt: null };
       }),
@@ -291,6 +300,7 @@ export class FarmView {
     context: RenderContext,
     player: Player | null = null,
     proximityMeters: readonly ProximityMeter[] = [],
+    specialization: SpecializationId | null = null,
   ): void {
     this.#elapsed = context.elapsedSeconds;
     this.#fieldWind?.setTime(context.elapsedSeconds);
@@ -318,6 +328,7 @@ export class FarmView {
     this.#bedContact?.sync(world);
     this.#carry.sync(world, player, context.elapsedSeconds);
     this.#constructionProgress.sync(world);
+    this.#processingProgress.sync(world, specialization);
     this.#proximityStatus.sync(world, proximityMeters);
     this.#structures.animatePreview(this.#elapsed);
     this.#syncFoxes(foxes, context);
@@ -328,6 +339,11 @@ export class FarmView {
       world,
       context,
       this.#animalPulse?.species === 'sheep' ? this.#animalPulse : null,
+    );
+    this.#dogs.sync(
+      world,
+      context,
+      this.#animalPulse?.species === 'dog' ? this.#animalPulse : null,
     );
     const pulseStartedAt = this.#animalPulse?.startedAt;
     if (
@@ -376,6 +392,7 @@ export class FarmView {
     this.#groundGoods.dispose();
     this.#carry.dispose();
     this.#constructionProgress.dispose();
+    this.#processingProgress.dispose();
     this.#proximityStatus.dispose();
     this.#impactEffects.dispose();
     this.#ground.geometry.dispose();
@@ -385,6 +402,7 @@ export class FarmView {
     this.#chickenGeometry.dispose();
     this.#cowGeometry.dispose();
     this.#sheep.dispose();
+    this.#dogs.dispose();
     for (const mesh of this.#scatter) mesh.dispose();
     this.#chickens?.dispose();
     this.#chickens = null;

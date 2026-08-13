@@ -16,11 +16,13 @@ const REPORT = JSON.parse(readFileSync(path.resolve(ROOT, 'art/build_report.json
 };
 
 function glbJson(filename: string): {
+  nodes?: readonly { name?: string }[];
   meshes?: readonly { primitives: readonly { attributes: Record<string, number> }[] }[];
 } {
   const bytes = readFileSync(filename);
   const jsonLength = bytes.readUInt32LE(12);
   return JSON.parse(bytes.subarray(20, 20 + jsonLength).toString('utf8')) as {
+    nodes?: readonly { name?: string }[];
     meshes?: readonly { primitives: readonly { attributes: Record<string, number> }[] }[];
   };
 }
@@ -28,25 +30,36 @@ function glbJson(filename: string): {
 describe('model catalog', () => {
   it('keeps shipped GLB sizes synchronized with the Blender report and manifest', () => {
     const modelEntries = CORE_MANIFEST.assets.filter((entry) => entry.kind === 'model');
-    expect(modelEntries).toHaveLength(Object.keys(REPORT.family_bytes).length);
+    expect(modelEntries).toHaveLength(
+      Object.keys(REPORT.family_bytes).length + Object.keys(REPORT.low_supplement_bytes).length,
+    );
 
     for (const entry of modelEntries) {
       const family = entry.id.replace('model:', '');
       const actualBytes = statSync(path.join(PUBLIC_ROOT, entry.url)).size;
-      expect(actualBytes, entry.id).toBe(REPORT.family_bytes[family]?.raw);
+      expect(actualBytes, entry.id).toBe(
+        REPORT.family_bytes[family]?.raw ?? REPORT.low_supplement_bytes[family]?.raw,
+      );
       expect(entry.bytes, entry.id).toBe(actualBytes);
     }
   });
 
-  it('routes low to the immutable legacy model pack', () => {
+  it('routes low to the immutable legacy model pack while sharing new-animal supplements', () => {
     const ultraModels = CORE_MANIFEST.assets.filter((entry) => entry.kind === 'model');
     const lowModels = LOW_CORE_MANIFEST.assets.filter((entry) => entry.kind === 'model');
     const ultraIds = new Set(ultraModels.map((entry) => entry.id));
     const lowSupplements = lowModels.filter((entry) => !ultraIds.has(entry.id));
-    expect(lowSupplements.map((entry) => entry.id)).toEqual(['model:animals-sheep']);
+    expect(lowSupplements).toEqual([]);
     expect(lowModels.filter((entry) => ultraIds.has(entry.id)).map((entry) => entry.id)).toEqual(
       ultraModels.map((entry) => entry.id),
     );
+
+    for (const family of Object.keys(REPORT.low_supplement_bytes)) {
+      const id = `model:${family}`;
+      expect(ultraModels.find((entry) => entry.id === id)).toEqual(
+        lowModels.find((entry) => entry.id === id),
+      );
+    }
 
     const expectedHashes: Readonly<Record<string, string>> = {
       animals: '74a77260f87710289f801820fe4fcdf24a64fe36db19fca43b563849a22ed0c6',
@@ -63,9 +76,9 @@ describe('model catalog', () => {
 
     for (const entry of lowModels) {
       const family = entry.id.replace('model:', '');
-      if (family === 'animals-sheep') {
+      if (REPORT.low_supplement_bytes[family]) {
         const filename = path.join(PUBLIC_ROOT, entry.url);
-        expect(entry.url).toBe('assets/models/animals-sheep.glb');
+        expect(entry.url).toBe(`assets/models/${family}.glb`);
         expect(entry.bytes).toBe(REPORT.low_supplement_bytes[family]?.raw);
         expect(statSync(filename).size).toBe(entry.bytes);
         continue;
@@ -147,6 +160,16 @@ describe('model catalog', () => {
     const names = new Set(REPORT.assets.map((asset) => asset.name));
     for (const species of ANIMAL_SPECIES) {
       expect(names.has(`SM_animal_${species}`), species).toBe(true);
+    }
+  });
+
+  it('exports the farm dog under the exact runtime GLB node name', () => {
+    const document = glbJson(path.join(PUBLIC_ROOT, 'assets/models/animals-dog.glb'));
+    expect(document.nodes?.some((node) => node.name === 'SM_animal_dog')).toBe(true);
+    for (const mesh of document.meshes ?? []) {
+      for (const primitive of mesh.primitives) {
+        expect(primitive.attributes['COLOR_0']).toBeTypeOf('number');
+      }
     }
   });
 

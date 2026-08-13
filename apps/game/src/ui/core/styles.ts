@@ -125,6 +125,20 @@ export const UI_STYLES = `
 
 .fr-progress { height: 12px; border: 3px solid var(--fr-timber-dark); border-radius: 999px; background: var(--fr-paper-shadow); overflow: hidden; margin-top: 18px; }
 .fr-progress__fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--fr-teal-light), var(--fr-gold)); transition: width 180ms ease; }
+.fr-progress__status { margin: 8px 0 0; color: var(--fr-timber-dark); font-size: 12px; font-weight: 800; text-align: center; }
+
+.fr-timed-progress { display: grid; gap: 5px; width: 100%; margin-top: 7px; }
+.fr-timed-progress__label { color: var(--fr-teal-dark); font-size: 12px; font-weight: 900; letter-spacing: 0.01em; }
+.fr-timed-progress__track {
+  height: 9px; overflow: hidden; border: 1px solid var(--fr-timber); border-radius: 999px;
+  background: var(--fr-paper-shadow);
+}
+.fr-timed-progress__fill {
+  height: 100%; width: 0%; border-radius: inherit;
+  background: linear-gradient(90deg, var(--fr-teal-light), var(--fr-gold));
+  transition: width 180ms linear;
+}
+.fr-timed-progress--paused .fr-timed-progress__fill { background: var(--fr-gold); }
 
 .fr-field {
   display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 12px 0;

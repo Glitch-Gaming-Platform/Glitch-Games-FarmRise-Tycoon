@@ -18,7 +18,7 @@ import { ALL_SOUND_IDS, registerProceduralSfx } from '@assets/audio/proceduralSf
 import type { MusicId } from '@assets/audio/musicIds.js';
 import type { FarmScene } from '@game/scenes/FarmScene.js';
 import type { GameStateMachine } from '@game/states/GameStateMachine.js';
-import { ANIMALS, type AnimalSpecies } from '@farmrise/shared';
+import { ANIMALS, isProducingAnimal, type AnimalSpecies } from '@farmrise/shared';
 import { MusicPlayer } from './MusicPlayer.js';
 
 const INCIDENT_WARNING_SOUND: Readonly<Record<string, SoundId>> = {
@@ -152,7 +152,10 @@ export function bindSceneAudio(scene: FarmScene, audio: AudioSystem): Unsubscrib
   }
 
   const play = (id: string, volume = 1) => audio.play(id, { bus: 'sfx', volume, detuneJitter: 25 });
-  const animalVariant = { chicken: 0, sheep: 0, cow: 0 } satisfies Record<AnimalSpecies, number>;
+  const animalVariant = { chicken: 0, sheep: 0, cow: 0, dog: 0 } satisfies Record<
+    AnimalSpecies,
+    number
+  >;
   const nextAnimalSound = (species: AnimalSpecies): string => {
     const variants = IMPLEMENTED_ANIMAL_SOUND_VARIANTS[species];
     const index = animalVariant[species] % variants.length;
@@ -161,7 +164,7 @@ export function bindSceneAudio(scene: FarmScene, audio: AudioSystem): Unsubscrib
   };
   const nextAnimalProductSound = (itemId: string): string | null => {
     const species = Object.values(ANIMALS).find(
-      (definition) => definition.producesItemId === itemId,
+      (definition) => isProducingAnimal(definition) && definition.producesItemId === itemId,
     )?.id;
     return species ? nextAnimalSound(species) : null;
   };
@@ -267,6 +270,7 @@ export function bindSceneAudio(scene: FarmScene, audio: AudioSystem): Unsubscrib
     subscriptions.push(
       enemies.events.on('enemy:spawned', () => audio.play(SOUND.foxAlert, { bus: 'ui' })),
       enemies.events.on('enemy:scared-off', () => play(SOUND.foxFlee, 0.65)),
+      enemies.events.on('enemy:dog-defended', () => play(nextAnimalSound('dog'), 0.85)),
     );
   }
 

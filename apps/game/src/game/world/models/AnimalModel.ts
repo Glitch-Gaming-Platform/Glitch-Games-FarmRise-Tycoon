@@ -6,7 +6,7 @@
  * rather than a global pool, so a herd on a distant parcel with no feed nearby
  * is a logistics problem rather than an accounting one.
  */
-import { ANIMALS, type AnimalSpecies } from '@farmrise/shared';
+import { ANIMALS, isGuardianAnimal, isProducingAnimal, type AnimalSpecies } from '@farmrise/shared';
 import { EventBus } from '@engine/core/EventBus.js';
 
 export interface AnimalGroup {
@@ -122,6 +122,23 @@ export class AnimalModel {
     if (group) group.sheltered = sheltered;
   }
 
+  /** Shelter-local fox interceptions available during each raid. */
+  foxProtectionAt(shelterId: string): number {
+    return this.#groups
+      .filter((group) => group.shelterId === shelterId && group.count > 0)
+      .reduce((total, group) => {
+        const definition = ANIMALS[group.species];
+        return isGuardianAnimal(definition)
+          ? total + group.count * definition.foxesDeterredPerRaid
+          : total;
+      }, 0);
+  }
+
+  isPredatorTarget(groupId: string): boolean {
+    const group = this.get(groupId);
+    return Boolean(group && group.count > 0 && isProducingAnimal(ANIMALS[group.species]));
+  }
+
   /**
    * Advances every group and returns what was produced and where.
    *
@@ -138,7 +155,7 @@ export class AnimalModel {
     for (const group of this.#groups) {
       if (group.count <= 0) continue;
       const definition = ANIMALS[group.species];
-      if (!definition) continue;
+      if (!definition || !isProducingAnimal(definition)) continue;
 
       group.cycleTicks += dtTicks;
       if (group.cycleTicks < definition.cycleTicks) continue;
@@ -175,7 +192,7 @@ export class AnimalModel {
 
   /** Group ids an animal-targeting incident could pick. */
   incidentCandidates(): string[] {
-    return this.#groups.filter((group) => group.count > 0).map((group) => group.id);
+    return this.#groups.filter((group) => this.isPredatorTarget(group.id)).map((group) => group.id);
   }
 
   hydrate(groups: readonly AnimalGroup[]): void {

@@ -232,8 +232,28 @@ test('routes low to the frozen model pack and requests no Ultra surfaces', async
 
   const modelRequests = requested.filter((url) => url.includes('/assets/models/'));
   expect(modelRequests.length).toBeGreaterThan(0);
-  expect(modelRequests.every((url) => url.includes('/assets/models/low/'))).toBe(true);
+  expect(
+    modelRequests.every(
+      (url) =>
+        url.includes('/assets/models/low/') ||
+        /\/assets\/models\/animals-(?:dog|sheep)\.glb$/.test(url),
+    ),
+  ).toBe(true);
+  expect(modelRequests.some((url) => url.endsWith('/assets/models/animals-sheep.glb'))).toBe(true);
+  expect(modelRequests.some((url) => url.endsWith('/assets/models/animals-dog.glb'))).toBe(true);
   expect(requested.some((url) => url.includes('/assets/textures/'))).toBe(false);
+});
+
+test('Ultra requests the authored animal supplements instead of rendering fallback blobs', async ({
+  page,
+}) => {
+  const requested: string[] = [];
+  page.on('request', (request) => requested.push(request.url()));
+
+  await enterFarm(page, '/?quality=ultra&debug=progression,overlay');
+  await expect(page.getByTestId('debug-overlay')).toContainText('tier ultra');
+  expect(requested.some((url) => url.endsWith('/assets/models/animals-sheep.glb'))).toBe(true);
+  expect(requested.some((url) => url.endsWith('/assets/models/animals-dog.glb'))).toBe(true);
 });
 
 test('handles a viewport resize without errors', async ({ page }) => {

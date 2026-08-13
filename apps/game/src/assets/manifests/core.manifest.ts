@@ -30,6 +30,22 @@ const ULTRA_MODEL_ASSETS: readonly AssetEntry[] = [
     scenes: ['farm'],
   },
   {
+    id: 'model:animals-dog',
+    kind: 'model',
+    url: 'assets/models/animals-dog.glb',
+    phase: 'critical',
+    bytes: 43_796,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:animals-sheep',
+    kind: 'model',
+    url: 'assets/models/animals-sheep.glb',
+    phase: 'critical',
+    bytes: 53_716,
+    scenes: ['farm'],
+  },
+  {
     id: 'model:buildings',
     kind: 'model',
     url: 'assets/models/buildings.glb',
@@ -121,6 +137,14 @@ export const LOW_MODEL_ASSETS: readonly AssetEntry[] = [
     scenes: ['farm'],
   },
   {
+    id: 'model:animals-dog',
+    kind: 'model',
+    url: 'assets/models/animals-dog.glb',
+    phase: 'critical',
+    bytes: 43_796,
+    scenes: ['farm'],
+  },
+  {
     id: 'model:animals-sheep',
     kind: 'model',
     url: 'assets/models/animals-sheep.glb',
@@ -204,7 +228,7 @@ export const LOW_MODEL_ASSETS: readonly AssetEntry[] = [
 
 /** Ultra/default manifest: regenerated models plus the lazy surface library. */
 export const CORE_MANIFEST: AssetManifest = {
-  version: 13,
+  version: 15,
   assets: [...AUDIO_ASSETS, ...UI_ICON_ASSETS, ...SURFACE_TEXTURE_ASSETS, ...ULTRA_MODEL_ASSETS],
 };
 
@@ -213,6 +237,6 @@ export const CORE_MANIFEST: AssetManifest = {
  * The absence makes the zero-download guarantee structural, not conventional.
  */
 export const LOW_CORE_MANIFEST: AssetManifest = {
-  version: 13,
+  version: 15,
   assets: [...AUDIO_ASSETS, ...UI_ICON_ASSETS, ...LOW_MODEL_ASSETS],
 };

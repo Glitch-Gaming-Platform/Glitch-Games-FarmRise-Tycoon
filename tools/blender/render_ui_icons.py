@@ -392,6 +392,7 @@ ICONS = {
     "chicken.webp": (single("SM_animal_chicken"), 192, 192, False),
     "cow.webp": (single("SM_animal_cow"), 192, 192, False),
     "sheep.webp": (single("SM_animal_sheep"), 160, 160, False),
+    "dog.webp": (single("SM_animal_dog"), 192, 192, False),
     "loading-pad.webp": (single("SM_building_loading_pad"), 192, 192, False),
     "cold-store.webp": (single("SM_building_cold_store"), 192, 192, False),
     "worker-hut.webp": (single("SM_building_worker_hut"), 192, 192, False),

@@ -13,6 +13,7 @@ import {
   BUILDINGS,
   CARRIERS,
   getItem,
+  isGuardianAnimal,
   ticksToSeconds,
   type AnimalSpecies,
   type BuildingKind,
@@ -180,35 +181,50 @@ export class BuildPanel {
       const definition = ANIMALS[option.species];
       const hasShelter = snapshot.shelterFree >= option.shelterRequired;
       const animal = localizedAnimalName(this.i18n, option.species, definition.displayName);
-      const feedDefinition = getItem(definition.feedItemId);
-      const productDefinition = getItem(definition.producesItemId);
-      const feedName = itemName(
-        this.i18n,
-        definition.feedItemId,
-        feedDefinition?.displayName ?? definition.feedItemId,
-      );
-      const productName = itemName(
-        this.i18n,
-        definition.producesItemId,
-        productDefinition?.displayName ?? definition.producesItemId,
-      );
+      const meta = isGuardianAnimal(definition)
+        ? this.i18n.t('build.guardianMeta', {
+            cost: this.i18n.formatCents(definition.purchaseCost),
+            foxes: this.i18n.formatNumber(definition.foxesDeterredPerRaid),
+            free: this.i18n.formatNumber(snapshot.shelterFree),
+          })
+        : (() => {
+            const feedDefinition = getItem(definition.feedItemId);
+            const productDefinition = getItem(definition.producesItemId);
+            const feedName = itemName(
+              this.i18n,
+              definition.feedItemId,
+              feedDefinition?.displayName ?? definition.feedItemId,
+            );
+            const productName = itemName(
+              this.i18n,
+              definition.producesItemId,
+              productDefinition?.displayName ?? definition.producesItemId,
+            );
+            return this.i18n.t('build.animalMeta', {
+              cost: this.i18n.formatCents(definition.purchaseCost),
+              animal,
+              feedQuantity: this.i18n.formatNumber(definition.feedPerCycle),
+              feed: feedName,
+              time: this.i18n.formatDurationSeconds(ticksToSeconds(definition.cycleTicks)),
+              produceQuantity: this.i18n.formatNumber(definition.producePerCycle),
+              product: productName,
+              free: this.i18n.formatNumber(snapshot.shelterFree),
+            });
+          })();
       this.#list.append(
         this.#row({
           testId: `build-animal-${option.species}`,
           rowTestId: `build-animal-row-${option.species}`,
           icon:
-            option.species === 'chicken' ? 'chicken' : option.species === 'sheep' ? 'sheep' : 'cow',
+            option.species === 'chicken'
+              ? 'chicken'
+              : option.species === 'sheep'
+                ? 'sheep'
+                : option.species === 'dog'
+                  ? 'dog'
+                  : 'cow',
           title: animal,
-          meta: this.i18n.t('build.animalMeta', {
-            cost: this.i18n.formatCents(definition.purchaseCost),
-            animal,
-            feedQuantity: this.i18n.formatNumber(definition.feedPerCycle),
-            feed: feedName,
-            time: this.i18n.formatDurationSeconds(ticksToSeconds(definition.cycleTicks)),
-            produceQuantity: this.i18n.formatNumber(definition.producePerCycle),
-            product: productName,
-            free: this.i18n.formatNumber(snapshot.shelterFree),
-          }),
+          meta,
           action: this.i18n.t(option.affordable && hasShelter ? 'build.buy' : 'common.unavailable'),
           enabled: option.affordable && hasShelter,
           onClick: () => this.callbacks.onBuyAnimal(option.species),

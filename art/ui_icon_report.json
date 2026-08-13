@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-08-12T22:12:42",
+  "generated_at": "2026-08-13T02:47:11",
   "blender": "5.2.0 LTS",
-  "duration_seconds": 17.57,
+  "duration_seconds": 1.11,
   "icons": [
     {
       "file": "hero-farm.webp",
@@ -148,6 +148,10 @@
       "bytes": 2356
     },
     {
+      "file": "dog.webp",
+      "bytes": 2870
+    },
+    {
       "file": "loading-pad.webp",
       "bytes": 2270
     },
@@ -196,5 +200,5 @@
       "bytes": 3308
     }
   ],
-  "total_bytes": 165104
+  "total_bytes": 167974
 }

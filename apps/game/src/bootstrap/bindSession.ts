@@ -25,9 +25,11 @@ import {
   WORKER_ROLES,
   availableProjects,
   batchMargin,
+  batchTicksFor,
   cents,
   getBuyer,
   getItem,
+  getRecipe,
   hasBuildingAccess,
   milestoneProgress as milestoneRequirementProgress,
   plantableCrops,
@@ -35,7 +37,6 @@ import {
   recipesFor,
   storageUsed,
   townStageFor,
-  ticksToSeconds,
   type BuildingKind,
   type ProcessorKind,
   type WorkerTask,
@@ -361,6 +362,16 @@ export function bindSession(
         if (!PROCESSORS[kind]) return [];
         const queued = processor.queue.reduce((sum, entry) => sum + entry.batches, 0);
         const remaining = world.processing.remainingTicks(processor.id, career.specialization);
+        const activeEntry = processor.queue[0];
+        const activeRecipe = activeEntry ? getRecipe(activeEntry.recipeId) : undefined;
+        const activeBatchTicks = activeRecipe
+          ? batchTicksFor(activeRecipe, career.specialization)
+          : 0;
+        const activeRemaining = activeEntry
+          ? activeEntry.remainingTicks > 0
+            ? activeEntry.remainingTicks
+            : activeBatchTicks
+          : 0;
         return recipesFor(kind).map((recipe) => {
           const held = processingInventory[recipe.inputItemId] ?? 0;
           const enabled =
@@ -388,12 +399,7 @@ export function bindSession(
               margin: i18n.formatCents(batchMargin(recipe)),
               queued: i18n.formatNumber(queued),
               capacity: i18n.formatNumber(PROCESSORS[kind].queueCapacity),
-              remaining:
-                remaining > 0
-                  ? i18n.t('career.remaining', {
-                      time: i18n.formatDurationSeconds(ticksToSeconds(remaining)),
-                    })
-                  : '',
+              remaining: '',
             }),
             action: i18n.t(
               building.broken
@@ -403,6 +409,16 @@ export function bindSession(
                   : 'common.unavailable',
             ),
             enabled,
+            ...(activeRecipe?.id === recipe.id && remaining > 0 && activeBatchTicks > 0
+              ? {
+                  wait: {
+                    state: i18n.t(building.broken ? 'career.broken' : 'career.processing'),
+                    progress: 1 - activeRemaining / activeBatchTicks,
+                    remainingTicks: activeRemaining,
+                    paused: building.broken,
+                  },
+                }
+              : {}),
           };
         });
       });
@@ -471,11 +487,16 @@ export function bindSession(
         ? [
             ...career.loans.map((loan) => {
               const amount = Math.min(5_000, loan.outstanding, career.balance);
+              const offerId = loan.id.split('-').slice(0, -1).join('-');
+              const offer = LOAN_OFFERS.find((candidate) => candidate.id === offerId);
+              const loanName = offer
+                ? domainText(i18n, 'loan', offer.id, 'name', offer.displayName)
+                : 'Loan';
               return {
                 id: `repay-${loan.id}`,
                 loanId: loan.id,
                 amount,
-                title: i18n.t('career.repayTitle', { loan: loan.id }),
+                title: i18n.t('career.repayTitle', { loan: loanName }),
                 meta: i18n.t('career.loanOutstanding', {
                   amount: i18n.formatCents(loan.outstanding),
                   rate: i18n.formatNumber(loan.dailyRate * 100, {
@@ -505,12 +526,25 @@ export function bindSession(
           ]
         : [];
 
+      const currentPolicy = career.insurance
+        ? INSURANCE_POLICIES.find((candidate) => candidate.policyId === career.insurance?.policyId)
+        : undefined;
       const insuranceRows = career.unlocks.includes('insurance')
         ? career.insurance
           ? [
               {
                 id: 'cancel-policy',
-                title: i18n.t('career.currentPolicy', { policy: career.insurance.policyId }),
+                title: i18n.t('career.currentPolicy', {
+                  policy: currentPolicy
+                    ? domainText(
+                        i18n,
+                        'insurance',
+                        currentPolicy.policyId,
+                        'name',
+                        currentPolicy.displayName,
+                      )
+                    : 'Policy',
+                }),
                 meta: i18n.t('career.policyMeta', {
                   premium: i18n.formatCents(career.insurance.premiumPerDay),
                   coverage: i18n.formatNumber(Math.round(career.insurance.coverage * 100)),
@@ -670,6 +704,7 @@ export function bindSession(
                 COMMUNITY_PROJECTS_BY_ID[active.id]?.displayName ?? active.id,
               ),
               remainingTicks: active.remainingTicks,
+              totalTicks: COMMUNITY_PROJECTS_BY_ID[active.id]?.buildTicks ?? active.remainingTicks,
             }
           : null,
         projectsUnlocked: projectSurfaceUnlocked,
@@ -811,11 +846,16 @@ export function bindSession(
     }),
   );
 
+  const countdownInterval = setInterval(() => {
+    if (ui.career.visible || ui.town.visible) refresh();
+  }, 1_000);
+
   refresh();
 
   return {
     refresh,
     unsubscribe: () => {
+      clearInterval(countdownInterval);
       for (const unsubscribe of subscriptions) unsubscribe();
       ui.coach.hide();
       ui.setPlacing(null);

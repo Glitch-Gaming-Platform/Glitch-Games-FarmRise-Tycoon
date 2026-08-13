@@ -10,12 +10,24 @@ import { cents, type Cents } from './ids.js';
 import { secondsToTicks, type Ticks } from './time.js';
 
 /** The species that exist. Widened only by adding a member here. */
-export type AnimalSpecies = 'chicken' | 'sheep' | 'cow';
+export type AnimalSpecies = 'chicken' | 'sheep' | 'cow' | 'dog';
 
-export interface AnimalDefinition {
+interface AnimalDefinitionBase {
   readonly id: AnimalSpecies;
   readonly displayName: string;
   readonly purchaseCost: Cents;
+  /** Whether this animal creates goods or protects its assigned shelter. */
+  readonly role: 'producer' | 'guardian';
+  /** Shelter slots occupied. Coop capacity is defined by buildings. */
+  readonly shelterSlots: number;
+  /** Career unlock required before this species can be bought, if any. */
+  readonly requiresUnlock: string | null;
+  /** Pasture tiles each head needs before production suffers. */
+  readonly pastureTilesPerHead: number;
+}
+
+export interface ProducingAnimalDefinition extends AnimalDefinitionBase {
+  readonly role: 'producer';
   /** Item id produced on each completed cycle. */
   readonly producesItemId: string;
   readonly produceDisplayName: string;
@@ -27,21 +39,24 @@ export interface AnimalDefinition {
   /** Crop id consumed as feed, and how many units per cycle. */
   readonly feedItemId: string;
   readonly feedPerCycle: number;
-  /** Shelter slots occupied. Coop capacity is defined by buildings. */
-  readonly shelterSlots: number;
   /** Chance per cycle of loss when unfenced and a predator event fires. */
   readonly predatorVulnerability: number;
-  /** Career unlock required before this species can be bought, if any. */
-  readonly requiresUnlock: string | null;
-  /** Pasture tiles each head needs before production suffers. */
-  readonly pastureTilesPerHead: number;
 }
 
-export const ANIMALS: Readonly<Record<AnimalSpecies, AnimalDefinition>> = Object.freeze({
+export interface GuardianAnimalDefinition extends AnimalDefinitionBase {
+  readonly role: 'guardian';
+  /** Foxes this animal can drive away from its assigned shelter during one raid. */
+  readonly foxesDeterredPerRaid: number;
+}
+
+export type AnimalDefinition = ProducingAnimalDefinition | GuardianAnimalDefinition;
+
+export const ANIMALS = Object.freeze({
   chicken: {
     id: 'chicken',
     displayName: 'Chicken',
     purchaseCost: cents(900),
+    role: 'producer',
     producesItemId: 'eggs',
     produceDisplayName: 'Eggs',
     producePerCycle: 4,
@@ -60,6 +75,7 @@ export const ANIMALS: Readonly<Record<AnimalSpecies, AnimalDefinition>> = Object
     id: 'sheep',
     displayName: 'Sheep',
     purchaseCost: cents(3_600),
+    role: 'producer',
     producesItemId: 'wool',
     produceDisplayName: 'Wool',
     producePerCycle: 4,
@@ -80,6 +96,7 @@ export const ANIMALS: Readonly<Record<AnimalSpecies, AnimalDefinition>> = Object
     id: 'cow',
     displayName: 'Dairy cow',
     purchaseCost: cents(11_000),
+    role: 'producer',
     producesItemId: 'milk',
     produceDisplayName: 'Milk',
     producePerCycle: 6,
@@ -94,7 +111,17 @@ export const ANIMALS: Readonly<Record<AnimalSpecies, AnimalDefinition>> = Object
     requiresUnlock: 'specialization',
     pastureTilesPerHead: 4,
   },
-});
+  dog: {
+    id: 'dog',
+    displayName: 'Farm dog',
+    purchaseCost: cents(10_000),
+    role: 'guardian',
+    shelterSlots: 1,
+    requiresUnlock: 'farm_dog',
+    pastureTilesPerHead: 0,
+    foxesDeterredPerRaid: 10,
+  },
+} satisfies Readonly<Record<AnimalSpecies, AnimalDefinition>>);
 
 export const ANIMAL_SPECIES = Object.keys(ANIMALS) as readonly AnimalSpecies[];
 
@@ -104,6 +131,18 @@ export function getAnimal(id: string): AnimalDefinition | undefined {
 
 export function isAnimalSpecies(id: string): id is AnimalSpecies {
   return Object.hasOwn(ANIMALS, id);
+}
+
+export function isProducingAnimal(
+  definition: AnimalDefinition,
+): definition is ProducingAnimalDefinition {
+  return definition.role === 'producer';
+}
+
+export function isGuardianAnimal(
+  definition: AnimalDefinition,
+): definition is GuardianAnimalDefinition {
+  return definition.role === 'guardian';
 }
 
 /** Species the player may buy given their unlocks. */

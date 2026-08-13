@@ -9,6 +9,7 @@ const EN_MESSAGES = {
   'time.secondsShort': '{value}s',
   'time.minutesShort': '{value}m',
   'time.minutesSecondsShort': '{minutes}m {seconds}s',
+  'time.remaining': '{time} remaining',
 
   'menu.ribbon': 'A new season begins',
   'menu.subtitle':
@@ -155,6 +156,7 @@ const EN_MESSAGES = {
 
   'interaction.changeSeed': 'Choose seed',
   'interaction.harvest': 'Harvest',
+  'interaction.harvestCrop': 'Harvest {crop}',
   'interaction.tend': 'Tend',
   'interaction.repair': 'Repair',
   'interaction.pickUp': 'Pick up',
@@ -184,6 +186,9 @@ const EN_MESSAGES = {
   'toast.pickedUpProduct': 'Picked up {quantity} {item}. Open Market to sell the load.',
   'toast.animalAdded':
     '{count} {animal} added. Store {feedQuantity} {feed} each cycle to produce {product}.',
+  'toast.guardianAdded':
+    '{count} {animal} assigned to this shelter. It can drive off up to {foxes} foxes per raid here.',
+  'toast.dogDefended': 'Your farm dog drove off {count} foxes from its shelter.',
   'toast.animalHungry':
     '{animals} need {needed} {feed} to make {product}; only {available} is stored.',
   'toast.animalLost': 'A fox took {count} {animal}. {remaining} remain.',
@@ -268,6 +273,8 @@ const EN_MESSAGES = {
   'build.buyFirst': 'Buy {land} first',
   'build.animalMeta':
     '{cost}  ·  Each {animal} needs {feedQuantity} stored {feed} every {time} to make {produceQuantity} {product}. Collect the {product} by the shelter, then sell the goods at Market. {free} shelter space free',
+  'build.guardianMeta':
+    '{cost}  ·  Uses 1 shelter space. Guards only its assigned shelter and drives off up to {foxes} foxes per raid. {free} shelter space free',
   'build.carrierMeta': '{cost}  ·  {capacity} capacity. {description}',
 
   'placement.activeTouch': 'Placing {building} — tap to build more, Rotate to turn, Cancel to stop',

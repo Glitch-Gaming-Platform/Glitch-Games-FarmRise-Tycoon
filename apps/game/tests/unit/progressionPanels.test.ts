@@ -98,6 +98,7 @@ describe('progression management panels', () => {
         { species: 'chicken', affordable: true, shelterRequired: 1 },
         { species: 'sheep', affordable: true, shelterRequired: 2 },
         { species: 'cow', affordable: true, shelterRequired: 4 },
+        { species: 'dog', affordable: true, shelterRequired: 1 },
       ],
       shelterFree: 8,
       land: [],
@@ -106,18 +107,26 @@ describe('progression management panels', () => {
 
     panel.root.querySelector<HTMLButtonElement>('[data-testid="build-animal-sheep"]')!.click();
     panel.root.querySelector<HTMLButtonElement>('[data-testid="build-animal-cow"]')!.click();
+    panel.root.querySelector<HTMLButtonElement>('[data-testid="build-animal-dog"]')!.click();
     panel.root.querySelector<HTMLButtonElement>('[data-testid="build-carrier-wagon"]')!.click();
     expect(onBuyAnimal).toHaveBeenCalledWith('sheep');
     expect(onBuyAnimal).toHaveBeenCalledWith('cow');
+    expect(onBuyAnimal).toHaveBeenCalledWith('dog');
     expect(onBuyCarrier).toHaveBeenCalledWith('wagon');
     expect(panel.root.textContent).toMatch(/stored Corn.*Eggs.*sell the goods at Market/i);
     expect(panel.root.textContent).toMatch(/stored Clover.*Milk.*sell the goods at Market/i);
     expect(panel.root.textContent).toMatch(/stored Corn.*Wool.*sell the goods at Market/i);
+    expect(panel.root.textContent).toMatch(/\$100\.00.*assigned shelter.*10 foxes per raid/i);
     expect(
       panel.root
         .querySelector<HTMLElement>('[data-testid="build-animal-row-sheep"] img')
         ?.getAttribute('src'),
     ).toMatch(/sheep\.webp$/);
+    expect(
+      panel.root
+        .querySelector<HTMLElement>('[data-testid="build-animal-row-dog"] img')
+        ?.getAttribute('src'),
+    ).toMatch(/dog\.webp$/);
   });
 
   it('lists the $20 three-bed extension above the locked North Field', () => {
@@ -346,6 +355,75 @@ describe('progression management panels', () => {
       .querySelector<HTMLButtonElement>('[data-testid="town-project-project-market-road"]')!
       .click();
     expect(fund).toHaveBeenCalledWith('project-market-road');
+  });
+
+  it('shows explicit countdowns on processor and town project wait bars', () => {
+    const career = new CareerPanel({
+      onClaimMilestone: vi.fn(),
+      onChooseSpecialization: vi.fn(),
+      onQueueProcessing: vi.fn(),
+      onHireWorker: vi.fn(),
+      onPrioritizeWorker: vi.fn(),
+      onTakeLoan: vi.fn(),
+      onRepayLoan: vi.fn(),
+      onBuyInsurance: vi.fn(),
+      onCancelInsurance: vi.fn(),
+      onClose: vi.fn(),
+    });
+    career.update({
+      context: 'processing',
+      balance: cents(6_000),
+      stageName: 'Homestead',
+      health: 'Healthy',
+      milestone: null,
+      specializations: [],
+      processors: [
+        {
+          id: 'preserves',
+          buildingId: 'building-preserves',
+          recipeId: 'recipe-preserves',
+          title: 'Bottle preserves',
+          meta: '3 Pumpkin → 3 Preserves',
+          action: 'Unavailable',
+          enabled: false,
+          wait: {
+            state: 'Processing',
+            progress: 0.5,
+            remainingTicks: 2_700,
+          },
+        },
+      ],
+      workers: [],
+      loans: [],
+      insurance: [],
+    });
+    const processorWait = career.root.querySelector<HTMLElement>(
+      '[data-testid="career-wait-preserves"]',
+    );
+    expect(processorWait?.textContent).toContain('Processing · 45s remaining');
+    expect(
+      processorWait?.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow'),
+    ).toBe('50');
+
+    const town = new TownPanel({ onStartProject: vi.fn(), onClose: vi.fn() });
+    town.update({
+      stageName: 'Village',
+      population: '200-600',
+      prosperity: 180,
+      summary: 'Growing.',
+      activeProject: {
+        title: 'Market Road',
+        remainingTicks: 3_600,
+        totalTicks: 7_200,
+      },
+      projectsUnlocked: true,
+      projects: [],
+    });
+    const townWait = town.root.querySelector<HTMLElement>('[data-testid="town-project-wait"]');
+    expect(townWait?.textContent).toContain('Building · 1m remaining');
+    expect(townWait?.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe(
+      '50',
+    );
   });
 
   it('does not reveal town projects before the career unlock', () => {

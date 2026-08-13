@@ -6,6 +6,7 @@ const messages = {
   'time.secondsShort': '{value}s',
   'time.minutesShort': '{value}min',
   'time.minutesSecondsShort': '{minutes}min {seconds}s',
+  'time.remaining': 'Quedan {time}',
   'menu.ribbon': 'Comienza una nueva temporada',
   'menu.subtitle':
     'Trabaja la tierra, estudia el mercado y convierte una pequeña finca en una granja con futuro.',
@@ -120,6 +121,7 @@ const messages = {
   'objective.runEstate': 'Gestionar la finca',
   'interaction.changeSeed': 'Cambiar semilla',
   'interaction.harvest': 'Cosechar',
+  'interaction.harvestCrop': 'Cosechar {crop}',
   'interaction.tend': 'Cuidar',
   'interaction.repair': 'Reparar',
   'interaction.pickUp': 'Recoger',

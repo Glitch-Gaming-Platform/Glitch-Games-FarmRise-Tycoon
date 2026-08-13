@@ -64,6 +64,7 @@ import {
 } from '../animals/chickenMotion.js';
 import { COW_COLLISION_RADIUS, cowPose, createCowPose } from '../animals/cowMotion.js';
 import { SHEEP_COLLISION_RADIUS, createSheepPose, sheepPose } from '../animals/sheepMotion.js';
+import { DOG_COLLISION_RADIUS, createDogPose, dogPose } from '../animals/dogMotion.js';
 import { visibleAnimalCountForGroup } from '../animals/visibleAnimalInstances.js';
 import type { TextLocalizer } from '@engine/i18n/Localization.js';
 
@@ -414,6 +415,7 @@ export class FarmScene implements GameScene {
       // the review fixture intentionally stands on the bed. They remain live
       // in gameplay; only the deterministic visual-review path omits them.
       this.options.reviewActions ? [] : (this.#interaction?.proximityMeters() ?? []),
+      career.specialization,
     );
     if (this.#player) {
       const surface = this.#farmView?.surfaceAt(
@@ -537,6 +539,22 @@ export class FarmScene implements GameScene {
       }
     }
 
+    const dogPoseState = createDogPose();
+    for (const group of groups) {
+      if (group.species !== 'dog') continue;
+      const count = visibleAnimalCountForGroup(groups, 'dog', group.id, 24);
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let localIndex = 0; localIndex < count; localIndex += 1) {
+        dogPose(shelter, localIndex, count, simulationTime, 1, dogPoseState);
+        write(
+          `dog-${group.id}-${localIndex}`,
+          dogPoseState.x,
+          dogPoseState.z,
+          DOG_COLLISION_RADIUS,
+        );
+      }
+    }
+
     for (const fox of this.#enemyDirector?.foxes ?? []) {
       write(fox.collisionId, fox.position.x, fox.position.z, fox.radius);
     }
@@ -565,6 +583,7 @@ export class FarmScene implements GameScene {
     const families = [
       ...modelFamiliesForSeasons(seasons),
       ...(loader.declares('model:animals-sheep') ? ['model:animals-sheep'] : []),
+      ...(loader.declares('model:animals-dog') ? ['model:animals-dog'] : []),
     ];
     for (const [index, id] of families.entries()) {
       try {

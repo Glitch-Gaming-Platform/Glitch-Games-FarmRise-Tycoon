@@ -10,7 +10,7 @@
  */
 import { cents, type Cents } from './ids.js';
 import { CROPS, getCrop, isCropPlantableInSeason } from './crops.js';
-import { ANIMALS } from './animals.js';
+import { ANIMALS, isProducingAnimal } from './animals.js';
 import type { Season } from './seasons.js';
 
 export type ItemCategory = 'crop' | 'animal_product' | 'processed';
@@ -67,6 +67,7 @@ function buildItemRegistry(): Readonly<Record<string, ItemDefinition>> {
     };
   }
   for (const animal of Object.values(ANIMALS)) {
+    if (!isProducingAnimal(animal)) continue;
     registry[animal.producesItemId] = {
       id: animal.producesItemId,
       displayName: animal.produceDisplayName,

@@ -447,6 +447,83 @@ export function createSheepMotionMaterial(base: THREE.MeshStandardMaterial): Tim
   };
 }
 
+/** Virtual dog rig: alert patrol gait, lifted head, independent ears and a broad tail wag. */
+export function createDogMotionMaterial(base: THREE.MeshStandardMaterial): TimeMaterial {
+  const material = base.clone();
+  material.name = 'M_FarmRise_DogMotion';
+  const time = { value: 0 };
+
+  material.onBeforeCompile = (shader) => {
+    const source = shader as unknown as ShaderSource;
+    source.uniforms['uAnimalTime'] = time;
+    source.vertexShader = `
+      uniform float uAnimalTime;
+      #ifdef USE_INSTANCING
+        attribute float farmMotion;
+        attribute float farmAction;
+        attribute float farmGaitPhase;
+      #endif
+      ${GAIT_GLSL}
+    ${source.vertexShader}`.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       float farmDogMotion = 1.0;
+       float farmDogAlert = 0.0;
+       float farmDogPhase = fract(uAnimalTime * 1.15);
+       #ifdef USE_INSTANCING
+         farmDogMotion = farmMotion;
+         farmDogAlert = farmAction;
+         farmDogPhase = farmGaitPhase;
+       #endif
+
+       float farmDogSide = position.x < 0.0 ? -1.0 : 1.0;
+       float farmDogFore = position.z > 0.02 ? 1.0 : -1.0;
+       float farmDogDiagonal = farmDogSide * farmDogFore > 0.0 ? 0.0 : 0.5;
+       float farmDogLegFwd, farmDogLegLift;
+       farmGait(farmDogPhase + farmDogDiagonal + (farmDogFore > 0.0 ? 0.08 : 0.0),
+         0.58, farmDogLegFwd, farmDogLegLift);
+       float farmDogLeg = (1.0 - smoothstep(0.25, 0.34, position.y))
+         * smoothstep(0.075, 0.13, abs(position.x));
+       transformed.z += farmDogLegFwd * 0.10 * farmDogLeg * farmDogMotion;
+       transformed.y += farmDogLegLift * 0.043 * farmDogLeg * farmDogMotion;
+
+       float farmDogChest = smoothstep(0.30, 0.48, position.y)
+         * smoothstep(0.06, 0.28, position.z);
+       transformed.y -= farmDogLegLift * 0.010 * farmDogChest * farmDogMotion;
+
+       float farmDogHead = smoothstep(0.25, 0.43, position.z)
+         * smoothstep(0.42, 0.60, position.y);
+       transformed.y += farmDogAlert * 0.032 * farmDogHead;
+       transformed.z += farmDogAlert * 0.018 * farmDogHead;
+
+       float farmDogTail = (1.0 - smoothstep(-0.38, -0.18, position.z))
+         * smoothstep(0.34, 0.53, position.y);
+       transformed.x += sin(uAnimalTime * (5.2 + farmDogAlert * 4.0) - position.z * 4.8)
+         * (0.045 + farmDogAlert * 0.05) * farmDogTail;
+       transformed.y += cos(uAnimalTime * 4.1 - position.z * 3.2)
+         * 0.014 * farmDogTail;
+
+       float farmDogEar = smoothstep(0.10, 0.16, abs(position.x))
+         * smoothstep(0.61, 0.72, position.y)
+         * smoothstep(0.22, 0.42, position.z);
+       transformed.x += farmDogSide * sin(uAnimalTime * 4.7 + farmDogSide)
+         * 0.012 * farmDogEar * (1.0 - farmDogAlert * 0.55);
+       transformed.y += farmDogAlert * 0.012 * farmDogEar;`,
+    );
+  };
+  material.customProgramCacheKey = () => 'farmrise-dog-motion-v1';
+
+  return {
+    material,
+    setTime(seconds): void {
+      time.value = seconds;
+    },
+    dispose(): void {
+      material.dispose();
+    },
+  };
+}
+
 /** Virtual fox rig: alternating paws, breathing head motion and a swishing plume. */
 export function createFoxMotionMaterial(base: THREE.MeshStandardMaterial): FoxMotionMaterial {
   const material = base.clone();

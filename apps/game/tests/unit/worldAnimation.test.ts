@@ -10,6 +10,7 @@ import {
   StructureView,
 } from '../../src/game/world/view/StructureView.js';
 import { constructionProgressState } from '../../src/game/world/view/ConstructionProgressView.js';
+import { processingProgressState } from '../../src/game/world/view/ProcessingProgressView.js';
 import { incidentLightingTarget } from '../../src/game/world/view/FarmLightingResponse.js';
 import { groundGoodsActionLabel } from '../../src/game/world/view/GroundGoodsView.js';
 import {
@@ -146,6 +147,27 @@ describe('world animation state', () => {
     expect(middle.progress).toBeCloseTo(0.5);
     expect(middle.label).toContain('Barn');
     expect(middle.label).toContain('45s');
+    expect(middle.label).toContain('remaining');
+  });
+
+  it('reports processor percentage, remaining time and paused breakdowns overhead', () => {
+    const running = processingProgressState(
+      { recipeId: 'recipe-preserves', batches: 1, remainingTicks: 2_700 as never },
+      null,
+      false,
+    );
+    expect(running?.progress).toBeCloseTo(0.5);
+    expect(running?.label).toContain('Bottle preserves');
+    expect(running?.label).toContain('45s remaining');
+    expect(running?.paused).toBe(false);
+
+    const paused = processingProgressState(
+      { recipeId: 'recipe-preserves', batches: 1, remainingTicks: 2_700 as never },
+      null,
+      true,
+    );
+    expect(paused?.label).toContain('Paused');
+    expect(paused?.paused).toBe(true);
   });
 
   it('raises a construction visual through progress and pops it on completion', () => {

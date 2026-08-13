@@ -107,7 +107,21 @@ export function createProgressionReviewCareer(
       storeFor('building-loading-pad', 9, 3, LOADING_PAD_CAPACITY, {}),
     ],
     animals: [
-      { ...site.animals[0]!, count: 4, cycleTicks: 0 },
+      { ...site.animals[0]!, count: reviewStage >= 3 ? 3 : 4, cycleTicks: 0 },
+      ...(reviewStage >= 3
+        ? [
+            {
+              id: 'animals-dog',
+              species: 'dog' as const,
+              shelterId: site.animals[0]!.shelterId,
+              count: 1,
+              cycleTicks: 0,
+              tileX: site.animals[0]!.tileX,
+              tileZ: site.animals[0]!.tileZ,
+              sheltered: false,
+            },
+          ]
+        : []),
       {
         id: 'animals-cows',
         species: 'cow',

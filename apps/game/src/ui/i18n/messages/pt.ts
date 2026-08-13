@@ -6,6 +6,7 @@ const messages = {
   'time.secondsShort': '{value}s',
   'time.minutesShort': '{value}min',
   'time.minutesSecondsShort': '{minutes}min {seconds}s',
+  'time.remaining': '{time} restantes',
   'menu.ribbon': 'Uma nova estação começa',
   'menu.subtitle':
     'Trabalhe a terra, acompanhe o mercado e transforme uma pequena propriedade numa fazenda duradoura.',
@@ -115,6 +116,7 @@ const messages = {
   'objective.runEstate': 'Administrar a propriedade',
   'interaction.changeSeed': 'Trocar semente',
   'interaction.harvest': 'Colher',
+  'interaction.harvestCrop': 'Colher {crop}',
   'interaction.tend': 'Cuidar',
   'interaction.repair': 'Consertar',
   'interaction.pickUp': 'Recolher',

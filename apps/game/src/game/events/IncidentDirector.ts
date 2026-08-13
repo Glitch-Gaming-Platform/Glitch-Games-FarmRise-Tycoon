@@ -240,13 +240,35 @@ export class IncidentDirector {
     }
 
     switch (definition.target) {
-      case 'plots':
-        for (const plotId of instance.targetIds) world.fields.applyMultiplier(plotId, multiplier);
+      case 'plots': {
+        const appliedMultipliers: number[] = [];
+        for (const plotId of instance.targetIds) {
+          const plot = world.getPlot(plotId);
+          if (!plot) continue;
+          const plotMultiplier =
+            plot.irrigated && definition.irrigatedMultiplier !== undefined
+              ? Math.max(multiplier, definition.irrigatedMultiplier)
+              : multiplier;
+          world.fields.applyMultiplier(plotId, plotMultiplier);
+          appliedMultipliers.push(plotMultiplier);
+        }
+        if (appliedMultipliers.length > 0) {
+          multiplier =
+            appliedMultipliers.reduce((sum, applied) => sum + applied, 0) /
+            appliedMultipliers.length;
+        }
         break;
+      }
       case 'animals':
         for (const groupId of instance.targetIds) {
           const group = world.livestock.get(groupId);
-          if (!group || group.sheltered) continue;
+          if (!group || group.sheltered || !world.livestock.isPredatorTarget(groupId)) continue;
+          if (
+            definition.id === 'incident-fox-raid' &&
+            world.livestock.foxProtectionAt(group.shelterId) > 0
+          ) {
+            continue;
+          }
           world.livestock.removeTo(groupId, group.count * (1 - multiplier));
         }
         break;

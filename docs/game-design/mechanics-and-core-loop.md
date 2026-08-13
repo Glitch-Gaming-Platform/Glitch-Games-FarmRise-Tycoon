@@ -39,7 +39,8 @@ Plant and tend → Harvest and haul → Build and upgrade → Trade and expand
   decisions affect action efficiency.
 - **Animal Production:** Animals consume feed and occupy shelter before producing goods on recurring
   timers. The player chooses whether to spend crop output on stable long-term products or sell it
-  immediately for cash.
+  immediately for cash. Stage 3 also unlocks a productless farm dog: it occupies one slot and guards
+  only its assigned shelter, driving off up to ten foxes per dog during each raid.
 - **Dynamic Market Orders:** A small set of buyers posts quantity, price, and deadline-based orders
   for crops and animal goods. The player can accept reliable contracts, sell immediately at a lower
   spot price, or hold goods while risking spoilage and missed opportunities.

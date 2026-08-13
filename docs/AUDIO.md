@@ -83,6 +83,7 @@ changes stay quiet.
 | Prevention is refused | `ui.deny` | Wired. `F` outside a warning window explains itself in a toast. |
 | Foxes spawn | `animal.fox_alert` | Wired on the `ui` bus because it opens an active response window. |
 | Fox scared away | `animal.fox_flee` | Wired. A receding yelp and scrub rustle, distinct from the alert. |
+| Farm dog defends a shelter | Rotating `animal.dog_1`–`animal.dog_3` | Wired at the shelter-local interception event; the existing friendly bark library is reused for purchase and defense. |
 | Fox raid takes an animal | `animal.raid_loss` | Wired. Wing flutter and distressed clucks without injury audio. |
 | Queue a processor batch | `processing.start` | Wired from the processor model. Belt catch and wooden gears confirm that stored inputs became active work. |
 | Processor completes goods | `processing.complete` | Wired from the processor model before the output stack refresh. Machine wind-down and tray drop identify finished production. |
@@ -112,7 +113,7 @@ bytes**. Repeated effects use runtime detune rather than storing multiple near-i
 | Direct handling | `farm_pickup`, `farm_deposit`, `farm_shoo_animals`, `farm_repair`, `farm_cart_roll` | Semantic action feedback that no longer borrows harvest, watering or building sounds. |
 | Processing | `processing_start`, `processing_complete` | One-shots at queue and completion; no unmanaged machinery loops. |
 | Incident identities | 13 `incident_*` files | Seven unique warnings and six physical impacts. Fox impact reuses its dedicated attack bark. |
-| Animals | Fox cues plus 60 farm-animal variants | The 20-animal reference library has three distinct one-shots per animal. Hen, sheep and cow variants rotate in current gameplay; the other 51 clips remain lazy until those animals exist. |
+| Animals | Fox cues plus 60 farm-animal variants | The 20-animal reference library has three distinct one-shots per animal. Hen, sheep, cow and dog variants rotate in current gameplay; the remaining 48 clips stay lazy until those animals exist. |
 | Seasons | `season_transition` | Reserved for the calendar boundary. |
 | Outcomes | `goal_land_purchased`, `run_success`, `run_fail` | Short acoustic stings reserved for major progression. |
 

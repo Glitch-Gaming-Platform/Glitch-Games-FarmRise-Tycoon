@@ -28,7 +28,7 @@ describe('MusicPlayer', () => {
     fallbackPlayer.dispose();
   });
 
-  it('plays five seamless repeats and rotates to the next enabled song', async () => {
+  it('plays three seamless repeats and rotates to the next enabled song', async () => {
     const played: PlayedTrack[] = [];
     const audio = fakeAudio(played);
     const assets = fakeAssets();
@@ -41,7 +41,7 @@ describe('MusicPlayer', () => {
     await vi.waitFor(() => expect(played).toHaveLength(1));
 
     expect(played[0]?.id).toBe(MUSIC.sunriseRows);
-    expect(played[0]?.options.repeatCount).toBe(5);
+    expect(played[0]?.options.repeatCount).toBe(3);
     played[0]?.options.onEnded?.();
 
     await vi.waitFor(() => expect(played).toHaveLength(2));

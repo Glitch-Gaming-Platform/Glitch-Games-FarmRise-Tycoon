@@ -18,6 +18,7 @@ import {
   careerSaveStateSchema,
   migrateSave,
   newCareer,
+  normalizeCareerCompatibility,
   type LegacySaveStateV1,
 } from '../src/index.js';
 
@@ -152,6 +153,26 @@ describe('migrateSave, version 1 to current', () => {
       expect(relationship.trust).toBe(0);
       expect(relationship.deliveries).toBe(0);
     }
+  });
+});
+
+describe('current save compatibility', () => {
+  it('backfills farm-dog access for an existing Stage 3 career', () => {
+    const state = newCareer({ careerId: 'stage-three-before-dogs', seed: 33 });
+    const normalized = normalizeCareerCompatibility({
+      ...state,
+      stage: 3,
+      unlocks: state.unlocks.filter((unlock) => unlock !== 'farm_dog'),
+    });
+
+    expect(normalized.state.unlocks).toContain('farm_dog');
+    expect(normalized.notes.some((note) => note.reason.includes('Farm dog'))).toBe(true);
+  });
+
+  it('does not grant farm dogs before Stage 3', () => {
+    const state = newCareer({ careerId: 'stage-two-before-dogs', seed: 22 });
+    const normalized = normalizeCareerCompatibility({ ...state, stage: 2 });
+    expect(normalized.state.unlocks).not.toContain('farm_dog');
   });
 });
 

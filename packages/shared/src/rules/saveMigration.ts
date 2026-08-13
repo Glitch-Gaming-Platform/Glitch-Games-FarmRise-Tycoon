@@ -333,14 +333,33 @@ export function normalizeContractDeadlines(state: CareerSaveState): MigrationOut
   };
 }
 
+/** Grants the Stage 3 farm-dog capability to careers that reached the stage before it shipped. */
+export function normalizeFarmDogUnlock(state: CareerSaveState): MigrationOutcome {
+  if (state.stage < 3 || state.unlocks.includes('farm_dog')) {
+    return { state, fromVersion: CAREER_SCHEMA_VERSION, notes: [] };
+  }
+  return {
+    state: { ...state, unlocks: [...state.unlocks, 'farm_dog'] },
+    fromVersion: CAREER_SCHEMA_VERSION,
+    notes: [
+      {
+        field: 'unlocks',
+        reason:
+          'Farm dog access was added to the Stage 3 capabilities already earned by this career.',
+      },
+    ],
+  };
+}
+
 /** Applies every wire-compatible repair required by the current career schema. */
 export function normalizeCareerCompatibility(state: CareerSaveState): MigrationOutcome {
   const estate = normalizeEstateLayout(state);
   const contracts = normalizeContractDeadlines(estate.state);
+  const farmDog = normalizeFarmDogUnlock(contracts.state);
   return {
-    state: contracts.state,
+    state: farmDog.state,
     fromVersion: CAREER_SCHEMA_VERSION,
-    notes: [...estate.notes, ...contracts.notes],
+    notes: [...estate.notes, ...contracts.notes, ...farmDog.notes],
   };
 }
 

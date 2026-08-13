@@ -45,6 +45,8 @@ export interface IncidentDefinition {
   readonly cooldownTicks: Ticks;
   /** Multiplier applied to affected assets when nothing is done. */
   readonly unmitigatedMultiplier: number;
+  /** Minimum multiplier for plots supplied by irrigation when this incident lands. */
+  readonly irrigatedMultiplier?: number;
   /** How many distinct assets it hits. Severity scales this. */
   readonly targetCount: { readonly min: number; readonly max: number };
   readonly responses: readonly IncidentResponse[];
@@ -64,6 +66,7 @@ export const INCIDENTS: readonly IncidentDefinition[] = Object.freeze([
     weight: 30,
     cooldownTicks: secondsToTicks(420),
     unmitigatedMultiplier: 0.35,
+    irrigatedMultiplier: 0.85,
     targetCount: { min: 2, max: 6 },
     responses: [
       {

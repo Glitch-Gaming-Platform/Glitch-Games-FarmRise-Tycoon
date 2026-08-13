@@ -6,6 +6,7 @@ const messages = {
   'time.secondsShort': '{value}dtk',
   'time.minutesShort': '{value}mnt',
   'time.minutesSecondsShort': '{minutes}mnt {seconds}dtk',
+  'time.remaining': '{time} tersisa',
   'menu.ribbon': 'Musim baru dimulai',
   'menu.subtitle':
     'Kerjakan tanah, baca pasar, dan ubah lahan kecil menjadi pertanian yang layak dipertahankan.',
@@ -115,6 +116,7 @@ const messages = {
   'objective.runEstate': 'Kelola perkebunan',
   'interaction.changeSeed': 'Ganti benih',
   'interaction.harvest': 'Panen',
+  'interaction.harvestCrop': 'Panen {crop}',
   'interaction.tend': 'Rawat',
   'interaction.repair': 'Perbaiki',
   'interaction.pickUp': 'Ambil',

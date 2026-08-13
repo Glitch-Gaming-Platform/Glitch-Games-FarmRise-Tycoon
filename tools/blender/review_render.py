@@ -372,7 +372,7 @@ CONTACT_ROWS = [
     ["SM_crop_wheat_s1", "SM_crop_wheat_s2", "SM_crop_wheat_s3", "SM_crop_wheat_s4",
      "SM_crop_corn_s1", "SM_crop_corn_s2", "SM_crop_corn_s3", "SM_crop_corn_s4"],
     ["SM_crop_pumpkin_s1", "SM_crop_pumpkin_s2", "SM_crop_pumpkin_s3", "SM_crop_pumpkin_s4",
-     "SM_char_farmer", "SM_animal_chicken", "SM_animal_sheep", "SM_animal_cow", "SM_animal_fox"],
+     "SM_char_farmer", "SM_animal_chicken", "SM_animal_sheep", "SM_animal_cow", "SM_animal_dog", "SM_animal_fox"],
     ["SM_crop_clover_s1", "SM_crop_clover_s2", "SM_crop_clover_s3", "SM_crop_clover_s4"],
     ["SM_building_fence", "SM_building_road", "SM_building_irrigation",
      "SM_prop_water_trough", "SM_building_coop", "SM_building_barn"],
@@ -677,6 +677,7 @@ def gameplay_scene() -> None:
     link_asset("SM_animal_chicken", (6.4, 1.8, 0), rotation_z=math.radians(-60))
     link_asset("SM_animal_chicken", (7.8, 0.8, 0), rotation_z=math.radians(20))
     link_asset("SM_animal_sheep", (5.2, 0.1, 0), rotation_z=math.radians(-18))
+    link_asset("SM_animal_dog", (7.0, 3.0, 0), rotation_z=math.radians(35))
     link_asset("SM_animal_fox", (9.3, 3.4, 0), rotation_z=math.radians(-130))
 
     # Every component comes from the shared camera constants. Azimuth matters
@@ -948,10 +949,11 @@ def actors_focus() -> str:
     link_asset("SM_char_farmer", (-3.15, 0, 0), rotation_z=math.radians(12))
     link_asset("SM_animal_chicken", (-1.35, 0, 0), rotation_z=math.radians(-18), scale=1.35)
     link_asset("SM_animal_sheep", (0.05, 0, 0), rotation_z=math.radians(16), scale=1.10)
-    link_asset("SM_animal_cow", (1.65, 0, 0), rotation_z=math.radians(-22))
-    link_asset("SM_animal_fox", (3.35, 0, 0), rotation_z=math.radians(18), scale=1.18)
+    link_asset("SM_animal_cow", (1.55, 0, 0), rotation_z=math.radians(-22))
+    link_asset("SM_animal_dog", (3.05, 0, 0), rotation_z=math.radians(-8), scale=1.08)
+    link_asset("SM_animal_fox", (4.35, 0, 0), rotation_z=math.radians(18), scale=1.18)
 
-    add_camera((6.4, -12.0, 4.2), (0.1, 0, 0.72), lens=70)
+    add_camera((7.0, -13.0, 4.5), (0.5, 0, 0.72), lens=70)
     return render_to("actors_focus.png")
 
 

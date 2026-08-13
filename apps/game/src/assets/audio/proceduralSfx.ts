@@ -464,6 +464,32 @@ const RECIPES: Partial<Record<RuntimeSoundId, Recipe>> = {
         [delayed(shaped(texture(239, 650, sr), percussive(0.12)), 0.58), 0.28],
       ),
   },
+  // Runtime fallbacks only: shipped dog recordings replace these after preload.
+  [FARM_ANIMAL_SOUND_VARIANTS.dog[0]]: {
+    duration: 0.38,
+    build: (sr) =>
+      mix(
+        [shaped(sweptSine(190, 118, 0.22, 0.58), adsr(0.008, 0.05, 0.42, 0.22, 0.36)), 0.72],
+        [shaped(texture(251, 1200, sr), percussive(0.11)), 0.34],
+      ),
+  },
+  [FARM_ANIMAL_SOUND_VARIANTS.dog[1]]: {
+    duration: 0.72,
+    build: (sr) =>
+      mix(
+        [shaped(sweptSine(175, 112, 0.18, 0.52), percussive(0.11)), 0.65],
+        [shaped(texture(257, 1050, sr), percussive(0.1)), 0.28],
+        [delayed(shaped(sweptSine(185, 120, 0.18, 0.48), percussive(0.11)), 0.34), 0.6],
+      ),
+  },
+  [FARM_ANIMAL_SOUND_VARIANTS.dog[2]]: {
+    duration: 0.86,
+    build: (sr) =>
+      mix(
+        [shaped(sweptSine(430, 520, 0.62, 0.22), adsr(0.04, 0.16, 0.32, 0.42, 0.82)), 0.5],
+        [delayed(shaped(texture(263, 1800, sr), percussive(0.18)), 0.58), 0.18],
+      ),
+  },
   [SOUND.raidLoss]: {
     duration: 0.9,
     build: (sr) =>
