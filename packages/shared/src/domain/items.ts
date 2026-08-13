@@ -91,6 +91,7 @@ const UNCOUNTABLE_ITEM_IDS = new Set([
   'corn',
   'clover',
   'milk',
+  'wool',
   'flour',
   'cheese',
   'preserves',

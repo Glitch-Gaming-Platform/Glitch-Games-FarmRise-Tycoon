@@ -419,8 +419,10 @@ def main(frames: int = 8, clip_name: str = "WALK") -> dict:
     bpy.context.scene.camera = camera
 
     os.makedirs(OUT_DIR, exist_ok=True)
-    bpy.context.scene.render.resolution_x = 320
-    bpy.context.scene.render.resolution_y = 520
+    # AAA deformation review needs enough pixels to expose strap gaps, stripe
+    # fins, wrist collapse and ankle separation instead of smoothing them away.
+    bpy.context.scene.render.resolution_x = 480
+    bpy.context.scene.render.resolution_y = 780
     written = []
     loop = clip_name in {"WALK", "RUN", "IDLE"}
     gait = clip_name in {"WALK", "RUN"}
@@ -457,6 +459,73 @@ def main(frames: int = 8, clip_name: str = "WALK") -> dict:
     return {"sheet": sheet, "frames": frames, "bones": len(bones)}
 
 
+def key_pose_proof() -> dict:
+    """Four enlarged poses covering the highest-risk character deformation."""
+    bones = parse_bones()
+    clips = {name: parse_clip(name) for name in ("WALK", "PLANT", "WAVE")}
+
+    source_mesh = None
+    for obj in bpy.data.objects:
+        if obj.type == "MESH" and obj.name.startswith("SM_char_farmer"):
+            source_mesh = obj.data
+            break
+    if source_mesh is None:
+        blend = os.path.join(ROOT, "art", "source", "farmrise_assets.blend")
+        with bpy.data.libraries.load(blend, link=False) as (src, dst):
+            dst.objects = [name for name in src.objects if name == "SM_char_farmer"]
+        loaded = bpy.data.objects.get("SM_char_farmer")
+        if loaded is None:
+            raise RuntimeError("SM_char_farmer not found in the master blend")
+        source_mesh = loaded.data
+    source_mesh.use_fake_user = True
+
+    setup_scene()
+    farmer = bpy.data.objects.new("SM_char_farmer_key_pose", source_mesh)
+    bpy.context.scene.collection.objects.link(farmer)
+    armature = build_armature(bones)
+    bind_capsule_weights(farmer, armature, bones)
+
+    camera_data = bpy.data.cameras.new("KeyPoseCam")
+    camera_data.lens = 62
+    camera = bpy.data.objects.new("KeyPoseCam", camera_data)
+    bpy.context.scene.collection.objects.link(camera)
+    bpy.context.scene.camera = camera
+    bpy.context.scene.render.resolution_x = 480
+    bpy.context.scene.render.resolution_y = 780
+
+    specs = [
+        ("plant_side", "PLANT", 0.52, Vector((5.2, -1.3, 1.18))),
+        ("plant_three_quarter", "PLANT", 0.52, Vector((3.2, -4.0, 1.35))),
+        ("wave_apex", "WAVE", 0.52, Vector((3.2, -4.0, 1.35))),
+        ("walk_stride", "WALK", 0.25, Vector((5.2, -1.3, 1.18))),
+    ]
+    written = []
+    for label, clip_name, phase, camera_location in specs:
+        keys = clips[clip_name]
+        gait = clip_name == "WALK"
+        loop = gait
+        apply_pose(armature, sample_gait(keys, phase) if gait else sample(keys, phase, loop))
+        armature.location = to_blender(sample_root(keys, phase, loop))
+        camera.location = camera_location
+        direction = Vector((0, 0, 0.82)) - camera.location
+        camera.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
+        bpy.context.view_layer.update()
+
+        path = os.path.join(OUT_DIR, f"_rig_key_{label}.png")
+        bpy.context.scene.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        written.append(path)
+
+    sheet = os.path.join(OUT_DIR, "rig_key_pose_proof.png")
+    stitch(written, sheet)
+    for path in written:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    return {"sheet": sheet, "poses": len(specs), "bones": len(bones)}
+
+
 def stitch(paths: list[str], out_path: str) -> None:
     """Lays the frames out left to right using Blender's own image API."""
     images = [bpy.data.images.load(p) for p in paths]
@@ -482,3 +551,4 @@ def stitch(paths: list[str], out_path: str) -> None:
 
 if __name__ == "__main__":
     main()
+    key_pose_proof()

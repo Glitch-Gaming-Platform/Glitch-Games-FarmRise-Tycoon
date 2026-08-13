@@ -208,6 +208,7 @@ export class TouchControls {
     this.i18n.bindAttribute(button, 'aria-label', labelKey);
     if (textKey) this.i18n.bindText(button, textKey);
     const pointers = new Set<number>();
+    let ignoreNextClick = false;
 
     const press = (event: PointerEvent): void => {
       event.preventDefault();
@@ -220,6 +221,7 @@ export class TouchControls {
         // the action if mobile Safari cancels capture during a gesture.
         callbacks.setAction(action, true);
         callbacks.setAction(action, false);
+        ignoreNextClick = true;
       }
       button.classList.add('fr-touch-button--pressed');
     };
@@ -228,9 +230,16 @@ export class TouchControls {
       event.preventDefault();
       if (pointers.size === 0) {
         button.classList.remove('fr-touch-button--pressed');
+        setTimeout(() => {
+          ignoreNextClick = false;
+        }, 0);
       }
     };
     const activateFromKeyboard = (event: MouseEvent): void => {
+      if (ignoreNextClick) {
+        ignoreNextClick = false;
+        return;
+      }
       if (event.detail !== 0) return;
       callbacks.setAction(action, true);
       callbacks.setAction(action, false);

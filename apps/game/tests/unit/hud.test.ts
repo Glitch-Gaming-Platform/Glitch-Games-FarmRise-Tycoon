@@ -57,9 +57,9 @@ describe('incident HUD phases', () => {
 describe('context prompt', () => {
   it('shows the seed-cycle key only when a secondary plot action exists', () => {
     const hud = new Hud();
-    hud.setPrompt('Plant Wheat', 'Change seed');
+    hud.setPrompt('Plant Wheat', 'Choose seed');
     expect(hud.root.textContent).toContain('Plant Wheat  ·  press E');
-    expect(hud.root.textContent).toContain('Change seed  ·  press Q');
+    expect(hud.root.textContent).toContain('Choose seed  ·  press Q');
 
     hud.setPrompt('Harvest');
     expect(hud.root.textContent).toContain('Harvest  ·  press E');

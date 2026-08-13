@@ -29,7 +29,7 @@ export interface DebugFlags {
   /** Explicit follow-camera override, `?cam=distance,pitchDeg,yawDeg,targetY`. */
   readonly reviewCamera: ReviewCameraOverride | null;
   /** Loads a non-persistent late-game career for progression acceptance review. */
-  readonly progressionReviewStage: 3 | 5 | null;
+  readonly progressionReviewStage: 2 | 3 | 4 | 5 | null;
   /** Loads one named incident through the normal career hydration path. */
   readonly incidentReviewId: string | null;
 }
@@ -120,7 +120,15 @@ export function resolveDebugFlags(
     actionReview: has('actions') || actorReview,
     actorReview,
     reviewCamera: parseReviewCamera(params, actorReview ? ACTOR_REVIEW_CAMERA : null),
-    progressionReviewStage: has('estate') ? 5 : has('progression') ? 3 : null,
+    progressionReviewStage: has('estate')
+      ? 5
+      : has('regional')
+        ? 4
+        : has('progression')
+          ? 3
+          : has('licensed')
+            ? 2
+            : null,
     incidentReviewId: INCIDENT_REVIEW_FLAGS.find((flag) => has(flag)) ?? null,
   };
 }

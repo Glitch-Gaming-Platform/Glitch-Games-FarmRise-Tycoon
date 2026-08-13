@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T16:33:21.897Z",
+  "generatedAt": "2026-08-13T04:59:17.074Z",
   "models": {
     "soundEffects": "eleven_text_to_sound_v2",
     "music": "music_v2"
@@ -38,11 +38,12 @@
     {
       "id": "ui.deny",
       "file": "apps/game/public/assets/audio/sfx/ui_deny.mp3",
-      "prompt": "One isolated low soft wooden thud with a slight downward pitch bend, discouraging but friendly and never harsh, dry, no buzzer, no reverb, no music, no speech.",
+      "prompt": "One clearly audible isolated low wooden refusal thud with a slight downward pitch bend, compact and friendly rather than harsh, firm rounded transient, dry close recording, no buzzer, no reverb, no music, no speech.",
       "request": {
         "modelId": "eleven_text_to_sound_v2",
         "durationSeconds": 0.6,
-        "promptInfluence": 0.72,
+        "promptInfluence": 0.82,
+        "gainDb": 20,
         "requestId": null
       },
       "bytes": 6941,
@@ -103,15 +104,80 @@
     {
       "id": "farm.footstep",
       "file": "apps/game/public/assets/audio/sfx/farm_footstep.mp3",
-      "prompt": "Exactly one soft leather work boot step on dry packed red earth, dusty compact impact, no second step, no gravel scatter, no reverb, no ambience, no music, no speech.",
+      "prompt": "Exactly one clearly audible leather work boot step on dry packed red earth, firm dusty compact heel-and-sole impact at close range, no second step, no gravel scatter, no reverb, no ambience, no music, no speech.",
       "request": {
         "modelId": "eleven_text_to_sound_v2",
         "durationSeconds": 0.5,
-        "promptInfluence": 0.76,
+        "promptInfluence": 0.84,
         "requestId": null
       },
       "bytes": 5060,
       "durationSeconds": 0.35
+    },
+    {
+      "id": "farm.cart_roll",
+      "file": "apps/game/public/assets/audio/sfx/farm_cart_roll.mp3",
+      "prompt": "One short movement beat from a small wooden farm cart on packed red earth: wheel rolls over one shallow rut, dry wood axle creaks once, compact and close, no horse, no engine, no footsteps, no ambience, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.8,
+        "promptInfluence": 0.74,
+        "requestId": null
+      },
+      "bytes": 10389,
+      "durationSeconds": 0.79
+    },
+    {
+      "id": "farm.pickup",
+      "file": "apps/game/public/assets/audio/sfx/farm_pickup.mp3",
+      "prompt": "A small wooden produce crate is lifted cleanly from dry soil by hand: brief canvas grip rustle, light wood scrape leaving the ground, compact tactile farm Foley, no footsteps, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.9,
+        "promptInfluence": 0.72,
+        "requestId": null
+      },
+      "bytes": 11329,
+      "durationSeconds": 0.87
+    },
+    {
+      "id": "farm.deposit",
+      "file": "apps/game/public/assets/audio/sfx/farm_deposit.mp3",
+      "prompt": "A carried wooden produce crate is set firmly but carefully onto a timber store floor: one low wood contact thump and tiny settling knock, close dry farm Foley, no breaking wood, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 0.9,
+        "promptInfluence": 0.74,
+        "requestId": null
+      },
+      "bytes": 11329,
+      "durationSeconds": 0.87
+    },
+    {
+      "id": "farm.shoo_animals",
+      "file": "apps/game/public/assets/audio/sfx/farm_shoo_animals.mp3",
+      "prompt": "A farmer drives livestock toward shelter without speaking: exactly two quick bare-hand claps, one firm boot scuff on packed earth, and a brief nearby movement of straw, decisive but gentle, no human words, no animal calls, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.2,
+        "promptInfluence": 0.78,
+        "requestId": null
+      },
+      "bytes": 15091,
+      "durationSeconds": 1.19
+    },
+    {
+      "id": "farm.repair",
+      "file": "apps/game/public/assets/audio/sfx/farm_repair.mp3",
+      "prompt": "One compact farm repair action by hand: short metal ratchet turn, one controlled wooden tool knock, then a small secure latch click, close dry Foley, successful maintenance without a reward chime, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.3,
+        "promptInfluence": 0.74,
+        "requestId": null
+      },
+      "bytes": 16031,
+      "durationSeconds": 1.27
     },
     {
       "id": "farm.build_place",
@@ -121,6 +187,7 @@
         "modelId": "eleven_text_to_sound_v2",
         "durationSeconds": 0.8,
         "promptInfluence": 0.72,
+        "gainDb": 10,
         "requestId": null
       },
       "bytes": 9135,
@@ -138,6 +205,33 @@
       },
       "bytes": 18853,
       "durationSeconds": 1.5
+    },
+    {
+      "id": "processing.start",
+      "file": "apps/game/public/assets/audio/sfx/processing_start.mp3",
+      "prompt": "A small belt-driven farm processing machine starts one batch: leather belt catches, wooden gear turns twice, restrained metal mechanism settles into motion, close and compact, no long loop, no engine, no alarm, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.74,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "processing.complete",
+      "file": "apps/game/public/assets/audio/sfx/processing_complete.mp3",
+      "prompt": "A small farm processing machine finishes one batch: mechanism winds down, one finished bundle drops into a wooden tray, followed by a subtle wooden completion tick, close dry Foley. The complete action must finish within 1.6 seconds and decay to clean silence for the rest of the file. No cash sound, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 2.4,
+        "promptInfluence": 0.72,
+        "fadeOutSeconds": 0.35,
+        "requestId": null
+      },
+      "bytes": 29511,
+      "durationSeconds": 2.39
     },
     {
       "id": "market.sell",
@@ -181,11 +275,11 @@
     {
       "id": "event.warning",
       "file": "apps/game/public/assets/audio/sfx/event_warning.mp3",
-      "prompt": "Two slow distant low wooden wind-chime knocks outdoors with a faint hollow resonance, uneasy and unmistakable but not frightening, plenty of space between strikes, no melody, no voice, no storm ambience.",
+      "prompt": "Exactly two clearly audible slow low wooden warning knocks outdoors, solid hollow timber transients with restrained resonance and plenty of space between them, uneasy and unmistakable but not frightening, no melody, no voice, no storm ambience.",
       "request": {
         "modelId": "eleven_text_to_sound_v2",
         "durationSeconds": 1.9,
-        "promptInfluence": 0.74,
+        "promptInfluence": 0.84,
         "requestId": null
       },
       "bytes": 22301,
@@ -216,6 +310,175 @@
       },
       "bytes": 15091,
       "durationSeconds": 1.2
+    },
+    {
+      "id": "incident.drought_warning",
+      "file": "apps/game/public/assets/audio/sfx/incident_drought_warning.mp3",
+      "prompt": "An isolated drought warning on a quiet farm: one dry wind pass over brittle grass and crop leaves, followed by a strained old timber fence creak, uneasy and sparse. The warning action must finish within 1.7 seconds and decay to clean silence for the rest of the file. No thunder, no rain, no animals, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 2.5,
+        "promptInfluence": 0.76,
+        "requestId": null
+      },
+      "bytes": 30451,
+      "durationSeconds": 2.47
+    },
+    {
+      "id": "incident.drought_impact",
+      "file": "apps/game/public/assets/audio/sfx/incident_drought_impact.mp3",
+      "prompt": "Parched farm soil cracks open at close range: one sharp earthen split, granular dry dirt crumble, and a short dusty gust over leaves, serious but natural, no cinematic boom, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.8,
+        "promptInfluence": 0.76,
+        "requestId": null
+      },
+      "bytes": 21674,
+      "durationSeconds": 1.75
+    },
+    {
+      "id": "incident.fox_raid_warning",
+      "file": "apps/game/public/assets/audio/sfx/incident_fox_raid_warning.mp3",
+      "prompt": "A fox raid warning from the farm treeline: one distant thin red fox yip, then one twig snap and a brief nervous movement through dry grass, alerting but not frightening, no growl, no other animals, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.4,
+        "promptInfluence": 0.8,
+        "requestId": null
+      },
+      "bytes": 16972,
+      "durationSeconds": 1.35
+    },
+    {
+      "id": "incident.cart_axle_warning",
+      "file": "apps/game/public/assets/audio/sfx/incident_cart_axle_warning.mp3",
+      "prompt": "A loaded wooden farm cart warns of failure: axle groans under weight, wheel hub gives one dry high squeak, and timber flexes without breaking, close isolated Foley, no horse, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.78,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "incident.cart_axle_impact",
+      "file": "apps/game/public/assets/audio/sfx/incident_cart_axle_impact.mp3",
+      "prompt": "A wooden farm cart axle fails at close range: one hard timber snap, wheel drops with a low wooden thud, and a modest produce load lands in soft mud, no crash pileup, no animal, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.8,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "incident.road_washout_warning",
+      "file": "apps/game/public/assets/audio/sfx/incident_road_washout_warning.mp3",
+      "prompt": "A rural road washout warning: shallow fast water rises through roadside gravel, several small stones shift and roll, damp earth loosens, compact isolated outdoor Foley, no thunder, no vehicle, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.8,
+        "promptInfluence": 0.76,
+        "requestId": null
+      },
+      "bytes": 21674,
+      "durationSeconds": 1.75
+    },
+    {
+      "id": "incident.road_washout_impact",
+      "file": "apps/game/public/assets/audio/sfx/incident_road_washout_impact.mp3",
+      "prompt": "A small muddy farm road edge collapses into rushing runoff: compact wet earth slump, gravel slide, then a brief stronger water rush, serious but not cinematic, no thunder, no vehicle, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 2,
+        "promptInfluence": 0.78,
+        "requestId": null
+      },
+      "bytes": 24182,
+      "durationSeconds": 1.938277
+    },
+    {
+      "id": "incident.blight_warning",
+      "file": "apps/game/public/assets/audio/sfx/incident_blight_warning.mp3",
+      "prompt": "A crop blight warning heard close to one field bed: healthy leaves rustle, then one leaf dries, curls and crackles unnaturally, sparse papery plant Foley, no insects, no wind gust, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.5,
+        "promptInfluence": 0.78,
+        "requestId": null
+      },
+      "bytes": 18539,
+      "durationSeconds": 1.47
+    },
+    {
+      "id": "incident.blight_impact",
+      "file": "apps/game/public/assets/audio/sfx/incident_blight_impact.mp3",
+      "prompt": "Crop blight takes hold across a small patch: several broad leaves rapidly crisp, curl and shed with brittle papery crackles, close dry plant Foley, no fire, no insects, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.7,
+        "promptInfluence": 0.78,
+        "requestId": null
+      },
+      "bytes": 20734,
+      "durationSeconds": 1.67
+    },
+    {
+      "id": "incident.processor_breakdown_warning",
+      "file": "apps/game/public/assets/audio/sfx/incident_processor_breakdown_warning.mp3",
+      "prompt": "A small belt-driven farm processor warns it is failing: leather belt squeals briefly, loose metal housing rattles three times, mechanism continues under strain, close isolated machinery Foley, no alarm siren, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.7,
+        "promptInfluence": 0.8,
+        "requestId": null
+      },
+      "bytes": 20734,
+      "durationSeconds": 1.67
+    },
+    {
+      "id": "incident.processor_breakdown_impact",
+      "file": "apps/game/public/assets/audio/sfx/incident_processor_breakdown_impact.mp3",
+      "prompt": "A small farm processor seizes: belt slaps loose, one hard metal clunk stops the mechanism, then a short descending mechanical whirr dies away, close and serious, no explosion, no alarm, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.8,
+        "promptInfluence": 0.8,
+        "requestId": null
+      },
+      "bytes": 21674,
+      "durationSeconds": 1.75
+    },
+    {
+      "id": "incident.cold_snap_warning",
+      "file": "apps/game/public/assets/audio/sfx/incident_cold_snap_warning.mp3",
+      "prompt": "A cold snap warning arrives on a quiet farm: sudden thin winter wind through timber slats with a few tiny ice crystals ticking against wood, sparse and unmistakably cold, no blizzard, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.8,
+        "promptInfluence": 0.74,
+        "requestId": null
+      },
+      "bytes": 21674,
+      "durationSeconds": 1.749932
+    },
+    {
+      "id": "incident.cold_snap_impact",
+      "file": "apps/game/public/assets/audio/sfx/incident_cold_snap_impact.mp3",
+      "prompt": "Hard frost rapidly forms over stored farm goods: one brittle icy crack spreads, dry containers tighten and creak, followed by a compact cold gust, no breaking glass, no storm, no voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.8,
+        "promptInfluence": 0.76,
+        "requestId": null
+      },
+      "bytes": 21674,
+      "durationSeconds": 1.75
     },
     {
       "id": "animal.fox_alert",
@@ -257,6 +520,32 @@
       "durationSeconds": 0.746757
     },
     {
+      "id": "animal.sheep",
+      "file": "apps/game/public/assets/audio/sfx/animal_sheep.mp3",
+      "prompt": "Exactly one calm adult sheep bleat at close range, natural medium pitch, friendly farm animal call, dry recording with almost no barn ambience, no lamb, no flock chorus, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.2,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 15091,
+      "durationSeconds": 1.19
+    },
+    {
+      "id": "animal.cow",
+      "file": "apps/game/public/assets/audio/sfx/animal_cow.mp3",
+      "prompt": "Exactly one gentle adult dairy cow lowing call at close range, warm and unhurried, natural farm animal vocal, dry recording with almost no barn ambience, no herd chorus, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
       "id": "animal.raid_loss",
       "file": "apps/game/public/assets/audio/sfx/animal_raid_loss.mp3",
       "prompt": "A brief startled chicken wing flutter and two distressed clucks scattering away, gentle game loss cue without injury sounds, dry farm Foley, no predator growl, no voice, no music.",
@@ -268,6 +557,19 @@
       },
       "bytes": 16345,
       "durationSeconds": 1.3
+    },
+    {
+      "id": "season.transition",
+      "file": "apps/game/public/assets/audio/sfx/season_transition.mp3",
+      "prompt": "A short rustic season-turn cue: one airy breeze lifts a few dry leaves, followed by a warm ascending three-note phrase on small wooden marimba bars and soft acoustic strings, reflective rather than triumphant. The phrase and its natural decay must finish within 2.3 seconds, followed by clean silence. No voice, no background music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 3.2,
+        "promptInfluence": 0.66,
+        "requestId": null
+      },
+      "bytes": 39228,
+      "durationSeconds": 3.19
     },
     {
       "id": "goal.land_purchased",
@@ -307,6 +609,747 @@
       },
       "bytes": 27316,
       "durationSeconds": 2.2
+    },
+    {
+      "id": "animal.cow_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_cow_2.mp3",
+      "prompt": "Exactly one short adult dairy cow contact moo at close range, a little brighter and more questioning than a long low, dry natural recording, no herd, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.cow_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_cow_3.mp3",
+      "prompt": "Exactly one contented adult dairy cow nasal low and soft breath at close range, calm and low pitched, dry natural farm animal recording, no herd, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.pig_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_pig_1.mp3",
+      "prompt": "Exactly one friendly domestic pig oink at close range, medium pitch and natural, dry recording with almost no pen ambience, no group, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.pig_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_pig_2.mp3",
+      "prompt": "Exactly two quick domestic pig grunts at close range, curious and relaxed, dry natural recording, no squeal, no group, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.pig_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_pig_3.mp3",
+      "prompt": "Exactly one brief excited domestic pig squeal, lively but not distressed or injured, close dry recording, no group, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.horse_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_horse_1.mp3",
+      "prompt": "Exactly one adult farm horse neigh at medium distance, clear natural rise and fall, calm rather than alarmed, little stable ambience, no other horses, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.horse_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_horse_2.mp3",
+      "prompt": "Exactly one soft adult horse whinny at close range, friendly greeting call, dry natural recording, no hoofbeats, no other horses, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.589705
+    },
+    {
+      "id": "animal.horse_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_horse_3.mp3",
+      "prompt": "Exactly one adult horse nasal snort and brief breath at close range, relaxed stable animal Foley, no neigh, no hoofbeats, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.575782
+    },
+    {
+      "id": "animal.goat_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_goat_1.mp3",
+      "prompt": "Exactly one adult farm goat bleat at close range, clear natural nasal call, dry recording, no herd chorus, no bell, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.goat_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_goat_2.mp3",
+      "prompt": "Exactly one short questioning goat maa at close range, higher and quicker than a full bleat, dry natural recording, no herd, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.goat_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_goat_3.mp3",
+      "prompt": "Exactly two soft contented goat grunts and a tiny breath at close range, calm and natural, no bleat chorus, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.pigeon_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_pigeon_1.mp3",
+      "prompt": "Exactly one domestic pigeon coo phrase at close range, low rounded two-part call, dry natural bird recording, no flock, no wing noise, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.576599
+    },
+    {
+      "id": "animal.pigeon_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_pigeon_2.mp3",
+      "prompt": "Exactly one shorter brighter pigeon coo at close range, curious and gentle, dry recording, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.pigeon_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_pigeon_3.mp3",
+      "prompt": "One pigeon takes off nearby: exactly three quick wing flaps and one faint coo, compact natural farmyard bird Foley, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.rabbit_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_rabbit_1.mp3",
+      "prompt": "A domestic rabbit at close range makes one soft nasal sniff and tiny contented tooth purr, extremely quiet but audible, dry recording, no cage rattle, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19480,
+      "durationSeconds": 1.547211
+    },
+    {
+      "id": "animal.rabbit_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_rabbit_2.mp3",
+      "prompt": "Exactly one rabbit hind-foot thump on packed earth, compact low impact with a tiny body rustle, no repeated footsteps, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.rabbit_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_rabbit_3.mp3",
+      "prompt": "Exactly one very soft domestic rabbit squeak at close range, brief and curious rather than distressed, dry recording, no other animals, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 14151,
+      "durationSeconds": 1.112562
+    },
+    {
+      "id": "animal.sheep_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_sheep_2.mp3",
+      "prompt": "Exactly one short adult sheep baa at close range, slightly higher and more questioning than a long bleat, natural dry recording, no lamb, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.sheep_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_sheep_3.mp3",
+      "prompt": "Exactly one low contented adult sheep nasal bleat and soft breath, calm and close, dry natural recording, no flock chorus, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.deer_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_deer_1.mp3",
+      "prompt": "Exactly one gentle adult doe bleat at medium distance, quiet natural woodland-farm edge call, dry with very little ambience, no herd, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.deer_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_deer_2.mp3",
+      "prompt": "Exactly one deer alarm snort at medium distance, brief sharp breathy warning, natural and alert but not cinematic, no hoofbeats, no herd, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.deer_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_deer_3.mp3",
+      "prompt": "Exactly one low adult deer contact grunt at medium distance, restrained and natural, almost no ambience, no herd, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.589365
+    },
+    {
+      "id": "animal.hen_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_hen_2.mp3",
+      "prompt": "Exactly one domestic hen gives a short egg-laying cackle phrase, lively but compact, close dry farm recording, no rooster, no flock chorus, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.hen_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_hen_3.mp3",
+      "prompt": "Exactly two soft contented hen bok-bok clucks at close range, friendly and unhurried, dry natural recording, no rooster, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19480,
+      "durationSeconds": 1.545442
+    },
+    {
+      "id": "animal.rooster_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_rooster_1.mp3",
+      "prompt": "Exactly one adult rooster crow at medium farmyard distance, full natural call, dry with light outdoor air, no hens, no repeated crowing, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.rooster_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_rooster_2.mp3",
+      "prompt": "Exactly one shorter adult rooster crow, brisk morning call at medium distance, natural farm recording, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19480,
+      "durationSeconds": 1.56161
+    },
+    {
+      "id": "animal.rooster_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_rooster_3.mp3",
+      "prompt": "Exactly one adult rooster warning cluck and sharp wing rustle at close range, alert but not attacking, no crow, no hens, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19166,
+      "durationSeconds": 1.517982
+    },
+    {
+      "id": "animal.turkey_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_turkey_1.mp3",
+      "prompt": "Exactly one adult turkey gobble phrase at medium distance, natural resonant farm bird call, dry recording, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.turkey_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_turkey_2.mp3",
+      "prompt": "Exactly two quiet adult turkey clucks at close range, curious and natural, no gobble, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.turkey_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_turkey_3.mp3",
+      "prompt": "Exactly one soft adult turkey purr and breathy trill at close range, calm natural call, no gobble, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.588798
+    },
+    {
+      "id": "animal.dove_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_dove_1.mp3",
+      "prompt": "Exactly one gentle white dove coo phrase at close range, soft rounded two-note call, dry natural recording, no flock, no wing noise, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.dove_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_dove_2.mp3",
+      "prompt": "Exactly one longer soothing dove coo with a quiet breath between notes, close and natural, no flock chorus, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.dove_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_dove_3.mp3",
+      "prompt": "A single dove lands nearby: exactly two soft wing flaps, a light perch contact and one faint coo, compact natural Foley, no flock, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.bee_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_bee_1.mp3",
+      "prompt": "One honey bee hovers close for a brief moment: focused natural wing buzz with a small pitch drift, isolated, no swarm, no music, no human voice.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.bee_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_bee_2.mp3",
+      "prompt": "One honey bee makes a quick close fly-by from one side to the other, short natural Doppler-like wing buzz, no swarm, no sting, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.bee_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_bee_3.mp3",
+      "prompt": "One honey bee lands on a flower and buzzes in two short pulses, tiny close natural insect Foley, no swarm ambience, no music, no human voice.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.duck_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_duck_1.mp3",
+      "prompt": "Exactly one adult farm duck quack at close range, clear natural medium-pitch call, dry recording, no flock, no water ambience, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.duck_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_duck_2.mp3",
+      "prompt": "Exactly two short adult duck quacks at close range, conversational and relaxed, natural dry recording, no flock chorus, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.duck_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_duck_3.mp3",
+      "prompt": "Exactly one softer raspy adult duck quack and tiny feather rustle, close natural farm bird recording, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.589977
+    },
+    {
+      "id": "animal.duckling_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_duckling_1.mp3",
+      "prompt": "Exactly three tiny duckling peeps at close range, bright gentle juvenile calls, dry natural recording, no adult duck, no flock bed, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.duckling_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_duckling_2.mp3",
+      "prompt": "Exactly one questioning duckling peep followed by a tiny breath, close and natural, no other birds, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.duckling_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_duckling_3.mp3",
+      "prompt": "A duckling makes two excited peeps and one soft webbed-foot patter step, compact close Foley, no water splash, no flock, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.589955
+    },
+    {
+      "id": "animal.dog_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_dog_1.mp3",
+      "prompt": "Exactly one friendly medium farm dog bark at close range, clear natural woof, alert but not aggressive, dry recording, no other dogs, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.dog_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_dog_2.mp3",
+      "prompt": "Exactly two soft friendly farm dog woofs at medium distance, relaxed and welcoming, no growl, no pack, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.dog_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_dog_3.mp3",
+      "prompt": "Exactly one gentle dog whine followed by a quiet panting breath, close and friendly, no barking, no distress, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19166,
+      "durationSeconds": 1.531156
+    },
+    {
+      "id": "animal.cat_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_cat_1.mp3",
+      "prompt": "Exactly one friendly adult farm cat meow at close range, natural medium pitch, dry recording, no kittens, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.cat_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_cat_2.mp3",
+      "prompt": "Exactly one short adult cat chirp-trill greeting at close range, bright and friendly, natural dry recording, no meow sequence, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.cat_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_cat_3.mp3",
+      "prompt": "A contented adult farm cat gives one audible purr pulse and soft nasal breath at close range, compact and natural, no meow, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.donkey_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_donkey_1.mp3",
+      "prompt": "Exactly one adult donkey bray at medium farm distance, full natural hee-haw phrase, dry with light outdoor air, no other donkeys, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.donkey_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_donkey_2.mp3",
+      "prompt": "Exactly one shorter adult donkey bray, compact rising then falling call, natural farm recording, no herd, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.donkey_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_donkey_3.mp3",
+      "prompt": "Exactly one adult donkey nasal snort and low grumble at close range, calm animal Foley, no bray, no hoofbeats, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.parrot_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_parrot_1.mp3",
+      "prompt": "Exactly one colourful parrot squawk at close range, bright natural bird call, expressive but not harsh, no words, no flock, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.parrot_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_parrot_2.mp3",
+      "prompt": "Exactly one short parrot chatter phrase made only of natural nonverbal clicks and chirps, no intelligible speech, close dry recording, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.parrot_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_parrot_3.mp3",
+      "prompt": "Exactly two friendly parrot chirps with one small wing rustle, close natural bird recording, no words, no flock, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.chick_1",
+      "file": "apps/game/public/assets/audio/sfx/animal_chick_1.mp3",
+      "prompt": "Exactly three tiny newly hatched chick peeps at close range, warm gentle juvenile calls, dry natural recording, no hen, no brood chorus, no human voice, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.chick_2",
+      "file": "apps/game/public/assets/audio/sfx/animal_chick_2.mp3",
+      "prompt": "Exactly one bright questioning baby chick peep followed by a tiny breath, very close and natural, no other birds, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
+    },
+    {
+      "id": "animal.chick_3",
+      "file": "apps/game/public/assets/audio/sfx/animal_chick_3.mp3",
+      "prompt": "A baby chick makes two quick excited peeps and one tiny straw step rustle, compact natural farm Foley, no hen, no flock bed, no music.",
+      "request": {
+        "modelId": "eleven_text_to_sound_v2",
+        "durationSeconds": 1.6,
+        "promptInfluence": 0.82,
+        "requestId": null
+      },
+      "bytes": 19793,
+      "durationSeconds": 1.59
     }
   ],
   "music": [

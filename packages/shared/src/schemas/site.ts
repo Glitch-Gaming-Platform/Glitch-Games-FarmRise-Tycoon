@@ -86,7 +86,7 @@ export const storeSchema = z.object({
 });
 export type StoreSaveState = z.infer<typeof storeSchema>;
 
-export const animalGroupSchema = z.object({
+export const animalGroupSchemaV2 = z.object({
   id: idStringSchema,
   species: speciesSchema,
   count: z.number().int().min(0).max(500),
@@ -96,6 +96,11 @@ export const animalGroupSchema = z.object({
   tileZ: z.number().int().min(0).max(255),
   /** True while the group has been driven inside during an incident. */
   sheltered: z.boolean().default(false),
+});
+
+export const animalGroupSchema = animalGroupSchemaV2.extend({
+  /** Stable inherited-shelter id or completed animal-shelter building id. */
+  shelterId: idStringSchema,
 });
 export type AnimalGroupSaveState = z.infer<typeof animalGroupSchema>;
 
@@ -166,3 +171,9 @@ export const farmSiteSchema = z.object({
   wageRemainder: z.number().min(0).max(1).default(0),
 });
 export type FarmSiteSaveState = z.infer<typeof farmSiteSchema>;
+
+/** Frozen version-2 site shape, retained only for deterministic migration. */
+export const farmSiteSchemaV2 = farmSiteSchema.extend({
+  animals: z.array(animalGroupSchemaV2).max(32),
+});
+export type FarmSiteSaveStateV2 = z.infer<typeof farmSiteSchemaV2>;

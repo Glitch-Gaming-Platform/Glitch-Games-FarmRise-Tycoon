@@ -26,7 +26,7 @@ const ULTRA_MODEL_ASSETS: readonly AssetEntry[] = [
     kind: 'model',
     url: 'assets/models/animals.glb',
     phase: 'critical',
-    bytes: 140_928,
+    bytes: 194_428,
     scenes: ['farm'],
   },
   {
@@ -42,7 +42,7 @@ const ULTRA_MODEL_ASSETS: readonly AssetEntry[] = [
     kind: 'model',
     url: 'assets/models/characters.glb',
     phase: 'critical',
-    bytes: 156_804,
+    bytes: 194_592,
     scenes: ['farm'],
   },
   {
@@ -108,8 +108,8 @@ const ULTRA_MODEL_ASSETS: readonly AssetEntry[] = [
  *
  * Ultra art is regenerated from Blender. Those files must never silently
  * replace low's established geometry again, so low has its own physical URLs
- * and measured byte counts. Logical ids stay identical: scenes and views do
- * not fork, only the loader's manifest does.
+ * and measured byte counts. Logical ids stay identical for those legacy
+ * packs; new species may add a small supplement instead of rewriting them.
  */
 export const LOW_MODEL_ASSETS: readonly AssetEntry[] = [
   {
@@ -118,6 +118,14 @@ export const LOW_MODEL_ASSETS: readonly AssetEntry[] = [
     url: 'assets/models/low/animals.glb',
     phase: 'critical',
     bytes: 138_816,
+    scenes: ['farm'],
+  },
+  {
+    id: 'model:animals-sheep',
+    kind: 'model',
+    url: 'assets/models/animals-sheep.glb',
+    phase: 'critical',
+    bytes: 53_716,
     scenes: ['farm'],
   },
   {
@@ -196,7 +204,7 @@ export const LOW_MODEL_ASSETS: readonly AssetEntry[] = [
 
 /** Ultra/default manifest: regenerated models plus the lazy surface library. */
 export const CORE_MANIFEST: AssetManifest = {
-  version: 12,
+  version: 13,
   assets: [...AUDIO_ASSETS, ...UI_ICON_ASSETS, ...SURFACE_TEXTURE_ASSETS, ...ULTRA_MODEL_ASSETS],
 };
 
@@ -205,6 +213,6 @@ export const CORE_MANIFEST: AssetManifest = {
  * The absence makes the zero-download guarantee structural, not conventional.
  */
 export const LOW_CORE_MANIFEST: AssetManifest = {
-  version: 12,
+  version: 13,
   assets: [...AUDIO_ASSETS, ...UI_ICON_ASSETS, ...LOW_MODEL_ASSETS],
 };

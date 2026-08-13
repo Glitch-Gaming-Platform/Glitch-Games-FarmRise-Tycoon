@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-08-12T07:03:03",
+  "generated_at": "2026-08-12T22:33:07",
   "blender": "5.2.0 LTS",
-  "duration_seconds": 2.43,
-  "palette_entries": 101,
+  "duration_seconds": 2.65,
+  "palette_entries": 106,
   "palette_contrast_failures": [],
   "budgets": {
     "crop": 900,
     "building": 900,
-    "character": 2600,
+    "character": 3500,
     "animal": 700,
     "prop": 300
   },
@@ -507,8 +507,8 @@
     {
       "name": "SM_char_farmer",
       "asset": "char_farmer",
-      "triangles": 2390,
-      "vertices": 1329
+      "triangles": 3488,
+      "vertices": 2005
     },
     {
       "name": "SM_animal_chicken",
@@ -521,6 +521,12 @@
       "asset": "animal_cow",
       "triangles": 678,
       "vertices": 399
+    },
+    {
+      "name": "SM_animal_sheep",
+      "asset": "animal_sheep",
+      "triangles": 636,
+      "vertices": 374
     },
     {
       "name": "SM_animal_fox",
@@ -625,31 +631,31 @@
       "vertices": 48
     }
   ],
-  "total_triangles": 35694,
+  "total_triangles": 37428,
   "family_bytes": {
     "crops": {
       "raw": 607128,
-      "raw_gzip": 197563,
-      "draco": 211256,
-      "draco_gzip": 172663,
+      "raw_gzip": 197565,
+      "draco": 211248,
+      "draco_gzip": 172940,
       "meshopt": 353740,
-      "meshopt_gzip": 159726
+      "meshopt_gzip": 159707
     },
     "crops-spring": {
       "raw": 377792,
       "raw_gzip": 113390,
-      "draco": 132208,
-      "draco_gzip": 107774,
-      "meshopt": 223252,
-      "meshopt_gzip": 97683
+      "draco": 132136,
+      "draco_gzip": 107865,
+      "meshopt": 223248,
+      "meshopt_gzip": 97675
     },
     "crops-summer": {
       "raw": 351176,
       "raw_gzip": 109476,
-      "draco": 123568,
-      "draco_gzip": 99526,
-      "meshopt": 215204,
-      "meshopt_gzip": 105837
+      "draco": 123788,
+      "draco_gzip": 99504,
+      "meshopt": 215200,
+      "meshopt_gzip": 105822
     },
     "crops-autumn": {
       "raw": 334172,
@@ -661,11 +667,11 @@
     },
     "crops-winter": {
       "raw": 342452,
-      "raw_gzip": 100454,
-      "draco": 116620,
-      "draco_gzip": 92626,
-      "meshopt": 201044,
-      "meshopt_gzip": 78118
+      "raw_gzip": 100453,
+      "draco": 116584,
+      "draco_gzip": 92568,
+      "meshopt": 201064,
+      "meshopt_gzip": 78141
     },
     "ground": {
       "raw": 28248,
@@ -678,34 +684,40 @@
     "buildings": {
       "raw": 758656,
       "raw_gzip": 142520,
-      "draco": 205664,
-      "draco_gzip": 167748,
-      "meshopt": 428524,
-      "meshopt_gzip": 133979
+      "draco": 205656,
+      "draco_gzip": 167736,
+      "meshopt": 428520,
+      "meshopt_gzip": 134009
     },
     "characters": {
-      "raw": 156804,
-      "raw_gzip": 43399,
-      "draco": 46716,
-      "draco_gzip": 41178,
-      "meshopt": 91388,
-      "meshopt_gzip": 49251
+      "raw": 194592,
+      "raw_gzip": 62095,
+      "draco": 55188,
+      "draco_gzip": 49160,
+      "meshopt": 112148,
+      "meshopt_gzip": 61053
     },
     "animals": {
-      "raw": 140928,
-      "raw_gzip": 42477,
-      "draco": 46452,
-      "draco_gzip": 39495,
-      "meshopt": 88592,
-      "meshopt_gzip": 49459
+      "raw": 194428,
+      "raw_gzip": 56817,
+      "draco": 64248,
+      "draco_gzip": 54427,
+      "meshopt": 121376,
+      "meshopt_gzip": 66862
     },
     "props": {
       "raw": 257868,
-      "raw_gzip": 85616,
-      "draco": 94692,
-      "draco_gzip": 76115,
+      "raw_gzip": 85618,
+      "draco": 94644,
+      "draco_gzip": 76056,
       "meshopt": 167824,
-      "meshopt_gzip": 84764
+      "meshopt_gzip": 84787
+    }
+  },
+  "low_supplement_bytes": {
+    "animals-sheep": {
+      "raw": 53716,
+      "raw_gzip": 14585
     }
   },
   "blend": "art/source/farmrise_assets.blend"

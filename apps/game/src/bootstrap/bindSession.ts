@@ -26,8 +26,11 @@ import {
   availableProjects,
   batchMargin,
   cents,
+  getBuyer,
   getItem,
+  hasBuildingAccess,
   milestoneProgress as milestoneRequirementProgress,
+  plantableCrops,
   purchasableAnimals,
   recipesFor,
   storageUsed,
@@ -35,6 +38,7 @@ import {
   ticksToSeconds,
   type BuildingKind,
   type ProcessorKind,
+  type WorkerTask,
 } from '@farmrise/shared';
 import type { Unsubscribe } from '@engine/core/types.js';
 import type { AudioSystem } from '@engine/audio/AudioSystem.js';
@@ -42,6 +46,8 @@ import { SOUND } from '@assets/audio/soundIds.js';
 import { inventoryRows } from '@game/items/InventoryView.js';
 import {
   buildCostFor,
+  contractQuote,
+  processableInventory,
   sellableInventory,
   sellableQuantity,
   spotQuote,
@@ -50,7 +56,7 @@ import type { FarmScene } from '@game/scenes/FarmScene.js';
 import type { SessionController } from '@game/systems/SessionController.js';
 import type { UiRoot } from '@ui/UiRoot.js';
 import type { GameLocalization } from '@ui/i18n/gameI18n.js';
-import { domainText, itemName } from '@ui/i18n/domainText.js';
+import { buildingName, cropName, domainText, itemName, seasonName } from '@ui/i18n/domainText.js';
 import { localizeGameText } from '@ui/i18n/gameText.js';
 import type { Beat } from '@game/onboarding/beats.js';
 
@@ -138,6 +144,54 @@ export function bindSession(
   };
 
   const refresh = (): void => {
+    if (ui.storage.visible) {
+      const buildingId = session.focusedStorageBuildingId;
+      const building = buildingId ? world.structures.get(buildingId) : undefined;
+      const store = buildingId
+        ? world.stores.stores.find((candidate) => candidate.buildingId === buildingId)
+        : undefined;
+      if (building && store) {
+        ui.storage.update({
+          title: buildingName(i18n, building.kind, BUILDINGS[building.kind].displayName),
+          used: storageUsed(store.items),
+          capacity: store.capacity,
+          carryFree: world.carry.free,
+          rows: Object.entries(store.items)
+            .filter(([, quantity]) => quantity > 0)
+            .map(([itemId, quantity]) => {
+              const item = getItem(itemId);
+              const weight = item?.storageWeight ?? 1;
+              return {
+                itemId,
+                displayName: itemName(i18n, itemId, item?.displayName ?? itemId),
+                quantity,
+                takeQuantity: Math.min(quantity, Math.floor(world.carry.free / weight)),
+              };
+            })
+            .sort((left, right) => left.displayName.localeCompare(right.displayName)),
+        });
+      }
+    }
+
+    if (ui.seed.visible) {
+      const interaction = scene.interaction;
+      if (!interaction) throw new Error('Seed panel requires the farm interaction controller.');
+      const season = career.season;
+      ui.seed.update({
+        seasonName: seasonName(i18n, season, season[0]!.toUpperCase() + season.slice(1)),
+        balance: career.balance,
+        options: plantableCrops(career.unlocks, season).map((crop) => ({
+          cropId: crop.id,
+          displayName: cropName(i18n, crop.id, crop.displayName),
+          cost: crop.seedCost,
+          growthTicks: crop.growthTicks,
+          baseYield: crop.baseYield,
+          affordable: career.balance >= crop.seedCost,
+          selected: interaction.selectedCropId === crop.id,
+        })),
+      });
+    }
+
     if (ui.market.visible) {
       // Two kinds of row share the panel: offers you could take, and promises
       // you have already made. Accepted contracts come first because they are
@@ -147,15 +201,19 @@ export function bindSession(
         .map((contract) => {
           const held = sellableQuantity(career, contract.itemId);
           const outstanding = contract.quantity - contract.delivered;
-          const spotValue = cents((getItem(contract.itemId)?.spotUnitPrice ?? 0) * outstanding);
-          const payout = cents(contract.unitPrice * outstanding);
+          const spotValue = cents(spotQuote(career, contract.itemId) * outstanding);
+          const payout = contractQuote(career, contract.itemId, contract.unitPrice, outstanding);
           const item = getItem(contract.itemId);
+          const buyer = getBuyer(contract.buyerId);
           return {
             action: 'deliver' as const,
             orderId: contract.id,
             itemId: contract.itemId,
-            displayName: i18n.t('market.deliverSuffix', {
+            displayName: i18n.t('market.offerName', {
               item: itemName(i18n, contract.itemId, item?.displayName ?? contract.itemId),
+              buyer: buyer
+                ? domainText(i18n, 'buyer', buyer.id, 'name', buyer.displayName)
+                : contract.buyerId,
             }),
             quantity: outstanding,
             payout,
@@ -163,13 +221,23 @@ export function bindSession(
             premiumPercent: spotValue > 0 ? (payout - spotValue) / spotValue : 0,
             ticksRemaining: Math.max(0, contract.deadlineTick - career.tick),
             held,
-            canFulfil: held > 0,
+            canFulfil: held > 0 && career.tick >= contract.acceptedTick,
+            minimumQuality: contract.minimumQuality,
+            recurringEveryTicks: contract.recurringEveryTicks,
+            ticksUntilWindow: Math.max(0, contract.acceptedTick - career.tick),
+            canSchedule: false,
           };
         });
 
       const offers = session.contracts.map((entry) => {
         const held = sellableQuantity(career, entry.offer.itemId);
-        const payout = cents(entry.offer.unitPrice * entry.offer.quantity);
+        const spotValue = cents(spotQuote(career, entry.offer.itemId) * entry.offer.quantity);
+        const payout = contractQuote(
+          career,
+          entry.offer.itemId,
+          entry.offer.unitPrice,
+          entry.offer.quantity,
+        );
         const item = getItem(entry.offer.itemId);
         return {
           action: 'accept' as const,
@@ -181,11 +249,15 @@ export function bindSession(
           }),
           quantity: entry.offer.quantity,
           payout,
-          spotValue: entry.spotValue,
-          premiumPercent: entry.spotValue > 0 ? (payout - entry.spotValue) / entry.spotValue : 0,
+          spotValue,
+          premiumPercent: spotValue > 0 ? (payout - spotValue) / spotValue : 0,
           ticksRemaining: Math.max(0, entry.offer.deadlineTick - career.tick),
           held,
           canFulfil: true,
+          minimumQuality: entry.offer.minimumQuality,
+          recurringEveryTicks: 0,
+          ticksUntilWindow: 0,
+          canSchedule: career.unlocks.includes('scheduled_delivery'),
         };
       });
 
@@ -206,8 +278,9 @@ export function bindSession(
 
     if (ui.build.visible) {
       ui.build.update({
+        context: session.focusedShelterId ? 'livestock' : null,
         balance: career.balance,
-        options: buildableKinds(career.unlocks).map((kind) => {
+        options: buildableKinds(career.unlocks, career.contracts).map((kind) => {
           const cost = buildCostFor(career, kind);
           return { kind, cost: cents(cost), affordable: career.balance >= cost };
         }),
@@ -266,92 +339,111 @@ export function bindSession(
       const switchCost = currentSpecialization
         ? SPECIALIZATIONS[currentSpecialization].switchCost
         : cents(0);
-      const completedHuts = world.structures.completed('worker_hut');
+      const completedHuts = world.structures
+        .completed('worker_hut')
+        .filter((hut) => !session.focusedWorkerHutId || hut.id === session.focusedWorkerHutId);
       const occupiedHuts = new Set(
         world.workforce.workers.map((worker) => worker.hutBuildingId).filter(Boolean),
       );
       const freeHuts = completedHuts.filter((hut) => !occupiedHuts.has(hut.id)).length;
 
-      const processorRows = career.unlocks.includes('processing')
-        ? world.processing.processors.flatMap((processor) => {
-            const building = world.structures.get(processor.buildingId);
-            if (!building) return [];
-            const kind = building.kind as ProcessorKind;
-            if (!PROCESSORS[kind]) return [];
-            const queued = processor.queue.reduce((sum, entry) => sum + entry.batches, 0);
-            const remaining = world.processing.remainingTicks(processor.id, career.specialization);
-            return recipesFor(kind).map((recipe) => {
-              const held = world.stores.totalOf(recipe.inputItemId);
-              const enabled =
-                !building.broken &&
-                queued < PROCESSORS[kind].queueCapacity &&
-                held >= recipe.inputQuantity &&
-                career.balance >= recipe.batchCost;
-              const input = getItem(recipe.inputItemId);
-              const output = getItem(recipe.outputItemId);
-              return {
-                id: `${processor.id}-${recipe.id}`,
-                buildingId: building.id,
-                recipeId: recipe.id,
-                title: domainText(i18n, 'recipe', recipe.id, 'name', recipe.displayName),
-                meta: i18n.t('career.processorMeta', {
-                  inputQuantity: i18n.formatNumber(recipe.inputQuantity),
-                  input: itemName(
-                    i18n,
-                    recipe.inputItemId,
-                    input?.displayName ?? recipe.inputItemId,
-                  ),
-                  outputQuantity: i18n.formatNumber(recipe.outputQuantity),
-                  output: itemName(
-                    i18n,
-                    recipe.outputItemId,
-                    output?.displayName ?? recipe.outputItemId,
-                  ),
-                  cost: i18n.formatCents(recipe.batchCost),
-                  margin: i18n.formatCents(batchMargin(recipe)),
-                  queued: i18n.formatNumber(queued),
-                  capacity: i18n.formatNumber(PROCESSORS[kind].queueCapacity),
-                  remaining:
-                    remaining > 0
-                      ? i18n.t('career.remaining', {
-                          time: i18n.formatDurationSeconds(ticksToSeconds(remaining)),
-                        })
-                      : '',
-                }),
-                action: i18n.t(
-                  building.broken
-                    ? 'career.broken'
-                    : enabled
-                      ? 'career.queueOne'
-                      : 'common.unavailable',
-                ),
-                enabled,
-              };
-            });
-          })
-        : [];
+      const processingInventory = processableInventory(career);
+      const processorRows = world.processing.processors.flatMap((processor) => {
+        const building = world.structures.get(processor.buildingId);
+        if (!building) return [];
+        if (
+          session.focusedProcessorBuildingId &&
+          building.id !== session.focusedProcessorBuildingId
+        ) {
+          return [];
+        }
+        const kind = building.kind as ProcessorKind;
+        if (!PROCESSORS[kind]) return [];
+        const queued = processor.queue.reduce((sum, entry) => sum + entry.batches, 0);
+        const remaining = world.processing.remainingTicks(processor.id, career.specialization);
+        return recipesFor(kind).map((recipe) => {
+          const held = processingInventory[recipe.inputItemId] ?? 0;
+          const enabled =
+            !building.broken &&
+            queued < PROCESSORS[kind].queueCapacity &&
+            held >= recipe.inputQuantity &&
+            career.balance >= recipe.batchCost;
+          const input = getItem(recipe.inputItemId);
+          const output = getItem(recipe.outputItemId);
+          return {
+            id: `${processor.id}-${recipe.id}`,
+            buildingId: building.id,
+            recipeId: recipe.id,
+            title: domainText(i18n, 'recipe', recipe.id, 'name', recipe.displayName),
+            meta: i18n.t('career.processorMeta', {
+              inputQuantity: i18n.formatNumber(recipe.inputQuantity),
+              input: itemName(i18n, recipe.inputItemId, input?.displayName ?? recipe.inputItemId),
+              outputQuantity: i18n.formatNumber(recipe.outputQuantity),
+              output: itemName(
+                i18n,
+                recipe.outputItemId,
+                output?.displayName ?? recipe.outputItemId,
+              ),
+              cost: i18n.formatCents(recipe.batchCost),
+              margin: i18n.formatCents(batchMargin(recipe)),
+              queued: i18n.formatNumber(queued),
+              capacity: i18n.formatNumber(PROCESSORS[kind].queueCapacity),
+              remaining:
+                remaining > 0
+                  ? i18n.t('career.remaining', {
+                      time: i18n.formatDurationSeconds(ticksToSeconds(remaining)),
+                    })
+                  : '',
+            }),
+            action: i18n.t(
+              building.broken
+                ? 'career.broken'
+                : enabled
+                  ? 'career.queueOne'
+                  : 'common.unavailable',
+            ),
+            enabled,
+          };
+        });
+      });
 
       const workerRows = career.unlocks.includes('workers')
         ? [
-            ...world.workforce.workers.map((worker) => ({
-              id: `employed-${worker.id}`,
-              title: worker.displayName,
-              meta: i18n.t('career.workerMeta', {
-                role: domainText(
-                  i18n,
-                  'worker',
-                  worker.role,
-                  'name',
-                  WORKER_ROLES[worker.role].displayName,
-                ),
-                skill: i18n.formatNumber(worker.skill),
-                tasks: i18n.formatNumber(worker.tasksCompleted),
-                priorities: worker.priorities.join(', '),
-              }),
-              action: worker.currentTask ?? i18n.t('career.employed'),
-              enabled: false,
-              selected: true,
-            })),
+            ...world.workforce.workers
+              .filter(
+                (worker) =>
+                  !session.focusedWorkerHutId ||
+                  worker.hutBuildingId === session.focusedWorkerHutId,
+              )
+              .map((worker) => ({
+                id: `employed-${worker.id}`,
+                title: worker.displayName,
+                meta: i18n.t('career.workerMeta', {
+                  role: domainText(
+                    i18n,
+                    'worker',
+                    worker.role,
+                    'name',
+                    WORKER_ROLES[worker.role].displayName,
+                  ),
+                  skill: i18n.formatNumber(worker.skill),
+                  tasks: i18n.formatNumber(worker.tasksCompleted),
+                  priorities: worker.priorities
+                    .map((priority) => workerTaskName(i18n, priority as WorkerTask))
+                    .join(' → '),
+                }),
+                action: worker.currentTask
+                  ? workerTaskName(i18n, worker.currentTask)
+                  : i18n.t('career.prioritize', {
+                      task: workerTaskName(
+                        i18n,
+                        (worker.priorities[1] ?? worker.priorities[0]) as WorkerTask,
+                      ),
+                    }),
+                enabled: !worker.currentTask && worker.priorities.length > 1,
+                selected: true,
+                workerId: worker.id,
+              })),
             ...Object.values(WORKER_ROLES).map((role) => ({
               id: role.id,
               title: i18n.t('career.hireTitle', {
@@ -449,6 +541,11 @@ export function bindSession(
         : [];
 
       ui.career.update({
+        context: session.focusedProcessorBuildingId
+          ? 'processing'
+          : session.focusedWorkerHutId
+            ? 'workforce'
+            : null,
         balance: career.balance,
         stageName: domainText(
           i18n,
@@ -468,7 +565,13 @@ export function bindSession(
           ? {
               id: milestone.id,
               title: domainText(i18n, 'milestone', milestone.id, 'name', milestone.displayName),
-              roleName: domainText(i18n, 'milestone', milestone.id, 'role', milestone.roleName),
+              nextStageName: domainText(
+                i18n,
+                'stage',
+                String(milestone.advancesToStage),
+                'name',
+                STAGE_NAMES[milestone.advancesToStage],
+              ),
               summary: domainText(i18n, 'milestone', milestone.id, 'problem', milestone.newProblem),
               progress: career.milestoneProgress(),
               ready: career.milestoneProgress() >= 1,
@@ -616,10 +719,12 @@ export function bindSession(
 
   subscriptions.push(
     session.events.on('session:panel', ({ panel }) => {
+      ui.seed.setVisible(panel === 'seed');
       ui.market.setVisible(panel === 'market');
       ui.build.setVisible(panel === 'build');
       ui.career.setVisible(panel === 'career');
       ui.town.setVisible(panel === 'town');
+      ui.storage.setVisible(panel === 'storage');
       ui.setMenuShortcutPanel(panel);
       playUi(panel === 'none' ? SOUND.uiClick : SOUND.uiOpen, panel === 'none' ? 0.6 : 0.8);
       refresh();
@@ -630,6 +735,7 @@ export function bindSession(
     session.events.on('session:refused', () => playUi(SOUND.uiDeny, 0.7)),
     career.events.on('career:balance-changed', refresh),
     career.events.on('career:unlocked', refresh),
+    career.events.on('career:season-changed', refresh),
     career.events.on('career:specialization-chosen', refresh),
     world.events.on('world:harvested', refresh),
     world.events.on('world:animal-purchased', refresh),
@@ -696,7 +802,6 @@ export function bindSession(
     // screen it is not terminal: the farm is still running behind it.
     careerDirector.events.on('career:season-review', ({ summary }) => {
       ui.outcome.present(summary);
-      audio.play(SOUND.runSuccess, { bus: 'ui', volume: 0.7 });
       onSeasonReview();
     }),
     i18n.onChange(() => {
@@ -714,20 +819,26 @@ export function bindSession(
       for (const unsubscribe of subscriptions) unsubscribe();
       ui.coach.hide();
       ui.setPlacing(null);
+      ui.seed.setVisible(false);
       ui.market.setVisible(false);
       ui.build.setVisible(false);
       ui.career.setVisible(false);
       ui.town.setVisible(false);
+      ui.storage.setVisible(false);
       ui.setMenuShortcutPanel('none');
       ui.setMenuShortcutsAvailable(false);
     },
   };
 }
 
+function workerTaskName(i18n: GameLocalization, task: WorkerTask): string {
+  return i18n.t(`workerTask.${task}`, undefined, task.replaceAll('_', ' '));
+}
+
 /** Build options the player has actually been taught, in a stable order. */
-function buildableKinds(unlocks: readonly string[]): readonly BuildingKind[] {
-  return BUILDING_KINDS.filter((kind) => {
-    const required = BUILDINGS[kind].requiresUnlock;
-    return required === null || unlocks.includes(required);
-  });
+function buildableKinds(
+  unlocks: readonly string[],
+  contracts: readonly { readonly itemId: string; readonly status: string }[],
+): readonly BuildingKind[] {
+  return BUILDING_KINDS.filter((kind) => hasBuildingAccess(kind, unlocks, contracts));
 }

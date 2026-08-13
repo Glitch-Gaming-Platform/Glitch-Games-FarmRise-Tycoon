@@ -18,7 +18,11 @@ import {
   type BuyerId,
   type TrustTier,
 } from '../domain/buyers.js';
+import { ANIMALS } from '../domain/animals.js';
+import { getCrop } from '../domain/crops.js';
 import { cents, type Cents } from '../domain/ids.js';
+import { getItem, isProcessedItem } from '../domain/items.js';
+import type { Ticks } from '../domain/time.js';
 import { ok, ruleViolation, type Result } from './result.js';
 
 export interface Relationship {
@@ -78,6 +82,26 @@ export function unitPriceFor(buyer: BuyerDefinition, spotPrice: Cents, trust: nu
   return cents(spotPrice * buyer.priceMultiplier * trustPriceMultiplier(trust));
 }
 
+/** Accepted work receives the buyer's full delivery window from commitment. */
+export function acceptedContractDeadline(buyerId: BuyerId, acceptedTick: Ticks): Ticks {
+  return acceptedTick + BUYER_DEFINITIONS[buyerId].deadlineTicks;
+}
+
+/** Whether a generated contract asks for something this career can produce. */
+export function isContractItemUnlocked(itemId: string, unlocks: readonly string[]): boolean {
+  if (!getItem(itemId)) return false;
+
+  const crop = getCrop(itemId);
+  if (crop) return crop.requiresUnlock === null || unlocks.includes(crop.requiresUnlock);
+
+  const animal = Object.values(ANIMALS).find((definition) => definition.producesItemId === itemId);
+  if (animal) {
+    return animal.requiresUnlock === null || unlocks.includes(animal.requiresUnlock);
+  }
+
+  return isProcessedItem(itemId) && unlocks.includes('processing');
+}
+
 export interface BuyerAvailability {
   readonly buyer: BuyerDefinition;
   readonly available: boolean;
@@ -89,10 +113,14 @@ export function buyerAvailability(
   buyerId: string,
   stage: number,
   trust: number,
+  unlocks: readonly string[],
 ): Result<BuyerAvailability> {
   const buyer = getBuyer(buyerId);
   if (!buyer) return ruleViolation(`Unknown buyer: ${buyerId}.`);
   if (buyer.unlocksAtStage > stage) {
+    return ok({ buyer, available: false, reason: 'You have not been introduced yet.' });
+  }
+  if (buyer.requiresUnlock && !unlocks.includes(buyer.requiresUnlock)) {
     return ok({ buyer, available: false, reason: 'You have not been introduced yet.' });
   }
   if (trust < buyer.minimumTrust) {

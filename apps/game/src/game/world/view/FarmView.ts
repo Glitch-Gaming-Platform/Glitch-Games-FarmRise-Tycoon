@@ -28,10 +28,22 @@ import type { ModelLibrary } from '@assets/registries/ModelLibrary.js';
 import type { SurfaceLibrary } from '@assets/registries/SurfaceLibrary.js';
 import type { FarmWorld } from '../FarmWorld.js';
 import type { Fox, FoxState } from '../../enemies/Fox.js';
-import type { IncidentInstance } from '@farmrise/shared';
-import { ticksToSeconds } from '@farmrise/shared';
+import {
+  ANIMALS,
+  ticksToSeconds,
+  type AnimalSpecies,
+  type IncidentInstance,
+} from '@farmrise/shared';
 import { chickenPose, createChickenPose } from '../../animals/chickenMotion.js';
 import { cowPose, createCowPose } from '../../animals/cowMotion.js';
+import { visibleAnimalCountForGroup } from '../../animals/visibleAnimalInstances.js';
+import { SheepView } from './SheepView.js';
+import {
+  addAnimalInstanceAttributes,
+  getAnimalInstanceAttributes,
+  markAnimalInstanceAttributesDirty,
+  writeAnimalInstanceAttributes,
+} from './animalInstanceAttributes.js';
 import type { Player } from '../../player/Player.js';
 import { CarryView } from './CarryView.js';
 import { GroundGoodsView } from './GroundGoodsView.js';
@@ -106,6 +118,7 @@ export class FarmView {
   readonly #deadTreeWind: TimeMaterial | null;
   readonly #chickenMotion: TimeMaterial | null;
   readonly #cowMotion: TimeMaterial | null;
+  readonly #sheep: SheepView;
   readonly #foxPrevious = new WeakMap<Fox, { x: number; z: number }>();
   readonly #foxFacing = new WeakMap<Fox, number>();
   readonly #foxStates = new WeakMap<Fox, FoxState>();
@@ -128,7 +141,11 @@ export class FarmView {
   #shadowTexelWorld = 0;
   readonly #shadowDirection = new THREE.Vector3();
   #lightingResponse: FarmLightingResponse | null = null;
-  #animalPulse: { kind: 'purchase' | 'produce'; startedAt: number | null } | null = null;
+  #animalPulse: {
+    kind: 'purchase' | 'produce';
+    species: AnimalSpecies;
+    startedAt: number | null;
+  } | null = null;
 
   constructor(
     world: FarmWorld,
@@ -177,6 +194,7 @@ export class FarmView {
       : null;
     this.#chickenMotion = library ? createChickenMotionMaterial(library.material) : null;
     this.#cowMotion = library ? createCowMotionMaterial(library.material) : null;
+    this.#sheep = new SheepView(library, this.#materials.animal, options.pipeline ?? null);
 
     const worldWidth = world.grid.width * world.grid.tileSize;
     this.#groundOptions = createFarmGroundOptions(world);
@@ -244,6 +262,7 @@ export class FarmView {
       this.#carry.object,
       this.#constructionProgress.object,
       this.#proximityStatus.object,
+      this.#sheep.object,
       this.#impactEffects.object,
     );
     this.#addLighting(worldWidth);
@@ -253,11 +272,14 @@ export class FarmView {
     this.#addBorderScenery(world);
     if (!library) this.#addGridHelper(world);
     this.#unsubscribes.push(
-      world.events.on('world:animal-purchased', () => {
-        this.#animalPulse = { kind: 'purchase', startedAt: null };
+      world.events.on('world:animal-purchased', ({ species }) => {
+        this.#animalPulse = { kind: 'purchase', species, startedAt: null };
       }),
-      world.events.on('world:produce', () => {
-        this.#animalPulse = { kind: 'produce', startedAt: null };
+      world.events.on('world:produce', ({ itemId }) => {
+        const species = Object.values(ANIMALS).find(
+          (definition) => definition.producesItemId === itemId,
+        )?.id;
+        if (species) this.#animalPulse = { kind: 'produce', species, startedAt: null };
       }),
     );
   }
@@ -302,6 +324,11 @@ export class FarmView {
     this.#impactEffects.syncIncident(world, incident, player, context);
     this.#syncChickens(world, context);
     this.#syncCows(world, context);
+    this.#sheep.sync(
+      world,
+      context,
+      this.#animalPulse?.species === 'sheep' ? this.#animalPulse : null,
+    );
     const pulseStartedAt = this.#animalPulse?.startedAt;
     if (
       pulseStartedAt !== null &&
@@ -357,6 +384,7 @@ export class FarmView {
     if (this.#ownsFoxGeometry) this.#foxGeometry.dispose();
     this.#chickenGeometry.dispose();
     this.#cowGeometry.dispose();
+    this.#sheep.dispose();
     for (const mesh of this.#scatter) mesh.dispose();
     this.#chickens?.dispose();
     this.#chickens = null;
@@ -529,9 +557,8 @@ export class FarmView {
    * not pay twenty draw calls for them.
    */
   #syncChickens(world: FarmWorld, context: RenderContext): void {
-    const total = world.animals
-      .filter((group) => group.species === 'chicken')
-      .reduce((sum, group) => sum + group.count, 0);
+    const groups = world.livestock.groups;
+    const total = world.livestock.countOf('chicken');
     if (!this.#chickens) {
       if (total === 0) return;
       this.#chickens = new THREE.InstancedMesh(
@@ -547,8 +574,6 @@ export class FarmView {
       this.object.add(this.#chickens);
     }
 
-    const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
-    const count = Math.min(total, 64);
     const matrix = new THREE.Matrix4();
     const quaternion = new THREE.Quaternion();
     const euler = new THREE.Euler();
@@ -556,39 +581,49 @@ export class FarmView {
     // identical. Real render time still drives the one-shot presentation pulse.
     const simulationTime = ticksToSeconds(world.tick + context.alpha);
     const presentationTime = context.elapsedSeconds;
-    const pulseAge =
-      this.#animalPulse?.startedAt === null || !this.#animalPulse
-        ? 99
-        : presentationTime - this.#animalPulse.startedAt;
+    const pulse = this.#animalPulse?.species === 'chicken' ? this.#animalPulse : null;
+    const pulseAge = pulse?.startedAt === null || !pulse ? 99 : presentationTime - pulse.startedAt;
     const purchaseIntro =
-      this.#animalPulse?.kind === 'purchase' && pulseAge < 0.72 ? Math.min(1, pulseAge / 0.3) : 1;
+      pulse?.kind === 'purchase' && pulseAge < 0.72 ? Math.min(1, pulseAge / 0.3) : 1;
     const animalHop =
-      this.#animalPulse && pulseAge < 0.82
-        ? Math.sin(Math.min(1, pulseAge / 0.82) * Math.PI) *
-          (this.#animalPulse.kind === 'produce' ? 0.16 : 0.1)
+      pulse && pulseAge < 0.82
+        ? Math.sin(Math.min(1, pulseAge / 0.82) * Math.PI) * (pulse.kind === 'produce' ? 0.16 : 0.1)
         : 0;
     const pose = createChickenPose();
     const attributes = getAnimalInstanceAttributes(this.#chickenGeometry);
-    for (let i = 0; i < count; i += 1) {
-      chickenPose(shelter, i, count, simulationTime, animalHop, purchaseIntro, pose);
-      matrix.compose(
-        new THREE.Vector3(pose.x, pose.y, pose.z),
-        quaternion.setFromEuler(euler.set(pose.pitch, pose.yaw, pose.roll)),
-        new THREE.Vector3(pose.scaleX * 1.18, pose.scaleY * 1.18, pose.scaleZ * 1.18),
-      );
-      this.#chickens.setMatrixAt(i, matrix);
-      writeAnimalInstanceAttributes(attributes, i, pose.motion, pose.action, pose.gaitPhase);
+    let instanceIndex = 0;
+    for (const group of groups) {
+      if (group.species !== 'chicken') continue;
+      const count = visibleAnimalCountForGroup(groups, 'chicken', group.id, 64);
+      if (count <= 0) continue;
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let localIndex = 0; localIndex < count; localIndex += 1) {
+        chickenPose(shelter, localIndex, count, simulationTime, animalHop, purchaseIntro, pose);
+        matrix.compose(
+          new THREE.Vector3(pose.x, pose.y, pose.z),
+          quaternion.setFromEuler(euler.set(pose.pitch, pose.yaw, pose.roll)),
+          new THREE.Vector3(pose.scaleX * 1.18, pose.scaleY * 1.18, pose.scaleZ * 1.18),
+        );
+        this.#chickens.setMatrixAt(instanceIndex, matrix);
+        writeAnimalInstanceAttributes(
+          attributes,
+          instanceIndex,
+          pose.motion,
+          pose.action,
+          pose.gaitPhase,
+        );
+        instanceIndex += 1;
+      }
     }
-    this.#chickens.count = count;
+    this.#chickens.count = instanceIndex;
     this.#chickens.instanceMatrix.needsUpdate = true;
     markAnimalInstanceAttributesDirty(attributes);
   }
 
   /** Dairy cows use the same deterministic positions for visuals and collision. */
   #syncCows(world: FarmWorld, context: RenderContext): void {
-    const total = world.animals
-      .filter((group) => group.species === 'cow')
-      .reduce((sum, group) => sum + group.count, 0);
+    const groups = world.livestock.groups;
+    const total = world.livestock.countOf('cow');
     if (!this.#cows) {
       if (total === 0) return;
       this.#cows = new THREE.InstancedMesh(
@@ -602,31 +637,44 @@ export class FarmView {
       this.object.add(this.#cows);
     }
 
-    const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
-    const count = Math.min(total, 16);
     const matrix = new THREE.Matrix4();
     const quaternion = new THREE.Quaternion();
     const euler = new THREE.Euler();
     const pose = createCowPose();
     const simulationTime = ticksToSeconds(world.tick + context.alpha);
-    const pulseStart = this.#animalPulse?.startedAt;
+    const pulse = this.#animalPulse?.species === 'cow' ? this.#animalPulse : null;
+    const pulseStart = pulse?.startedAt;
     const pulseAge =
       pulseStart === null || pulseStart === undefined ? 99 : context.elapsedSeconds - pulseStart;
     const purchaseIntro =
-      this.#animalPulse?.kind === 'purchase' && pulseAge < 0.72 ? Math.min(1, pulseAge / 0.3) : 1;
+      pulse?.kind === 'purchase' && pulseAge < 0.72 ? Math.min(1, pulseAge / 0.3) : 1;
     const attributes = getAnimalInstanceAttributes(this.#cowGeometry);
 
-    for (let index = 0; index < count; index += 1) {
-      cowPose(shelter, index, count, simulationTime, purchaseIntro, pose);
-      matrix.compose(
-        new THREE.Vector3(pose.x, pose.y, pose.z),
-        quaternion.setFromEuler(euler.set(pose.pitch, pose.yaw, pose.roll)),
-        new THREE.Vector3(pose.scaleX, pose.scaleY, pose.scaleZ),
-      );
-      this.#cows.setMatrixAt(index, matrix);
-      writeAnimalInstanceAttributes(attributes, index, pose.motion, pose.graze, pose.gaitPhase);
+    let instanceIndex = 0;
+    for (const group of groups) {
+      if (group.species !== 'cow') continue;
+      const count = visibleAnimalCountForGroup(groups, 'cow', group.id, 16);
+      if (count <= 0) continue;
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let localIndex = 0; localIndex < count; localIndex += 1) {
+        cowPose(shelter, localIndex, count, simulationTime, purchaseIntro, pose);
+        matrix.compose(
+          new THREE.Vector3(pose.x, pose.y, pose.z),
+          quaternion.setFromEuler(euler.set(pose.pitch, pose.yaw, pose.roll)),
+          new THREE.Vector3(pose.scaleX, pose.scaleY, pose.scaleZ),
+        );
+        this.#cows.setMatrixAt(instanceIndex, matrix);
+        writeAnimalInstanceAttributes(
+          attributes,
+          instanceIndex,
+          pose.motion,
+          pose.graze,
+          pose.gaitPhase,
+        );
+        instanceIndex += 1;
+      }
     }
-    this.#cows.count = count;
+    this.#cows.count = instanceIndex;
     this.#cows.instanceMatrix.needsUpdate = true;
     markAnimalInstanceAttributesDirty(attributes);
   }
@@ -991,57 +1039,4 @@ const NORMAL_SUN = new THREE.Color(0xfff0cf);
 function lerpAngle(from: number, to: number, amount: number): number {
   const difference = Math.atan2(Math.sin(to - from), Math.cos(to - from));
   return from + difference * amount;
-}
-
-interface AnimalInstanceAttributes {
-  readonly motion: THREE.InstancedBufferAttribute;
-  readonly action: THREE.InstancedBufferAttribute;
-  readonly gaitPhase: THREE.InstancedBufferAttribute;
-}
-
-function addAnimalInstanceAttributes(geometry: THREE.BufferGeometry, capacity: number): void {
-  geometry.setAttribute(
-    'farmMotion',
-    new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(
-      THREE.DynamicDrawUsage,
-    ),
-  );
-  geometry.setAttribute(
-    'farmAction',
-    new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(
-      THREE.DynamicDrawUsage,
-    ),
-  );
-  geometry.setAttribute(
-    'farmGaitPhase',
-    new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1).setUsage(
-      THREE.DynamicDrawUsage,
-    ),
-  );
-}
-
-function getAnimalInstanceAttributes(geometry: THREE.BufferGeometry): AnimalInstanceAttributes {
-  return {
-    motion: geometry.getAttribute('farmMotion') as THREE.InstancedBufferAttribute,
-    action: geometry.getAttribute('farmAction') as THREE.InstancedBufferAttribute,
-    gaitPhase: geometry.getAttribute('farmGaitPhase') as THREE.InstancedBufferAttribute,
-  };
-}
-
-function writeAnimalInstanceAttributes(
-  attributes: AnimalInstanceAttributes,
-  index: number,
-  motion: number,
-  action: number,
-  gaitPhase: number,
-): void {
-  attributes.motion.setX(index, motion);
-  attributes.action.setX(index, action);
-  attributes.gaitPhase.setX(index, gaitPhase);
-}
-
-function markAnimalInstanceAttributesDirty(attributes: AnimalInstanceAttributes): void {
-  attributes.motion.needsUpdate = true;
-  attributes.action.needsUpdate = true;
-  attributes.gaitPhase.needsUpdate = true;
 }

@@ -13,7 +13,9 @@
 import {
   BUYER_DEFINITIONS,
   BUYER_IDS,
+  applyContractCommitmentBonus,
   buyerAvailability,
+  isContractItemUnlocked,
   marketItemIdsForSeason,
   spotPriceFor,
   townDemandMultiplier,
@@ -68,7 +70,12 @@ export class ContractBoard {
 
     for (const buyerId of BUYER_IDS) {
       const relationship = this.career.relationship(buyerId);
-      const availability = buyerAvailability(buyerId, this.career.stage, relationship.trust);
+      const availability = buyerAvailability(
+        buyerId,
+        this.career.stage,
+        relationship.trust,
+        this.career.unlocks,
+      );
       if (!availability.ok || !availability.value.available) continue;
       if (this.#entries.filter((entry) => entry.offer.buyerId === buyerId).length >= 2) continue;
       const entry = this.#generate(buyerId);
@@ -82,7 +89,9 @@ export class ContractBoard {
     const relationship = this.career.relationship(buyerId);
 
     const seasonalItems = new Set(marketItemIdsForSeason(this.career.season));
-    const preferences = buyer.itemPreference.filter((itemId) => seasonalItems.has(itemId));
+    const preferences = buyer.itemPreference.filter(
+      (itemId) => seasonalItems.has(itemId) && isContractItemUnlocked(itemId, this.career.unlocks),
+    );
     const itemId = preferences[rng.int(0, preferences.length)];
     if (!itemId) return null;
 
@@ -97,7 +106,10 @@ export class ContractBoard {
     );
 
     this.#sequence += 1;
-    const unitPrice = offeredUnitPrice(this.career, buyerId, itemId);
+    const unitPrice = applyContractCommitmentBonus(
+      offeredUnitPrice(this.career, buyerId, itemId),
+      rng.next(),
+    );
 
     return {
       buyer,

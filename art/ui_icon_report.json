@@ -1,184 +1,200 @@
 {
-  "generated_at": "2026-08-11T01:57:15",
+  "generated_at": "2026-08-12T22:12:42",
   "blender": "5.2.0 LTS",
-  "duration_seconds": 18.21,
+  "duration_seconds": 17.57,
   "icons": [
     {
       "file": "hero-farm.webp",
-      "bytes": 11906
+      "bytes": 9312
     },
     {
       "file": "farmer.webp",
-      "bytes": 4366
+      "bytes": 3916
     },
     {
       "file": "settings.webp",
-      "bytes": 4424
+      "bytes": 4120
     },
     {
       "file": "market.webp",
-      "bytes": 5454
+      "bytes": 5074
     },
     {
       "file": "contract.webp",
-      "bytes": 3982
+      "bytes": 3558
     },
     {
       "file": "wheat.webp",
-      "bytes": 8920
+      "bytes": 8474
     },
     {
       "file": "corn.webp",
-      "bytes": 8100
+      "bytes": 7678
     },
     {
       "file": "pumpkin.webp",
-      "bytes": 2762
+      "bytes": 2500
     },
     {
       "file": "clover.webp",
-      "bytes": 2950
+      "bytes": 2722
     },
     {
       "file": "radish.webp",
-      "bytes": 2596
+      "bytes": 2844
     },
     {
       "file": "pea.webp",
-      "bytes": 5424
+      "bytes": 6554
     },
     {
       "file": "strawberry.webp",
-      "bytes": 2550
+      "bytes": 2494
     },
     {
       "file": "sunflower.webp",
-      "bytes": 8108
+      "bytes": 7626
     },
     {
       "file": "tomato.webp",
-      "bytes": 4396
+      "bytes": 3948
     },
     {
       "file": "avocado.webp",
-      "bytes": 4416
+      "bytes": 4050
     },
     {
       "file": "beetroot.webp",
-      "bytes": 2738
+      "bytes": 3258
     },
     {
       "file": "cranberry.webp",
-      "bytes": 1922
+      "bytes": 1862
     },
     {
       "file": "grape.webp",
-      "bytes": 4026
+      "bytes": 5162
     },
     {
       "file": "carrot.webp",
-      "bytes": 4412
+      "bytes": 4110
     },
     {
       "file": "cabbage.webp",
-      "bytes": 2814
+      "bytes": 2488
     },
     {
       "file": "garlic.webp",
-      "bytes": 3772
+      "bytes": 3550
     },
     {
       "file": "eggs.webp",
-      "bytes": 2532
+      "bytes": 2338
     },
     {
       "file": "milk.webp",
-      "bytes": 2058
+      "bytes": 1900
+    },
+    {
+      "file": "wool.webp",
+      "bytes": 2302
     },
     {
       "file": "flour.webp",
-      "bytes": 2466
+      "bytes": 2188
     },
     {
       "file": "cheese.webp",
-      "bytes": 2276
+      "bytes": 2096
     },
     {
       "file": "preserves.webp",
-      "bytes": 2540
+      "bytes": 2314
     },
     {
       "file": "barn.webp",
-      "bytes": 3128
+      "bytes": 2556
     },
     {
       "file": "irrigation.webp",
-      "bytes": 3324
+      "bytes": 3120
     },
     {
       "file": "road.webp",
-      "bytes": 1764
+      "bytes": 1678
     },
     {
       "file": "fence.webp",
-      "bytes": 3224
+      "bytes": 3188
+    },
+    {
+      "file": "animal-shelter.webp",
+      "bytes": 2390
+    },
+    {
+      "file": "water-trough.webp",
+      "bytes": 2260
     },
     {
       "file": "chicken.webp",
-      "bytes": 3390
+      "bytes": 3096
     },
     {
       "file": "cow.webp",
-      "bytes": 3266
+      "bytes": 2688
+    },
+    {
+      "file": "sheep.webp",
+      "bytes": 2356
     },
     {
       "file": "loading-pad.webp",
-      "bytes": 2480
+      "bytes": 2270
     },
     {
       "file": "cold-store.webp",
-      "bytes": 2466
+      "bytes": 2436
     },
     {
       "file": "worker-hut.webp",
-      "bytes": 3236
+      "bytes": 2834
     },
     {
       "file": "well.webp",
-      "bytes": 3706
+      "bytes": 3770
     },
     {
       "file": "mill.webp",
-      "bytes": 2908
+      "bytes": 2500
     },
     {
       "file": "creamery.webp",
-      "bytes": 2710
+      "bytes": 2430
     },
     {
       "file": "preserve-kitchen.webp",
-      "bytes": 2954
+      "bytes": 2658
     },
     {
       "file": "land.webp",
-      "bytes": 3650
+      "bytes": 2952
     },
     {
       "file": "warning.webp",
-      "bytes": 2956
+      "bytes": 2732
     },
     {
       "file": "watering.webp",
-      "bytes": 3146
+      "bytes": 2956
     },
     {
       "file": "harvest.webp",
-      "bytes": 2616
+      "bytes": 2488
     },
     {
       "file": "tools.webp",
-      "bytes": 3532
+      "bytes": 3308
     }
   ],
-  "total_bytes": 166366
+  "total_bytes": 165104
 }

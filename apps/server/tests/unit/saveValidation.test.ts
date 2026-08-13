@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ANIMALS,
   BUILDINGS,
   COMMUNITY_PROJECTS_BY_ID,
   INSURANCE_POLICIES,
@@ -8,6 +9,8 @@ import {
   PARCELS_BY_ID,
   SPECIALIZATIONS,
   STARTER_ANIMAL_PRODUCT_DROP,
+  STARTER_SHELTER_ID,
+  animalShelterProductDropTile,
   cents,
   newCareer,
   requireCrop,
@@ -48,6 +51,60 @@ describe('validateSaveTransition', () => {
   it('accepts an ordinary continuation', () => {
     const base = fresh();
     expect(validateSaveTransition(base, later(base), base.tick + 600).ok).toBe(true);
+  });
+
+  it('allows only the processor required by an open pre-milestone contract', () => {
+    const base = fresh();
+    base.stage = 1;
+    base.unlocks = ['contracts'];
+    base.contracts = [
+      {
+        id: 'offer-preserves-regression',
+        buyerId: 'growers_co_op',
+        itemId: 'preserves',
+        quantity: 21,
+        delivered: 0,
+        unitPrice: cents(342),
+        minimumQuality: 0,
+        acceptedTick: base.tick,
+        deadlineTick: base.tick + 72_000,
+        recurringEveryTicks: 0,
+        status: 'open',
+      },
+    ];
+    const cost = BUILDINGS.preserve_kitchen.buildCost;
+    const next = updateSite(
+      later(base, {
+        balance: cents(base.balance - cost),
+        statistics: {
+          ...base.statistics,
+          lifetimeSpent: base.statistics.lifetimeSpent + cost,
+        },
+      }),
+      (site) => ({
+        ...site,
+        buildings: [
+          ...site.buildings,
+          {
+            id: 'building-contract-preserves',
+            kind: 'preserve_kitchen',
+            tileX: 20,
+            tileZ: 18,
+            rotation: 0,
+            remainingBuildTicks: BUILDINGS.preserve_kitchen.buildTicks,
+            broken: false,
+          },
+        ],
+      }),
+    );
+
+    expect(validateSaveTransition(base, next, next.tick)).toEqual({ ok: true });
+
+    const withoutContract = { ...base, contracts: [] };
+    const forged = { ...next, contracts: [] };
+    expect(validateSaveTransition(withoutContract, forged, forged.tick).reason).toMatch(
+      /unlocked/i,
+    );
   });
 
   it('rejects time going backwards or beyond wall time', () => {
@@ -489,6 +546,284 @@ describe('validateSaveTransition', () => {
     }));
 
     expect(validateSaveTransition(base, covered, covered.tick).reason).toMatch(/protected tile/i);
+  });
+
+  it('keeps a purchased shelter product area clear in every save', () => {
+    const base = fresh();
+    base.stage = 1;
+    base.unlocks = ['animal_shelters'];
+    const drop = animalShelterProductDropTile(20, 18, 0);
+    const cost = BUILDINGS.animal_shelter.buildCost + BUILDINGS.road.buildCost;
+    const covered = updateSite(
+      later(base, {
+        balance: cents(base.balance - cost),
+        statistics: {
+          ...base.statistics,
+          lifetimeSpent: base.statistics.lifetimeSpent + cost,
+        },
+      }),
+      (site) => ({
+        ...site,
+        buildings: [
+          ...site.buildings,
+          {
+            id: 'building-shelter',
+            kind: 'animal_shelter',
+            tileX: 20,
+            tileZ: 18,
+            rotation: 0,
+            remainingBuildTicks: BUILDINGS.animal_shelter.buildTicks,
+            broken: false,
+          },
+          {
+            id: 'building-over-shelter-products',
+            kind: 'road',
+            tileX: drop.tileX,
+            tileZ: drop.tileZ,
+            rotation: 0,
+            remainingBuildTicks: BUILDINGS.road.buildTicks,
+            broken: false,
+          },
+        ],
+      }),
+    );
+
+    expect(validateSaveTransition(base, covered, covered.tick).reason).toMatch(
+      /overlap|product area/i,
+    );
+  });
+
+  it('rejects invented shelter assignments and livestock beyond completed capacity', () => {
+    const base = fresh();
+    const unknownShelter = updateSite(later(base), (site) => ({
+      ...site,
+      animals: [
+        ...site.animals,
+        {
+          id: 'animals-forged',
+          species: 'chicken',
+          count: 0,
+          cycleTicks: 0,
+          shelterId: 'building-forged-shelter',
+          tileX: 20,
+          tileZ: 18,
+          sheltered: false,
+        },
+      ],
+    }));
+    expect(validateSaveTransition(base, unknownShelter, unknownShelter.tick).reason).toMatch(
+      /completed shelter/i,
+    );
+
+    const overCapacity = updateSite(
+      later(base, { balance: cents(base.balance - BUILDINGS.water_trough.buildCost) }),
+      (site) => ({
+        ...site,
+        animals: site.animals.map((group) => ({ ...group, count: 5 })),
+      }),
+    );
+    expect(validateSaveTransition(base, overCapacity, overCapacity.tick).reason).toMatch(
+      /shelter capacity/i,
+    );
+  });
+
+  it('reserves the inherited shelter id from placed buildings', () => {
+    const base = fresh();
+    const forged = updateSite(later(base), (site) => ({
+      ...site,
+      buildings: [
+        ...site.buildings,
+        {
+          id: STARTER_SHELTER_ID,
+          kind: 'road',
+          tileX: 20,
+          tileZ: 18,
+          rotation: 0,
+          remainingBuildTicks: BUILDINGS.road.buildTicks,
+          broken: false,
+        },
+      ],
+    }));
+
+    expect(validateSaveTransition(base, forged, forged.tick).reason).toMatch(/reserved/i);
+  });
+
+  it('rejects new local shelter overfill even when another shelter leaves site-wide room', () => {
+    const base = fresh();
+    base.stage = 1;
+    base.unlocks = ['animal_shelters'];
+    const starterCount = base.sites[0]?.animals[0]?.count ?? 0;
+    const addedChickens = 5 - starterCount;
+    const cost = BUILDINGS.animal_shelter.buildCost + addedChickens * ANIMALS.chicken.purchaseCost;
+    const elapsed = BUILDINGS.animal_shelter.buildTicks + 1;
+    const overfilled = updateSite(
+      later(
+        base,
+        {
+          balance: cents(base.balance - cost),
+          statistics: {
+            ...base.statistics,
+            lifetimeSpent: base.statistics.lifetimeSpent + cost,
+          },
+        },
+        elapsed,
+      ),
+      (site) => ({
+        ...site,
+        buildings: [
+          ...site.buildings,
+          {
+            id: 'building-unused-shelter',
+            kind: 'animal_shelter',
+            tileX: 20,
+            tileZ: 18,
+            rotation: 0,
+            remainingBuildTicks: 0,
+            broken: false,
+          },
+        ],
+        animals: site.animals.map((group, index) => (index === 0 ? { ...group, count: 5 } : group)),
+      }),
+    );
+
+    expect(validateSaveTransition(base, overfilled, overfilled.tick).reason).toMatch(
+      /capacity at shelter/i,
+    );
+  });
+
+  it('grandfathers an unchanged locally overfilled v3 shelter', () => {
+    const base = fresh();
+    base.stage = 1;
+    base.unlocks = ['animal_shelters'];
+    const previous = updateSite(base, (site) => ({
+      ...site,
+      buildings: [
+        ...site.buildings,
+        {
+          id: 'building-empty-shelter',
+          kind: 'animal_shelter',
+          tileX: 20,
+          tileZ: 18,
+          rotation: 0,
+          remainingBuildTicks: 0,
+          broken: false,
+        },
+      ],
+      animals: site.animals.map((group, index) => (index === 0 ? { ...group, count: 5 } : group)),
+    }));
+
+    expect(validateSaveTransition(previous, later(previous), previous.tick + 600)).toEqual({
+      ok: true,
+    });
+  });
+
+  it('accepts paid livestock assigned to a newly completed purchased shelter', () => {
+    const base = fresh();
+    base.stage = 1;
+    base.unlocks = ['animal_shelters'];
+    const shelterCost = BUILDINGS.animal_shelter.buildCost;
+    const animalCost = 900;
+    const cost = shelterCost + animalCost;
+    const elapsed = BUILDINGS.animal_shelter.buildTicks + 1;
+    const next = updateSite(
+      later(
+        base,
+        {
+          balance: cents(base.balance - cost),
+          statistics: {
+            ...base.statistics,
+            lifetimeSpent: base.statistics.lifetimeSpent + cost,
+          },
+        },
+        elapsed,
+      ),
+      (site) => ({
+        ...site,
+        buildings: [
+          ...site.buildings,
+          {
+            id: 'building-shelter',
+            kind: 'animal_shelter',
+            tileX: 20,
+            tileZ: 18,
+            rotation: 0,
+            remainingBuildTicks: 0,
+            broken: false,
+          },
+        ],
+        animals: [
+          ...site.animals,
+          {
+            id: 'animals-remote-hen',
+            species: 'chicken',
+            count: 1,
+            cycleTicks: 0,
+            shelterId: 'building-shelter',
+            tileX: 20,
+            tileZ: 18,
+            sheltered: false,
+          },
+        ],
+      }),
+    );
+
+    expect(validateSaveTransition(base, next, next.tick)).toEqual({ ok: true });
+    expect(next.sites[0]?.animals[0]?.shelterId).toBe(STARTER_SHELTER_ID);
+  });
+
+  it('rejects sheep before Stage 1 and accepts a paid sheep after the shelter unlock', () => {
+    const lockedBase = fresh();
+    const locked = updateSite(later(lockedBase), (site) => ({
+      ...site,
+      animals: [
+        ...site.animals,
+        {
+          id: 'animals-locked-sheep',
+          species: 'sheep',
+          count: 0,
+          cycleTicks: 0,
+          shelterId: STARTER_SHELTER_ID,
+          tileX: 19,
+          tileZ: 16,
+          sheltered: false,
+        },
+      ],
+    }));
+    expect(validateSaveTransition(lockedBase, locked, locked.tick).reason).toMatch(
+      /before.*unlocked/i,
+    );
+
+    const base = fresh();
+    base.stage = 1;
+    base.unlocks = ['animal_shelters'];
+    const cost = ANIMALS.sheep.purchaseCost;
+    const purchased = updateSite(
+      later(base, {
+        balance: cents(base.balance - cost),
+        statistics: {
+          ...base.statistics,
+          lifetimeSpent: base.statistics.lifetimeSpent + cost,
+        },
+      }),
+      (site) => ({
+        ...site,
+        animals: [
+          ...site.animals,
+          {
+            id: 'animals-sheep',
+            species: 'sheep',
+            count: 1,
+            cycleTicks: 0,
+            shelterId: STARTER_SHELTER_ID,
+            tileX: 19,
+            tileZ: 16,
+            sheltered: false,
+          },
+        ],
+      }),
+    );
+
+    expect(validateSaveTransition(base, purchased, purchased.tick)).toEqual({ ok: true });
   });
 });
 

@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { centsSchema, idStringSchema, plotIdSchema, tickSchema } from './common.js';
 import {
   CAREER_SCHEMA_VERSION,
+  CAREER_SCHEMA_VERSION_V2,
   careerEnvelopeSchema,
   careerSaveStateSchema,
   putCareerRequestSchema,
@@ -90,5 +91,6 @@ export type PutSaveRequest = PutCareerRequest;
 /** Every schema version this build knows how to read. */
 export const SUPPORTED_SAVE_VERSIONS: readonly number[] = Object.freeze([
   SAVE_SCHEMA_VERSION_V1,
+  CAREER_SCHEMA_VERSION_V2,
   CAREER_SCHEMA_VERSION,
 ]);

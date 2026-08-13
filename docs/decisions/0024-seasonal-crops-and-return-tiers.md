@@ -29,15 +29,16 @@ load later packs at season boundaries. Give every crop a Blender-rendered lazy U
 
 Raise the measured whole-catalog triangle guardrail from 22,000 to 40,000 while retaining every
 per-asset budget, and raise the complete lazy UI-art guardrail from 125 KB to 175 KB. The resulting
-catalog measures 102 assets, 37,712 triangles and 166,366 UI-art bytes.
+catalog measures 102 assets, 36,792 triangles and 171,446 UI-art bytes.
 
 ## Consequences
 
 - The season changes the seed roster without removing productive year-round options.
 - Return, time and rarity are one enforceable relationship rather than three independent labels.
 - Delayed harvest and spoilage can push realized return below the advertised tier.
-- The complete model catalog grows to about 979 KB gzip, but seasonal crop geometry is not loaded all
-  at once. The initial Spring path remains about 626 KB gzip and requires physical-device profiling.
+- The complete model catalog grows to about 951 KB gzip, but seasonal crop geometry is not loaded all
+  at once. The initial critical Spring model path is about 566 KB gzip, with the 86 KB props pack
+  preloaded separately, and still requires physical-device profiling.
 - Draw-call capacity rises from sixteen to twenty-eight crop-stage buckets for common plus current
   seasonal crops; instancing still keeps plot count out of that equation.
 - ADR 0022's aggregate budgets are superseded; its tighter per-asset budgets remain unchanged.

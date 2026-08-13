@@ -14,7 +14,6 @@ import type { FarmWorld } from '../world/FarmWorld.js';
 import type { IncidentDirector } from '../events/IncidentDirector.js';
 import type { Player } from '../player/Player.js';
 import { Fox } from './Fox.js';
-import { shelterDoorPoint } from '../world/collisionProfiles.js';
 
 export interface EnemyDirectorEvents extends Record<string, unknown> {
   'enemy:spawned': { count: number };
@@ -42,7 +41,7 @@ export class EnemyDirector {
       // A mitigated raid still shows up, with fewer of them: the player should
       // see that driving the animals in worked, not that nothing happened.
       const mitigated = instance.responseProgress > 0;
-      this.#spawnRaid(mitigated ? 1 : 3);
+      this.#spawnRaid(mitigated ? 1 : 3, instance.targetIds);
     });
     incidents.events.on('incident:resolved', ({ definition }) => {
       if (definition.id === 'incident-fox-raid') this.#retireAll();
@@ -65,29 +64,28 @@ export class EnemyDirector {
       }
       if (fox.succeeded) {
         fox.state = 'gone';
-        losses += 1;
+        if (fox.targetGroupId) losses += this.world.livestock.removeTo(fox.targetGroupId, 1);
       }
     }
 
     if (losses > 0) {
-      for (const group of this.world.animals) {
-        group.count = Math.max(0, group.count - losses);
-      }
       this.events.emit('enemy:raid-succeeded', { losses });
     }
 
     this.#prune();
   }
 
-  #spawnRaid(count: number): void {
-    const shelter = shelterDoorPoint(
-      this.world.grid,
-      this.world.level.shelter.tileX,
-      this.world.level.shelter.tileZ,
-    );
+  #spawnRaid(count: number, targetIds: readonly string[]): void {
+    const targets = targetIds
+      .map((id) => this.world.livestock.get(id))
+      .filter((group) => group !== undefined && group.count > 0);
+    if (targets.length === 0) return;
     const halfWidth = (this.world.grid.width * this.world.grid.tileSize) / 2;
 
     for (let i = 0; i < count; i += 1) {
+      const target = targets[i % targets.length];
+      if (!target) continue;
+      const shelter = this.world.shelters.doorPoint(target.shelterId);
       // Foxes come in from the map edge so the player sees them arrive.
       const angle = this.rng.next() * Math.PI * 2;
       this.#foxes.push(
@@ -102,6 +100,7 @@ export class EnemyDirector {
           FOX_SPEED,
           180,
           `fox-${this.#nextFoxId++}`,
+          target.id,
         ),
       );
     }

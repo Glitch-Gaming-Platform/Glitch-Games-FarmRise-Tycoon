@@ -43,6 +43,8 @@ const BUILDING_MESH: Partial<Record<BuildingKind, string>> = {
   irrigation: 'SM_building_irrigation',
   road: 'SM_building_road',
   fence: 'SM_building_fence',
+  animal_shelter: 'SM_building_coop',
+  water_trough: 'SM_prop_water_trough',
   loading_pad: 'SM_building_loading_pad',
   cold_store: 'SM_building_cold_store',
   worker_hut: 'SM_building_worker_hut',
@@ -62,6 +64,8 @@ const FALLBACK_HEIGHT: Partial<Record<BuildingKind, number>> = {
   preserve_kitchen: 2.2,
   well: 1.4,
   fence: 1.1,
+  animal_shelter: 2.1,
+  water_trough: 0.45,
   irrigation: 1,
   loading_pad: 0.2,
   road: 0.15,
@@ -534,6 +538,14 @@ export class StructureView {
         this.#addPart(group, WELL_CRANK_MESH, [0.74, 1.3, 0], 'well-crank');
       }
 
+      if (kind === 'water_trough') {
+        const troughWater = new THREE.Mesh(this.#waterPlane, this.#water.material);
+        troughWater.position.set(0, 0.325, 0);
+        troughWater.scale.set(0.84, 1, 0.2);
+        troughWater.renderOrder = 3;
+        group.add(troughWater);
+        return group;
+      }
       if (kind !== 'irrigation') return group;
 
       const troughWater = new THREE.Mesh(this.#waterPlane, this.#water.material);

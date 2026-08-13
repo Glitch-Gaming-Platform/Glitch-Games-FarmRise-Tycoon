@@ -372,7 +372,7 @@ CONTACT_ROWS = [
     ["SM_crop_wheat_s1", "SM_crop_wheat_s2", "SM_crop_wheat_s3", "SM_crop_wheat_s4",
      "SM_crop_corn_s1", "SM_crop_corn_s2", "SM_crop_corn_s3", "SM_crop_corn_s4"],
     ["SM_crop_pumpkin_s1", "SM_crop_pumpkin_s2", "SM_crop_pumpkin_s3", "SM_crop_pumpkin_s4",
-     "SM_char_farmer", "SM_animal_chicken", "SM_animal_cow", "SM_animal_fox"],
+     "SM_char_farmer", "SM_animal_chicken", "SM_animal_sheep", "SM_animal_cow", "SM_animal_fox"],
     ["SM_crop_clover_s1", "SM_crop_clover_s2", "SM_crop_clover_s3", "SM_crop_clover_s4"],
     ["SM_building_fence", "SM_building_road", "SM_building_irrigation",
      "SM_prop_water_trough", "SM_building_coop", "SM_building_barn"],
@@ -676,6 +676,7 @@ def gameplay_scene() -> None:
         add_player_outline(player)
     link_asset("SM_animal_chicken", (6.4, 1.8, 0), rotation_z=math.radians(-60))
     link_asset("SM_animal_chicken", (7.8, 0.8, 0), rotation_z=math.radians(20))
+    link_asset("SM_animal_sheep", (5.2, 0.1, 0), rotation_z=math.radians(-18))
     link_asset("SM_animal_fox", (9.3, 3.4, 0), rotation_z=math.radians(-130))
 
     # Every component comes from the shared camera constants. Azimuth matters
@@ -857,6 +858,85 @@ def character_portrait() -> str:
     return render_to("character_portrait.png")
 
 
+def character_gameplay_read() -> str:
+    """Front three-quarter avatar proof at the shipping distance and FOV."""
+    clear()
+    setup_render(1600, 900, samples=64)
+    world_colour("sky_haze", 0.48)
+    add_sun()
+    add_ground("ground_scrub", 40, variation=True)
+    player = link_asset("SM_char_farmer", (0, 0, 0))
+    if player:
+        add_player_outline(player)
+
+    # Keep the real pitch, distance and vertical FOV, but turn the isolated
+    # review around to the face. The decisive farm scene often sees the player
+    # from behind, which is useful for silhouette and useless for validating
+    # eyes, hands and boot direction at their actual on-screen size.
+    distance = GAMEPLAY_REVIEW_DISTANCE
+    pitch = math.radians(GAMEPLAY_REVIEW_PITCH_DEGREES)
+    bearing = math.radians(27.0)
+    target = Vector((0, 0, 0.80))
+    cam_pos = target + Vector((
+        math.sin(bearing) * math.cos(pitch) * distance,
+        -math.cos(bearing) * math.cos(pitch) * distance,
+        math.sin(pitch) * distance,
+    ))
+    scene = bpy.context.scene
+    aspect = scene.render.resolution_x / scene.render.resolution_y
+    lens = lens_for_vertical_fov(GAMEPLAY_REVIEW_FOV_DEGREES, aspect)
+    add_camera(cam_pos, target, lens=lens)
+    return render_to("character_gameplay_read.png")
+
+
+def character_gameplay_context_no_outline() -> str:
+    """Native shipping-camera proof among crops and structures, without the rim."""
+    clear()
+    setup_render(1600, 900, samples=64)
+    world_colour("sky_haze", 0.48)
+    add_sun()
+    add_ground("ground_scrub", 40, variation=True)
+
+    # The character must survive the same visual competition as the Dinkum
+    # references without relying on the player-only accessibility outline.
+    link_asset("SM_char_farmer", (0, 0, 0))
+    for name, x, y in (("SM_crop_wheat_s4", -1.15, 1.65),
+                       ("SM_crop_corn_s4", 1.10, 1.90)):
+        link_asset("SM_ground_plot", (x, y, 0))
+        link_asset(name, (x, y, 0.10))
+    link_asset("SM_building_road", (0, 3.55, 0), rotation_z=math.pi / 2)
+    link_asset("SM_building_fence", (0, 4.55, 0), rotation_z=math.pi / 2)
+    link_asset("SM_prop_grass_tuft", (-1.75, 0.30, 0), rotation_z=0.5)
+    link_asset("SM_prop_wildflowers", (1.65, 0.45, 0), rotation_z=-0.4)
+
+    distance = GAMEPLAY_REVIEW_DISTANCE
+    pitch = math.radians(GAMEPLAY_REVIEW_PITCH_DEGREES)
+    bearing = math.radians(27.0)
+    target = Vector((0, 0, 0.80))
+    cam_pos = target + Vector((
+        math.sin(bearing) * math.cos(pitch) * distance,
+        -math.cos(bearing) * math.cos(pitch) * distance,
+        math.sin(pitch) * distance,
+    ))
+    scene = bpy.context.scene
+    aspect = scene.render.resolution_x / scene.render.resolution_y
+    lens = lens_for_vertical_fov(GAMEPLAY_REVIEW_FOV_DEGREES, aspect)
+    add_camera(cam_pos, target, lens=lens)
+    return render_to("character_gameplay_context_no_outline.png")
+
+
+def character_side_profile() -> str:
+    """Side proof for boot direction, heel shape, wrist taper and head ratio."""
+    clear()
+    setup_render(1000, 1000, samples=64)
+    world_colour("sand_path", 0.68)
+    add_sun()
+    add_ground("ground_scrub", 30)
+    link_asset("SM_char_farmer", (0, 0, 0))
+    add_camera((4.20, -0.02, 1.20), (0, 0, 0.80), lens=82)
+    return render_to("character_side_profile.png")
+
+
 def actors_focus() -> str:
     """Player and every current animal at a close but scale-honest review distance."""
     clear()
@@ -865,12 +945,13 @@ def actors_focus() -> str:
     add_sun()
     add_ground("ground_scrub", 45)
 
-    link_asset("SM_char_farmer", (-2.45, 0, 0), rotation_z=math.radians(12))
-    link_asset("SM_animal_chicken", (-0.75, 0, 0), rotation_z=math.radians(-18), scale=1.35)
-    link_asset("SM_animal_cow", (1.00, 0, 0), rotation_z=math.radians(-22))
-    link_asset("SM_animal_fox", (2.75, 0, 0), rotation_z=math.radians(18), scale=1.18)
+    link_asset("SM_char_farmer", (-3.15, 0, 0), rotation_z=math.radians(12))
+    link_asset("SM_animal_chicken", (-1.35, 0, 0), rotation_z=math.radians(-18), scale=1.35)
+    link_asset("SM_animal_sheep", (0.05, 0, 0), rotation_z=math.radians(16), scale=1.10)
+    link_asset("SM_animal_cow", (1.65, 0, 0), rotation_z=math.radians(-22))
+    link_asset("SM_animal_fox", (3.35, 0, 0), rotation_z=math.radians(18), scale=1.18)
 
-    add_camera((5.7, -10.8, 4.0), (0.1, 0, 0.72), lens=68)
+    add_camera((6.4, -12.0, 4.2), (0.1, 0, 0.72), lens=70)
     return render_to("actors_focus.png")
 
 
@@ -931,6 +1012,12 @@ def main() -> dict:
     assert_sources_unpainted("silhouette")
     paths["character_portrait"] = character_portrait()
     assert_sources_unpainted("character_portrait")
+    paths["character_gameplay_read"] = character_gameplay_read()
+    assert_sources_unpainted("character_gameplay_read")
+    paths["character_gameplay_context_no_outline"] = character_gameplay_context_no_outline()
+    assert_sources_unpainted("character_gameplay_context_no_outline")
+    paths["character_side_profile"] = character_side_profile()
+    assert_sources_unpainted("character_side_profile")
     paths["actors_focus"] = actors_focus()
     assert_sources_unpainted("actors_focus")
     paths.update({f"accessibility_{name}": path

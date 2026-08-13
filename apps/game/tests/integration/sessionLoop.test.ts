@@ -1,19 +1,29 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { STARTER_COMMUNITY_PROJECT_ID, type IncidentInstance } from '@farmrise/shared';
+import {
+  STARTER_COMMUNITY_PROJECT_ID,
+  cents,
+  isContractItemUnlocked,
+  spotPriceFor,
+  type IncidentInstance,
+} from '@farmrise/shared';
 import { InputSystem } from '@engine/input/InputSystem.js';
 import { ServiceContainer } from '@engine/core/ServiceContainer.js';
 import { CareerDirector } from '@game/career/CareerDirector.js';
+import { ContractBoard } from '@game/career/ContractBoard.js';
 import { IncidentDirector } from '@game/events/IncidentDirector.js';
 import { DEFAULT_BINDINGS, type GameAction } from '@game/GameActions.js';
 import { Player } from '@game/player/Player.js';
 import { PlayerController } from '@game/player/PlayerController.js';
+import { InteractionController } from '@game/systems/InteractionController.js';
 import { SessionController } from '@game/systems/SessionController.js';
+import { contractQuote, spotQuote } from '@game/world/FarmCommands.js';
 import {
   addToYard,
   depositCarriedAtYard,
   fundedCareer,
   growAndHarvest,
+  makeCareer,
 } from '../helpers/career.js';
 
 const STEP = { stepSeconds: 1 / 60, tick: 0 };
@@ -31,17 +41,29 @@ function makeSession(contractsUnlocked = true, skipOnboarding = true) {
   const playerController = new PlayerController(player, world, world.physics, input);
   const incidents = new IncidentDirector(career);
   const careerDirector = new CareerDirector(career);
+  const interaction = new InteractionController(career, player, playerController, incidents, input);
   const session = new SessionController(
     career,
     player,
     playerController,
+    interaction,
     incidents,
     careerDirector,
     input,
     new THREE.PerspectiveCamera(),
     { skipOnboarding, now: () => 0 },
   );
-  return { career, world, player, session, incidents, careerDirector, input, target };
+  return {
+    career,
+    world,
+    player,
+    session,
+    interaction,
+    incidents,
+    careerDirector,
+    input,
+    target,
+  };
 }
 
 let harness: ReturnType<typeof makeSession>;
@@ -60,6 +82,22 @@ describe('the physical core loop', () => {
   it('keeps contract offers hidden until the milestone unlocks them', () => {
     const locked = makeSession(false);
     expect(locked.session.contracts).toHaveLength(0);
+  });
+
+  it('does not offer any goods before their production capability unlocks', () => {
+    const career = makeCareer({
+      stage: 1,
+      unlocks: ['contracts', 'buyer_cannery', 'buyer_co_op'],
+    });
+    const board = new ContractBoard(career);
+    board.refresh();
+
+    expect(board.available().length).toBeGreaterThan(0);
+    expect(
+      board
+        .available()
+        .every((entry) => isContractItemUnlocked(entry.offer.itemId, career.unlocks)),
+    ).toBe(true);
   });
 
   it('grows into carried goods, hauls them to a store, then sells them', () => {
@@ -96,6 +134,16 @@ describe('the physical core loop', () => {
     weathered.session.sell('wheat', 1);
 
     expect(freshPayout).toBeGreaterThan(weatheredPayout);
+  });
+
+  it('quotes spot and contract payouts using the same held quality', () => {
+    const { career, world } = harness;
+    world.stores.deposit('store-yard', 'wheat', 2, 0.2);
+    const spotUnit = spotQuote(career, 'wheat');
+    const contractUnit = cents(spotPriceFor('wheat') * 1.5);
+    const contractTotal = contractQuote(career, 'wheat', contractUnit, 2);
+
+    expect(Math.abs(contractTotal - spotUnit * 2 * 1.5)).toBeLessThanOrEqual(2);
   });
 
   it('accepts an offline buyer offer and completes it from localized storage', () => {
@@ -197,6 +245,31 @@ describe('progression remains continuous', () => {
 });
 
 describe('incident response and panels', () => {
+  it('opens the seasonal seed panel from an empty bed and applies a valid choice', () => {
+    const { career, world, player, session, interaction, input } = harness;
+    const plot = world.fields.placements[0]!;
+    const at = world.grid.tileToWorld(plot.tileX, plot.tileZ);
+    player.position.x = at.x;
+    player.position.z = at.z;
+    const refusals: string[] = [];
+    session.events.on('session:refused', ({ reason }) => refusals.push(reason));
+
+    input.setActionValue('cycleCrop', 1);
+    input.fixedUpdate();
+    session.fixedUpdate(STEP);
+    expect(session.panel).toBe('seed');
+
+    session.selectSeed('tomato');
+    expect(refusals.at(-1)).toMatch(/not available this season/i);
+    expect(session.panel).toBe('seed');
+    expect(interaction.selectedCropId).toBe('wheat');
+
+    session.selectSeed('radish');
+    expect(session.panel).toBe('none');
+    expect(interaction.selectedCropId).toBe('radish');
+    expect(career.world.getPlot(plot.id)?.cropId).toBeNull();
+  });
+
   it('routes a warned response through the session and charges its real cost', () => {
     const { career, session, incidents } = harness;
     const incident: IncidentInstance = {

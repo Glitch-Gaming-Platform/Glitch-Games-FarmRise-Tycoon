@@ -67,6 +67,11 @@ describe('order listing', () => {
     const result = await services.market.listOrders(userId);
     expect(result.orders.length).toBeGreaterThan(0);
     expect(result.serverTick).toBeGreaterThan(0);
+    for (const order of result.orders) {
+      const ratio = order.unitPrice / spotPriceFor(order.itemId);
+      expect(ratio).toBeGreaterThanOrEqual(1.3);
+      expect(ratio).toBeLessThanOrEqual(1.9);
+    }
   });
 
   it('is stable across calls within a window, so refreshing cannot reroll', async () => {

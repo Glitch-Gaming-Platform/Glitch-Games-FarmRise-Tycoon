@@ -2,7 +2,7 @@ import { readFileSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BUILDING_KINDS, CROP_IDS } from '@farmrise/shared';
+import { ANIMAL_SPECIES, BUILDING_KINDS, CROP_IDS } from '@farmrise/shared';
 import { CORE_MANIFEST, LOW_CORE_MANIFEST } from '../../src/assets/manifests/core.manifest.js';
 
 const ROOT = process.cwd();
@@ -10,7 +10,9 @@ const PUBLIC_ROOT = path.resolve(ROOT, 'apps/game/public');
 const REPORT = JSON.parse(readFileSync(path.resolve(ROOT, 'art/build_report.json'), 'utf8')) as {
   total_triangles: number;
   assets: readonly { name: string; triangles: number }[];
+  budgets: Readonly<Record<string, number>>;
   family_bytes: Record<string, { raw: number; raw_gzip: number }>;
+  low_supplement_bytes: Record<string, { raw: number; raw_gzip: number }>;
 };
 
 function glbJson(filename: string): {
@@ -39,7 +41,12 @@ describe('model catalog', () => {
   it('routes low to the immutable legacy model pack', () => {
     const ultraModels = CORE_MANIFEST.assets.filter((entry) => entry.kind === 'model');
     const lowModels = LOW_CORE_MANIFEST.assets.filter((entry) => entry.kind === 'model');
-    expect(lowModels.map((entry) => entry.id)).toEqual(ultraModels.map((entry) => entry.id));
+    const ultraIds = new Set(ultraModels.map((entry) => entry.id));
+    const lowSupplements = lowModels.filter((entry) => !ultraIds.has(entry.id));
+    expect(lowSupplements.map((entry) => entry.id)).toEqual(['model:animals-sheep']);
+    expect(lowModels.filter((entry) => ultraIds.has(entry.id)).map((entry) => entry.id)).toEqual(
+      ultraModels.map((entry) => entry.id),
+    );
 
     const expectedHashes: Readonly<Record<string, string>> = {
       animals: '74a77260f87710289f801820fe4fcdf24a64fe36db19fca43b563849a22ed0c6',
@@ -56,6 +63,13 @@ describe('model catalog', () => {
 
     for (const entry of lowModels) {
       const family = entry.id.replace('model:', '');
+      if (family === 'animals-sheep') {
+        const filename = path.join(PUBLIC_ROOT, entry.url);
+        expect(entry.url).toBe('assets/models/animals-sheep.glb');
+        expect(entry.bytes).toBe(REPORT.low_supplement_bytes[family]?.raw);
+        expect(statSync(filename).size).toBe(entry.bytes);
+        continue;
+      }
       expect(entry.url).toBe(`assets/models/low/${family}.glb`);
       const filename = path.join(PUBLIC_ROOT, entry.url);
       const bytes = readFileSync(filename);
@@ -77,6 +91,12 @@ describe('model catalog', () => {
 
   it('keeps the complete authored world below its triangle budget', () => {
     expect(REPORT.total_triangles).toBeLessThanOrEqual(40_000);
+  });
+
+  it('reserves the approved ULTRA hero budget without changing low assets', () => {
+    const farmer = REPORT.assets.find((asset) => asset.name === 'SM_char_farmer');
+    expect(REPORT.budgets.character).toBe(3_500);
+    expect(farmer?.triangles).toBeLessThanOrEqual(REPORT.budgets.character ?? 0);
   });
 
   it('reclaims enough catalog geometry for readable crop and tree silhouettes', () => {
@@ -113,7 +133,20 @@ describe('model catalog', () => {
   it('ships authored geometry for every playable building kind', () => {
     const names = new Set(REPORT.assets.map((asset) => asset.name));
     for (const kind of BUILDING_KINDS) {
-      expect(names.has(`SM_building_${kind}`), kind).toBe(true);
+      const mesh =
+        kind === 'animal_shelter'
+          ? 'SM_building_coop'
+          : kind === 'water_trough'
+            ? 'SM_prop_water_trough'
+            : `SM_building_${kind}`;
+      expect(names.has(mesh), kind).toBe(true);
+    }
+  });
+
+  it('ships authored geometry for every purchasable animal species', () => {
+    const names = new Set(REPORT.assets.map((asset) => asset.name));
+    for (const species of ANIMAL_SPECIES) {
+      expect(names.has(`SM_animal_${species}`), species).toBe(true);
     }
   });
 

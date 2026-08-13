@@ -14,7 +14,7 @@ const state = (id: GamePhase, hooks: Partial<GameState> = {}): GameState => ({ i
 
 function makeMachine() {
   const machine = new GameStateMachine();
-  for (const phase of ['boot', 'menu', 'loading', 'playing', 'paused'] as const) {
+  for (const phase of ['boot', 'menu', 'loading', 'playing', 'paused', 'outcome'] as const) {
     machine.register(state(phase));
   }
   return machine;
@@ -26,6 +26,7 @@ describe('transition table', () => {
     expect(canTransition('loading', 'playing')).toBe(true);
     expect(canTransition('playing', 'paused')).toBe(true);
     expect(canTransition('paused', 'playing')).toBe(true);
+    expect(canTransition('outcome', 'playing')).toBe(true);
   });
 
   it('refuses pausing during a load', () => {
@@ -51,6 +52,14 @@ describe('GameStateMachine', () => {
     expect(machine.current).toBe('menu'); // queued, not applied yet
     await machine.flush();
     expect(machine.current).toBe('loading');
+  });
+
+  it('continues from a season review on the already loaded farm', async () => {
+    const machine = makeMachine();
+    await machine.begin('outcome');
+    machine.transitionTo('playing', 'season-continue');
+    await machine.flush();
+    expect(machine.current).toBe('playing');
   });
 
   it('rejects an illegal transition and stays put', async () => {

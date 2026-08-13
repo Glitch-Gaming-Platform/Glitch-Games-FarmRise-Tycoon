@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { requireCrop, type IncidentInstance } from '@farmrise/shared';
+import { STARTER_SHELTER_ID, requireCrop, type IncidentInstance } from '@farmrise/shared';
 import type { InputSystem } from '@engine/input/InputSystem.js';
 import { IncidentDirector } from '@game/events/IncidentDirector.js';
 import { Player } from '@game/player/Player.js';
@@ -9,6 +9,7 @@ import { plant } from '@game/world/FarmCommands.js';
 import { shelterDoorPoint } from '@game/world/collisionProfiles.js';
 import { chickenPose, createChickenPose } from '@game/animals/chickenMotion.js';
 import { cowPose, createCowPose } from '@game/animals/cowMotion.js';
+import { createSheepPose, sheepPose } from '@game/animals/sheepMotion.js';
 import type { GameAction } from '@game/GameActions.js';
 import { makeCareer } from '../helpers/career.js';
 
@@ -146,7 +147,7 @@ describe('InteractionController prompts', () => {
       plotPrompts.push({ label, secondary: secondaryLabel }),
     );
     plotInteraction.fixedUpdate(STEP);
-    expect(plotPrompts).toEqual([{ label: 'Plant Wheat', secondary: 'Change seed' }]);
+    expect(plotPrompts).toEqual([{ label: 'Plant Wheat', secondary: 'Choose seed' }]);
 
     const door = shelterDoorPoint(world.grid, world.level.shelter.tileX, world.level.shelter.tileZ);
     const shelterPlayer = new Player(door.x, door.z);
@@ -161,6 +162,37 @@ describe('InteractionController prompts', () => {
     shelterInteraction.events.on('interaction:prompt', ({ label }) => shelterLabels.push(label));
     shelterInteraction.fixedUpdate(STEP);
     expect(shelterLabels).toEqual(['Drive the animals in']);
+  });
+
+  it('selects an explicit current-season seed and rejects a stale seasonal choice', () => {
+    const career = makeCareer();
+    const world = career.world;
+    const placement = world.fields.placements[0]!;
+    const position = world.grid.tileToWorld(placement.tileX, placement.tileZ);
+    const player = new Player(position.x, position.z);
+    const input = {
+      wasPressed: () => false,
+      isDown: () => false,
+      axis: () => 0,
+    } as unknown as InputSystem<GameAction>;
+    const interaction = new InteractionController(
+      career,
+      player,
+      new PlayerController(player, world, world.physics, input),
+      new IncidentDirector(career),
+      input,
+    );
+    const selected: string[] = [];
+    interaction.events.on('interaction:crop-selected', ({ cropId }) => selected.push(cropId));
+
+    expect(interaction.seedSelectionTargetId()).toBe(placement.id);
+    expect(interaction.selectCrop('radish')).toEqual({ ok: true, value: undefined });
+    expect(interaction.selectedCropId).toBe('radish');
+    expect(selected).toEqual(['radish']);
+
+    const unavailable = interaction.selectCrop('tomato');
+    expect(unavailable.ok).toBe(false);
+    expect(interaction.selectedCropId).toBe('radish');
   });
 
   it('lets the egg basket win over a simultaneous fox response at the shelter', () => {
@@ -668,6 +700,43 @@ describe('proximity meters', () => {
     expect(interaction.proximityMeters().some((meter) => meter.kind === 'storage')).toBe(false);
   });
 
+  it('shows local shelter slots only while the player is beside that shelter', () => {
+    const { world, player, interaction } = setUp();
+    world.livestock.hydrate([
+      {
+        id: 'animals-sheep-capacity',
+        species: 'sheep',
+        shelterId: STARTER_SHELTER_ID,
+        count: 1,
+        cycleTicks: 0,
+        tileX: world.level.shelter.tileX,
+        tileZ: world.level.shelter.tileZ,
+        sheltered: false,
+      },
+    ]);
+
+    const far = world.grid.tileToWorld(2, 2);
+    player.position.x = far.x;
+    player.position.z = far.z;
+    expect(interaction.proximityMeters().some((meter) => meter.kind === 'shelter')).toBe(false);
+
+    const nearby = world.grid.tileToWorld(world.level.shelter.tileX + 2, world.level.shelter.tileZ);
+    player.position.x = nearby.x;
+    player.position.z = nearby.z;
+    const available = interaction.proximityMeters().find((meter) => meter.kind === 'shelter');
+    expect(available?.target).toEqual({ kind: 'shelter', id: STARTER_SHELTER_ID });
+    expect(available?.label).toBe('Starter Shelter capacity');
+    expect(available?.detail).toBe('2/4 slots used · 2 available');
+    expect(available?.value).toBe(0.5);
+    expect(available?.urgent).toBe(false);
+
+    world.livestock.add('sheep', 1, world.shelters.get(STARTER_SHELTER_ID)!);
+    const full = interaction.proximityMeters().find((meter) => meter.kind === 'shelter');
+    expect(full?.detail).toBe('Full · 4/4 slots used');
+    expect(full?.value).toBe(0);
+    expect(full?.urgent).toBe(true);
+  });
+
   it('keeps storage details visible while a broken building owns the Repair prompt', () => {
     const { world, player, interaction } = setUp();
     world.structures.add({
@@ -698,7 +767,7 @@ describe('proximity meters', () => {
 
     interaction.fixedUpdate(STEP);
 
-    expect(prompts).toEqual(['Repair']);
+    expect(prompts).toEqual(['Repair Barn']);
     expect(interaction.proximityMeters().map((meter) => meter.kind)).toEqual([
       'freshness',
       'storage',
@@ -808,6 +877,7 @@ describe('proximity meters', () => {
       {
         id: 'animals-cows',
         species: 'cow',
+        shelterId: 'shelter-starter',
         count: 1,
         cycleTicks: 0,
         tileX: world.level.shelter.tileX,
@@ -823,6 +893,32 @@ describe('proximity meters', () => {
     const animal = interaction.proximityMeters().find((meter) => meter.kind === 'animal');
     expect(animal?.label).toBe('1 Dairy cow makes 6 Milk');
     expect(animal?.detail).toBe('Store 3 Clover each cycle · 0/3 stored');
+    expect(animal?.urgent).toBe(true);
+  });
+
+  it('explains the longer sheep feed and wool cycle beside the flock', () => {
+    const { world, player, interaction } = setUp();
+    world.livestock.hydrate([
+      {
+        id: 'animals-sheep',
+        species: 'sheep',
+        shelterId: STARTER_SHELTER_ID,
+        count: 1,
+        cycleTicks: 0,
+        tileX: world.level.shelter.tileX,
+        tileZ: world.level.shelter.tileZ,
+        sheltered: false,
+      },
+    ]);
+    world.stores.withdrawStoredAnywhere('corn', world.stores.storedTotalOf('corn'));
+    const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
+    const pose = sheepPose(shelter, 0, 1, 0, 1, createSheepPose());
+    player.position.x = pose.x;
+    player.position.z = pose.z;
+
+    const animal = interaction.proximityMeters().find((meter) => meter.kind === 'animal');
+    expect(animal?.label).toBe('1 Sheep makes 4 Wool');
+    expect(animal?.detail).toBe('Store 2 Corn each cycle · 0/2 stored');
     expect(animal?.urgent).toBe(true);
   });
 });

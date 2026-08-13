@@ -94,13 +94,13 @@ export const BEATS: readonly Beat[] = [
     touch: {
       body: 'When Plant Wheat appears, tap Work to sow your first crop.',
       key: 'WORK',
-      hintBody: 'Tap Work while standing on a bed. Seed changes which crop you carry.',
+      hintBody: 'Tap Work while standing on a bed. Seed opens the seasonal seed menu.',
     },
     reveals: ['seed', 'money'],
     isDone: (c) => c.plantedPlots > 0,
     hint: {
       afterMs: 14_000,
-      body: 'Press E while standing on a bed. Q swaps which seed you carry.',
+      body: 'Press E while standing on a bed. Q opens the seasonal seed menu.',
     },
   },
   {

@@ -14,6 +14,7 @@
 import {
   DEFAULT_BUYER_ID,
   ITEMS,
+  applyContractCommitmentBonus,
   combineStoreInventories,
   cents,
   createRng,
@@ -165,10 +166,11 @@ export class MarketService {
     return Array.from({ length: count }, () => {
       const itemId = rng.pick(itemIds);
       const spot = spotPriceFor(itemId);
-      // Contracts pay 15-45% over spot. That premium is the reason to accept a
-      // deadline instead of selling on the spot market.
+      // The existing market premium establishes the offer, then committing to
+      // its quantity and deadline adds another 15-30%.
       const premium = 1.15 + rng.next() * 0.3;
       const quantity = 4 + rng.int(0, 9);
+      const unitPrice = applyContractCommitmentBonus(cents(spot * premium), rng.next());
 
       return {
         id: newId('ord'),
@@ -176,7 +178,7 @@ export class MarketService {
         buyerId: DEFAULT_BUYER_ID,
         itemId,
         quantity,
-        unitPrice: Math.round(spot * premium),
+        unitPrice,
         // Deadlines land between 5 and 15 in-game minutes out.
         deadlineTick: tick + 60 * (300 + rng.int(0, 600)),
         status: 'open' as const,

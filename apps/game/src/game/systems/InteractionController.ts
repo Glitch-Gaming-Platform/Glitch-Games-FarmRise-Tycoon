@@ -15,6 +15,7 @@ import {
   CROPS,
   ANIMALS,
   BUILDINGS,
+  STARTER_SHELTER_ID,
   buildingFootprint,
   FIELD_SPOILAGE_MULTIPLIER,
   STORED_SPOILAGE_MULTIPLIER,
@@ -30,6 +31,7 @@ import {
   ticksUntilThirsty,
   totalUnits,
   type PlotState,
+  type AnimalSpecies,
   type Season,
   getCrop,
   getItem,
@@ -37,7 +39,11 @@ import {
   plantableCrops,
   plotStage,
   ticksToSeconds,
+  recipesFor,
+  type BuildingKind,
   type Result,
+  ok,
+  ruleViolation,
 } from '@farmrise/shared';
 import { EventBus } from '@engine/core/EventBus.js';
 import type { InputSystem } from '@engine/input/InputSystem.js';
@@ -46,16 +52,22 @@ import { collectStack, depositCarried, harvest, plant, tend } from '../world/Far
 import type { Career } from '../career/Career.js';
 import type { IncidentDirector } from '../events/IncidentDirector.js';
 import type { StoreState } from '../world/models/StoreModel.js';
+import type { AnimalShelterState } from '../world/models/AnimalShelterModel.js';
 import type { Player } from '../player/Player.js';
 import type { WorkAction } from '../player/Player.js';
 import type { PlayerController } from '../player/PlayerController.js';
 import type { GameAction } from '../GameActions.js';
-import { shelterDoorPoint } from '../world/collisionProfiles.js';
 import { chickenPose, createChickenPose } from '../animals/chickenMotion.js';
 import { cowPose, createCowPose } from '../animals/cowMotion.js';
+import { createSheepPose, sheepPose } from '../animals/sheepMotion.js';
+import { visibleAnimalCountForGroup } from '../animals/visibleAnimalInstances.js';
+import {
+  buildingInteraction,
+  type BuildingInteractionKind,
+} from '../world/buildingInteractions.js';
 
 export type ContextVerb =
-  'plant' | 'tend' | 'harvest' | 'deposit' | 'collect' | 'respond' | 'repair';
+  'plant' | 'tend' | 'harvest' | 'deposit' | 'collect' | 'respond' | 'repair' | 'manage';
 
 export interface InteractionEvents extends Record<string, unknown> {
   'interaction:prompt': {
@@ -65,9 +77,18 @@ export interface InteractionEvents extends Record<string, unknown> {
     notice: string | null;
     verb: ContextVerb | null;
   };
-  'interaction:performed': { target: string; action: ContextVerb };
+  'interaction:performed': {
+    target: string;
+    action: ContextVerb;
+    responseKind?: string;
+  };
   'interaction:refused': { reason: string };
   'interaction:crop-selected': { cropId: string };
+  'interaction:building-requested': {
+    buildingId: string;
+    kind: BuildingKind;
+    interaction: Exclude<BuildingInteractionKind, 'passive'>;
+  };
 }
 
 /** How long each action locks the player in place. Work should be felt. */
@@ -81,6 +102,7 @@ const WORK_TICKS: Record<ContextVerb, number> = {
   collect: secondsToTicks(0.9),
   respond: secondsToTicks(1.4),
   repair: secondsToTicks(1.8),
+  manage: 0,
 };
 
 const FULL_PACK_MESSAGE = "You can't carry anymore. Store some items first.";
@@ -91,6 +113,8 @@ interface ContextTarget {
   readonly label: string;
   readonly secondaryLabel?: string;
   readonly responseKind?: string;
+  readonly buildingKind?: BuildingKind;
+  readonly buildingInteraction?: Exclude<BuildingInteractionKind, 'passive'>;
   /** Bars describing the thing under the player's feet, if it has any. */
   readonly meters?: readonly ProximityMeter[];
 }
@@ -103,11 +127,11 @@ interface ContextTarget {
  * direction before reading the number.
  */
 export interface ProximityMeter {
-  readonly kind: 'water' | 'growth' | 'freshness' | 'storage' | 'animal';
+  readonly kind: 'water' | 'growth' | 'freshness' | 'storage' | 'shelter' | 'animal';
   /** The world object this gauge floats above. */
   readonly target:
     | {
-        readonly kind: 'plot' | 'store';
+        readonly kind: 'plot' | 'store' | 'shelter';
         readonly id: string;
       }
     | {
@@ -130,7 +154,7 @@ export interface ProximityMeter {
 
 export class InteractionController {
   readonly events = new EventBus<InteractionEvents>();
-  #selectedCropIndex = 0;
+  #selectedCropId = Object.keys(CROPS)[0] ?? 'wheat';
   #lastPromptId: string | null = null;
   #lastPromptLabel: string | null = null;
   #lastSecondaryLabel: string | null = null;
@@ -147,12 +171,11 @@ export class InteractionController {
 
   get selectedCropId(): string {
     const available = plantableCrops(this.career.unlocks, this.career.season);
-    const crop = available[this.#selectedCropIndex % Math.max(1, available.length)];
-    return (crop?.id as string) ?? Object.keys(CROPS)[0] ?? 'wheat';
+    const selected = available.find((crop) => crop.id === this.#selectedCropId);
+    return (selected?.id as string) ?? (available[0]?.id as string) ?? 'wheat';
   }
 
   fixedUpdate(_context: FixedUpdateContext): void {
-    if (this.input.wasPressed('cycleCrop')) this.#cycleCrop();
     this.#reportBlockedPickup();
 
     const target = this.#resolveTarget();
@@ -207,8 +230,31 @@ export class InteractionController {
       };
     }
 
-    if (!world.carry.isEmpty) {
-      const store = world.stores.nearestStored(tile.x, tile.z, 2);
+    const building = world.structures.nearest(
+      tile.x,
+      tile.z,
+      2,
+      (candidate) =>
+        candidate.remainingBuildTicks <= 0 &&
+        (candidate.broken || buildingInteraction(candidate.kind) !== 'passive'),
+    );
+
+    // A processor consumes carried ingredients directly. Resolve it before a
+    // neighbouring yard/barn deposit so "Load Mill" does what its prompt says.
+    if (
+      building &&
+      !building.broken &&
+      buildingInteraction(building.kind) === 'processing' &&
+      this.#carriesProcessorInput(building.kind)
+    ) {
+      return this.#buildingTarget(building.id, building.kind, 'Load');
+    }
+
+    if (!world.carry.isEmpty && !building?.broken) {
+      const buildingStore = building
+        ? world.stores.stores.find((store) => store.buildingId === building.id)
+        : undefined;
+      const store = buildingStore ?? world.stores.nearestStored(tile.x, tile.z, 2);
       if (store) {
         return {
           verb: 'deposit',
@@ -233,7 +279,7 @@ export class InteractionController {
             verb: 'plant',
             id: plotId,
             label: `Plant ${crop?.displayName ?? this.selectedCropId}`,
-            secondaryLabel: 'Change seed',
+            secondaryLabel: 'Choose seed',
           };
         }
         if (stage === 'ready') {
@@ -253,11 +299,40 @@ export class InteractionController {
       }
     }
 
-    const building = world.structures.at(tile.x, tile.z);
     if (building?.broken) {
-      return { verb: 'repair', id: building.id, label: 'Repair' };
+      return {
+        verb: 'repair',
+        id: building.id,
+        label: `Repair ${BUILDINGS[building.kind].displayName}`,
+      };
     }
+    if (building) return this.#buildingTarget(building.id, building.kind);
     return null;
+  }
+
+  #carriesProcessorInput(kind: BuildingKind): boolean {
+    const carried = this.career.world.carry.items;
+    return recipesFor(kind as never).some((recipe) => (carried[recipe.inputItemId] ?? 0) > 0);
+  }
+
+  #buildingTarget(
+    id: string,
+    kind: BuildingKind,
+    verb: 'Manage' | 'Inspect' | 'Load' = buildingInteraction(kind) === 'storage'
+      ? 'Inspect'
+      : 'Manage',
+  ): ContextTarget {
+    const interaction = buildingInteraction(kind);
+    if (interaction === 'passive') {
+      throw new Error(`Passive building ${kind} cannot own the context action.`);
+    }
+    return {
+      verb: 'manage',
+      id,
+      label: `${verb} ${BUILDINGS[kind].displayName}`,
+      buildingKind: kind,
+      buildingInteraction: interaction,
+    };
   }
 
   /**
@@ -294,6 +369,9 @@ export class InteractionController {
       if (buildingStore.id !== store?.id) meters.push(...this.#storeMeters(buildingStore));
       meters.push(this.#buildingStorageMeter(buildingStore));
     }
+
+    const shelter = this.#nearestShelterMeter(tile.x, tile.z);
+    if (shelter) meters.push(shelter);
 
     const animal = this.#animalGuidanceMeter();
     if (animal) meters.push(animal);
@@ -354,6 +432,56 @@ export class InteractionController {
     };
   }
 
+  /** Shelter occupancy appears only while the player is beside that shelter. */
+  #nearestShelterMeter(tileX: number, tileZ: number): ProximityMeter | null {
+    const world = this.career.world;
+    let nearest: AnimalShelterState | undefined;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const shelter of world.shelters.all()) {
+      const footprint =
+        shelter.buildingId === null
+          ? { width: 1, depth: 1 }
+          : buildingFootprint('animal_shelter', shelter.rotation);
+      const minX = shelter.tileX;
+      const maxX = shelter.tileX + footprint.width - 1;
+      const minZ = shelter.tileZ;
+      const maxZ = shelter.tileZ + footprint.depth - 1;
+      const dx = tileX < minX ? minX - tileX : tileX > maxX ? tileX - maxX : 0;
+      const dz = tileZ < minZ ? minZ - tileZ : tileZ > maxZ ? tileZ - maxZ : 0;
+      const distance = dx + dz;
+      if (
+        distance > 2 ||
+        distance > nearestDistance ||
+        (distance === nearestDistance && nearest && shelter.id >= nearest.id)
+      ) {
+        continue;
+      }
+      nearest = shelter;
+      nearestDistance = distance;
+    }
+
+    if (!nearest) return null;
+    const capacity = world.shelters.capacityFor(nearest.id);
+    const used = world.shelterSlotsUsedAt(nearest.id);
+    const available = Math.max(0, capacity - used);
+    const overCapacity = Math.max(0, used - capacity);
+    const name = nearest.id === STARTER_SHELTER_ID ? 'Starter Shelter' : 'Animal Shelter';
+    return {
+      kind: 'shelter',
+      target: { kind: 'shelter', id: nearest.id },
+      label: `${name} capacity`,
+      value: capacity > 0 ? available / capacity : 0,
+      detail:
+        overCapacity > 0
+          ? `${used}/${capacity} slots used · ${overCapacity} over capacity`
+          : available === 0
+            ? `Full · ${used}/${capacity} slots used`
+            : `${used}/${capacity} slots used · ${available} available`,
+      urgent: available === 0,
+    };
+  }
+
   /** Announces a blocked pickup once when the player enters a pile's range. */
   #reportBlockedPickup(): void {
     const world = this.career.world;
@@ -379,59 +507,104 @@ export class InteractionController {
   /** Feed/product guidance follows the nearest visible animal without owning E. */
   #animalGuidanceMeter(): ProximityMeter | null {
     const world = this.career.world;
-    const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
+    const groups = world.livestock.groups;
     const simulationTime = ticksToSeconds(world.tick);
     let nearest:
       | {
-          readonly species: 'chicken' | 'cow';
+          readonly groupId: string;
+          readonly species: AnimalSpecies;
+          readonly count: number;
           readonly distance: number;
           readonly x: number;
           readonly z: number;
         }
       | undefined;
 
-    const chickenCount = Math.min(world.livestock.countOf('chicken'), 64);
     const chicken = createChickenPose();
-    for (let index = 0; index < chickenCount; index += 1) {
-      chickenPose(shelter, index, chickenCount, simulationTime, 0, 1, chicken);
-      const distance = Math.hypot(
-        this.player.position.x - chicken.x,
-        this.player.position.z - chicken.z,
-      );
-      if (!nearest || distance < nearest.distance) {
-        nearest = { species: 'chicken', distance, x: chicken.x, z: chicken.z };
+    for (const group of groups) {
+      if (group.species !== 'chicken') continue;
+      const count = visibleAnimalCountForGroup(groups, 'chicken', group.id, 64);
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let index = 0; index < count; index += 1) {
+        chickenPose(shelter, index, count, simulationTime, 0, 1, chicken);
+        const distance = Math.hypot(
+          this.player.position.x - chicken.x,
+          this.player.position.z - chicken.z,
+        );
+        if (!nearest || distance < nearest.distance) {
+          nearest = {
+            groupId: group.id,
+            species: 'chicken',
+            count: group.count,
+            distance,
+            x: chicken.x,
+            z: chicken.z,
+          };
+        }
       }
     }
 
-    const cowCount = Math.min(world.livestock.countOf('cow'), 16);
     const cow = createCowPose();
-    for (let index = 0; index < cowCount; index += 1) {
-      cowPose(shelter, index, cowCount, simulationTime, 1, cow);
-      const distance = Math.hypot(this.player.position.x - cow.x, this.player.position.z - cow.z);
-      if (!nearest || distance < nearest.distance) {
-        nearest = { species: 'cow', distance, x: cow.x, z: cow.z };
+    for (const group of groups) {
+      if (group.species !== 'cow') continue;
+      const count = visibleAnimalCountForGroup(groups, 'cow', group.id, 16);
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let index = 0; index < count; index += 1) {
+        cowPose(shelter, index, count, simulationTime, 1, cow);
+        const distance = Math.hypot(this.player.position.x - cow.x, this.player.position.z - cow.z);
+        if (!nearest || distance < nearest.distance) {
+          nearest = {
+            groupId: group.id,
+            species: 'cow',
+            count: group.count,
+            distance,
+            x: cow.x,
+            z: cow.z,
+          };
+        }
+      }
+    }
+
+    const sheep = createSheepPose();
+    for (const group of groups) {
+      if (group.species !== 'sheep') continue;
+      const count = visibleAnimalCountForGroup(groups, 'sheep', group.id, 24);
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let index = 0; index < count; index += 1) {
+        sheepPose(shelter, index, count, simulationTime, 1, sheep);
+        const distance = Math.hypot(
+          this.player.position.x - sheep.x,
+          this.player.position.z - sheep.z,
+        );
+        if (!nearest || distance < nearest.distance) {
+          nearest = {
+            groupId: group.id,
+            species: 'sheep',
+            count: group.count,
+            distance,
+            x: sheep.x,
+            z: sheep.z,
+          };
+        }
       }
     }
 
     if (!nearest || nearest.distance > 2.6) return null;
     const definition = ANIMALS[nearest.species];
-    const count = world.livestock.countOf(nearest.species);
+    const count = nearest.count;
     const needed = definition.feedPerCycle * count;
     const available = world.stores.storedTotalOf(definition.feedItemId);
     const produced = definition.producePerCycle * count;
-    const animals =
-      nearest.species === 'chicken'
-        ? `${count} ${count === 1 ? 'Hen' : 'Hens'}`
-        : `${count} ${count === 1 ? 'Dairy cow' : 'Dairy cows'}`;
+    const animals = animalGroupLabel(nearest.species, count);
     const feed = getItem(definition.feedItemId)?.displayName ?? definition.feedItemId;
     const product = getItem(definition.producesItemId)?.displayName ?? definition.producesItemId;
     return {
       kind: 'animal',
       target: {
         kind: 'animal',
-        id: nearest.species,
+        id: nearest.groupId,
         x: nearest.x,
-        y: nearest.species === 'chicken' ? 1.25 : 1.9,
+        y: nearest.species === 'chicken' ? 1.25 : nearest.species === 'sheep' ? 1.65 : 1.9,
         z: nearest.z,
       },
       label: `${animals} ${count === 1 ? 'makes' : 'make'} ${produced} ${product}`,
@@ -493,11 +666,9 @@ export class InteractionController {
     const world = this.career.world;
     const plotId = this.playerController.plotInReach();
     const targetPlot = plotId ? world.getPlot(plotId) : undefined;
-    const shelter = shelterDoorPoint(
-      world.grid,
-      world.level.shelter.tileX,
-      world.level.shelter.tileZ,
-    );
+    const playerTile = world.grid.worldToTile(this.player.position.x, this.player.position.z);
+    const nearestShelter = world.shelters.nearest(playerTile.x, playerTile.z);
+    const nearestShelterDoor = world.shelters.doorPoint(nearestShelter.id);
 
     for (const response of definition.responses) {
       if (response.kind === 'pay') continue;
@@ -515,8 +686,15 @@ export class InteractionController {
           );
           break;
         case 'move_animals':
+          relevant = instance.targetIds.some((groupId) => {
+            const group = world.livestock.get(groupId);
+            if (!group) return false;
+            const shelter = world.shelters.doorPoint(group.shelterId);
+            return this.player.canReach(shelter.x, shelter.z);
+          });
+          break;
         case 'haul_to_shelter':
-          relevant = this.player.canReach(shelter.x, shelter.z);
+          relevant = this.player.canReach(nearestShelterDoor.x, nearestShelterDoor.z);
           break;
         case 'repair':
           if (definition.target === 'processor') {
@@ -567,6 +745,20 @@ export class InteractionController {
   }
 
   #perform(target: ContextTarget): void {
+    if (target.verb === 'manage' && target.buildingKind && target.buildingInteraction) {
+      this.events.emit('interaction:building-requested', {
+        buildingId: target.id,
+        kind: target.buildingKind,
+        interaction: target.buildingInteraction,
+      });
+      this.events.emit('interaction:performed', {
+        target: target.id,
+        action: target.verb,
+      });
+      this.#clearPromptCache();
+      return;
+    }
+
     const world = this.career.world;
     const tile = world.grid.worldToTile(this.player.position.x, this.player.position.z);
     let result: Result<unknown>;
@@ -610,19 +802,46 @@ export class InteractionController {
     }
 
     this.player.beginWork(WORK_TICKS[target.verb], workPose(target.verb));
-    this.events.emit('interaction:performed', { target: target.id, action: target.verb });
+    this.events.emit('interaction:performed', {
+      target: target.id,
+      action: target.verb,
+      ...(target.responseKind ? { responseKind: target.responseKind } : {}),
+    });
     // The prompt text changes as soon as the action lands, so force a refresh.
+    this.#clearPromptCache();
+  }
+
+  /** The seed ledger is contextual: Q does nothing unless Plant owns the prompt. */
+  seedSelectionTargetId(): string | null {
+    const target = this.#resolveTarget();
+    return target?.verb === 'plant' ? target.id : null;
+  }
+
+  /** Applies a visual-menu choice while retaining the normal planting command. */
+  selectCrop(cropId: string): Result<void> {
+    const available = plantableCrops(this.career.unlocks, this.career.season);
+    const crop = available.find((candidate) => candidate.id === cropId);
+    if (!crop) return ruleViolation('That seed is not available this season.');
+
+    const previous = this.selectedCropId;
+    this.#selectedCropId = cropId;
+    this.#clearPromptCache();
+    if (previous !== cropId) this.events.emit('interaction:crop-selected', { cropId });
+    return ok(undefined);
+  }
+
+  #clearPromptCache(): void {
     this.#lastPromptId = null;
     this.#lastPromptLabel = null;
     this.#lastSecondaryLabel = null;
     this.#lastPromptNotice = null;
   }
+}
 
-  #cycleCrop(): void {
-    const available = plantableCrops(this.career.unlocks, this.career.season);
-    this.#selectedCropIndex = (this.#selectedCropIndex + 1) % Math.max(1, available.length);
-    this.events.emit('interaction:crop-selected', { cropId: this.selectedCropId });
-  }
+function animalGroupLabel(species: AnimalSpecies, count: number): string {
+  if (species === 'chicken') return `${count} ${count === 1 ? 'Hen' : 'Hens'}`;
+  if (species === 'cow') return `${count} ${count === 1 ? 'Dairy cow' : 'Dairy cows'}`;
+  return `${count} Sheep`;
 }
 
 /** Maps a context verb onto a readable player gesture. */

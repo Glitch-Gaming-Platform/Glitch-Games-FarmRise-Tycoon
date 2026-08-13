@@ -40,7 +40,7 @@ describe('protocol version', () => {
 
   it('pins the current version, so a bump is a deliberate edit', () => {
     expect(PROTOCOL_VERSION).toBe('1.0');
-    expect(SAVE_SCHEMA_VERSION).toBe(2);
+    expect(SAVE_SCHEMA_VERSION).toBe(3);
   });
 });
 

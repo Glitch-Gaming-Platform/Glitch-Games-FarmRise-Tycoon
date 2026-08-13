@@ -29,7 +29,12 @@ describe('TouchControls', () => {
       ['interact', true],
       ['interact', false],
     ]);
-    work.dispatchEvent(pointer('pointercancel', 2));
+    work.dispatchEvent(pointer('pointerup', 2));
+    work.click();
+    expect(setAction.mock.calls).toEqual([
+      ['interact', true],
+      ['interact', false],
+    ]);
     joystick.dispatchEvent(pointer('pointerup', 1, 50, 10));
 
     expect(setActionValue).toHaveBeenCalledWith('moveForward', 1);

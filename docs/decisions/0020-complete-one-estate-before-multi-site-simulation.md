@@ -16,7 +16,7 @@ described in the progression plan.
 
 ## Decision
 
-This release completes progression across the full four-parcel, 32×32 Millbrook estate. The final
+This release completes progression across the full five-parcel, 32×32 Millbrook estate. The final
 playable milestone recognizes regional supply from that estate and unlocks utilities. The save keeps
 the `sites` array and `activeSiteId` so a later release can add multi-site travel without another
 single-site-to-array migration, but the server rejects creation of additional sites for now.

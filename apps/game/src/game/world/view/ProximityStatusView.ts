@@ -59,6 +59,7 @@ export function proximityMeterStackLayout(
 /** Plot and dropped-goods meters on the same tile share one visual stack. */
 export function proximityMeterGroupId(meter: ProximityMeter, anchor: ProximityMeterAnchor): string {
   if (meter.target.kind === 'animal') return `animal:${meter.target.id}`;
+  if (meter.target.kind === 'shelter') return `shelter:${meter.target.id}`;
   return `ground:${anchor.x.toFixed(3)}:${anchor.z.toFixed(3)}`;
 }
 
@@ -76,6 +77,13 @@ export function proximityMeterAnchor(
 
   if (meter.target.kind === 'animal') {
     return { x: meter.target.x, y: meter.target.y, z: meter.target.z };
+  }
+
+  if (meter.target.kind === 'shelter') {
+    const shelter = world.shelters.get(meter.target.id);
+    if (!shelter) return null;
+    const at = world.shelters.worldPosition(shelter.id);
+    return { x: at.x, y: shelter.buildingId === null ? 2.55 : 2.85, z: at.z };
   }
 
   const store = world.stores.get(meter.target.id);
@@ -231,6 +239,8 @@ function meterOrder(kind: ProximityMeter['kind']): number {
       return 1;
     case 'storage':
       return 0;
+    case 'shelter':
+      return 0;
     case 'freshness':
       return 1;
     case 'animal':
@@ -284,7 +294,7 @@ function drawMeter(
         ? '#d6ad3d'
         : meter.kind === 'storage'
           ? '#8a6f47'
-          : meter.kind === 'animal'
+          : meter.kind === 'animal' || meter.kind === 'shelter'
             ? '#3f7a82'
             : '#73a85d';
   context.fill();

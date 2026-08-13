@@ -462,6 +462,14 @@ function animalCountName(
   count: number,
 ): string {
   const fallback =
-    species === 'chicken' ? (count === 1 ? 'hen' : 'hens') : count === 1 ? 'cow' : 'cows';
+    species === 'chicken'
+      ? count === 1
+        ? 'hen'
+        : 'hens'
+      : species === 'sheep'
+        ? 'sheep'
+        : count === 1
+          ? 'cow'
+          : 'cows';
   return i18n.t(`domain.animal.${species}.name`, { count }, fallback);
 }

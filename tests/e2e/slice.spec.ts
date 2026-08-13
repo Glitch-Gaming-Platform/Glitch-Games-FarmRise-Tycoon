@@ -8,6 +8,8 @@
  * Run with `npm run test:e2e` after a one-time `npx playwright install`.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { SEASON_TICKS } from '@farmrise/shared';
+import { createProgressionReviewCareer } from '../../apps/game/src/game/debug/progressionReview.js';
 
 test.beforeEach(async ({ page }) => {
   page.on('pageerror', (error) => {
@@ -200,6 +202,18 @@ test('crop condition bars stay out of the top HUD', async ({ page }) => {
   await expect(page.getByTestId('hud-meter-growth')).toHaveCount(0);
 });
 
+test('empty HUD boxes are not drawn', async ({ page }) => {
+  await enterFarm(page);
+
+  const prompt = page.getByTestId('hud-prompt');
+  await expect(prompt).toHaveText('');
+  await expect(prompt).toBeHidden();
+
+  const bar = page.getByTestId('hud-bar');
+  await expect(bar).toHaveText('');
+  await expect(bar).toBeHidden();
+});
+
 test('a new player is given something to do within seconds', async ({ page }) => {
   await enterFarm(page);
   const coach = page.getByTestId('coach-mark');
@@ -350,6 +364,39 @@ test('market and reinvest interfaces block farm controls behind them', async ({ 
   await expect(page.getByTestId('pause-menu')).toBeHidden();
 });
 
+test('Q opens the seasonal seed menu and the chosen crop becomes the planting action', async ({
+  page,
+}) => {
+  await enterFarm(page);
+  await skipTutorial(page);
+  await reachFirstPlot(page);
+
+  await page.keyboard.press('q');
+  const seedPanel = page.getByTestId('seed-panel');
+  await expect(seedPanel).toBeVisible();
+  await expect(seedPanel).toContainText(/Spring seed cart/i);
+  await expect(seedPanel.getByTestId('seed-option-wheat')).toContainText(/seed.*to harvest/i);
+  await expect(seedPanel.getByTestId('seed-option-radish')).toBeVisible();
+  await expect(seedPanel.getByTestId('seed-option-strawberry')).toBeVisible();
+  await expect(seedPanel.getByTestId('seed-option-tomato')).toHaveCount(0);
+  await expect(page.getByTestId('menu-shortcuts')).toBeHidden();
+
+  await page.keyboard.press('e');
+  await page.keyboard.down('s');
+  await page.waitForTimeout(500);
+  await page.keyboard.up('s');
+  await expect(page.getByTestId('hud-balance')).toContainText('$50.00');
+  await expect(seedPanel).toBeVisible();
+
+  await seedPanel.getByTestId('seed-option-radish').click();
+  await expect(seedPanel).toBeHidden();
+  await expect(page.getByTestId('hud-prompt')).toContainText('Plant Radish');
+
+  await page.keyboard.press('e');
+  await expect(page.getByTestId('hud-balance')).not.toContainText('$50.00');
+  await expect(page.getByTestId('hud-prompt')).toContainText('Tend');
+});
+
 test('the coach mark never blocks the game behind it', async ({ page }) => {
   await enterFarm(page, '/?debug=overlay');
   await expect(page.getByTestId('coach-mark')).toBeVisible();
@@ -432,9 +479,11 @@ test('the reinvest panel shows every option, including the goal', async ({ page 
 
   await page.keyboard.press('KeyB');
   await expect(page.getByTestId('build-panel')).toBeVisible();
-  for (const kind of ['barn', 'irrigation', 'road', 'fence']) {
+  for (const kind of ['barn', 'irrigation', 'road', 'fence', 'water_trough']) {
     await expect(page.getByTestId(`build-${kind}`)).toBeVisible();
   }
+  await expect(page.getByTestId('build-row-water_trough')).toContainText('$10.00');
+  await expect(page.getByTestId('build-animal_shelter')).toHaveCount(0);
   // The land purchase is always listed, even when unaffordable, so the player
   // learns what they are saving toward.
   const extension = page.getByTestId('build-land-row-parcel-starter-extension');
@@ -446,6 +495,210 @@ test('the reinvest panel shows every option, including the goal', async ({ page 
 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('build-panel')).toBeHidden();
+});
+
+test('Stage 1+ exposes the shelter, sheep and wool loop with authored icons', async ({ page }) => {
+  const state = createProgressionReviewCareer(3);
+  await page.addInitScript((savedState) => {
+    window.localStorage.setItem(
+      'farmrise:save:v1',
+      JSON.stringify({
+        schemaVersion: 1,
+        savedAt: Date.now(),
+        revision: 0,
+        state: savedState,
+      }),
+    );
+  }, state);
+  await enterFarm(page, '/?quality=low');
+
+  await page.keyboard.press('KeyB');
+  const shelter = page.getByTestId('build-row-animal_shelter');
+  await expect(shelter).toBeVisible();
+  await expect(shelter).toContainText(/Animal Shelter.*\$30\.00/i);
+  await expect(shelter.locator('img')).toHaveAttribute('src', /animal-shelter\.webp$/);
+  const trough = page.getByTestId('build-row-water_trough');
+  await expect(trough).toContainText(/Water Trough.*\$10\.00/i);
+  await expect(trough.locator('img')).toHaveAttribute('src', /water-trough\.webp$/);
+  const sheep = page.getByTestId('build-animal-row-sheep');
+  await expect(sheep).toContainText(/Sheep.*\$36\.00.*2 stored Corn.*5m.*4 Wool/i);
+  await expect(sheep).toContainText('2 shelter space free');
+  await expect(sheep.locator('img')).toHaveAttribute('src', /sheep\.webp$/);
+  const buySheep = sheep.getByRole('button', { name: 'Buy' });
+  await expect(buySheep).toBeEnabled();
+  // The build snapshot refreshes every frame. Dispatch the semantic click so
+  // slow software-rendered Chromium cannot lose the button to a DOM refresh
+  // while waiting for layout stability.
+  await buySheep.dispatchEvent('click');
+  // One sheep occupies both remaining slots at a single shelter.
+  await expect(page.getByTestId('build-animal-row-sheep')).toContainText('0 shelter space free');
+
+  await page.getByTestId('build-close').click();
+  await page.keyboard.press('KeyM');
+  const wool = page.getByTestId('market-inventory-row-wool');
+  await expect(wool).toContainText(/4 × Wool.*\$[\d,.]+ each.*\$[\d,.]+/i);
+  await expect(wool.locator('img')).toHaveAttribute('src', /wool\.webp$/);
+});
+
+test('contracts display a meaningful premium over the live spot quote', async ({ page }) => {
+  const state = createProgressionReviewCareer(3);
+  await page.addInitScript((savedState) => {
+    window.localStorage.setItem(
+      'farmrise:save:v1',
+      JSON.stringify({
+        schemaVersion: 1,
+        savedAt: Date.now(),
+        revision: 0,
+        state: savedState,
+      }),
+    );
+  }, state);
+  await enterFarm(page, '/?quality=low');
+
+  await page.keyboard.press('KeyM');
+  const contracts = page.getByTestId('market-contracts');
+  await expect(contracts).toBeVisible();
+  const text = await contracts.innerText();
+  const premiums = [...text.matchAll(/\(\+(\d+)% over spot\)/g)].map((match) => Number(match[1]));
+
+  expect(premiums.length).toBeGreaterThan(0);
+  expect(premiums.every((premium) => premium >= 15)).toBe(true);
+});
+
+test('Licensed Producer exposes farm identity, processing, and the South Works expansion', async ({
+  page,
+}) => {
+  const state = createProgressionReviewCareer(2);
+  await page.addInitScript((savedState) => {
+    window.localStorage.setItem(
+      'farmrise:save:v1',
+      JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), revision: 0, state: savedState }),
+    );
+  }, state);
+  await enterFarm(page, '/?quality=low');
+  await skipTutorial(page);
+
+  await page.getByRole('button', { name: 'Open Office' }).click();
+  const office = page.getByTestId('career-panel');
+  await expect(office).toContainText(/Licensed Producer/i);
+  await expect(office).toContainText(/Next stage: Local Supplier/i);
+  await expect(office).toContainText(/Complete every requirement to advance to Local Supplier:/i);
+  await expect(office).toContainText(/Arable.*Livestock.*Market Garden/is);
+  await expect(office).toContainText(/Mill flour.*Press cheese.*Bottle preserves/is);
+
+  const choose = office.getByRole('button', { name: 'Choose' }).first();
+  await choose.click();
+  await expect(office).toContainText(/Arable.*Chosen/is);
+  await office.getByTestId('career-action-processor-building-mill-recipe-flour').click();
+  await expect(office).toContainText(/Mill flour.*1\/3 queued.*42s remaining/is);
+
+  await page.getByTestId('career-close').click();
+  await page.getByRole('button', { name: 'Open Build' }).click();
+  const southWorks = page.getByTestId('build-land-row-parcel-south-works');
+  await expect(southWorks).toContainText(/South Works.*\$380\.00.*4 crop beds/is);
+  await expect(page.getByTestId('build-cold_store')).toHaveCount(0);
+  await expect(page.getByTestId('build-worker_hut')).toHaveCount(0);
+});
+
+test('Local Supplier exposes editable worker priorities and buyer quality terms', async ({
+  page,
+}) => {
+  const state = createProgressionReviewCareer(3);
+  await page.addInitScript((savedState) => {
+    window.localStorage.setItem(
+      'farmrise:save:v1',
+      JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), revision: 0, state: savedState }),
+    );
+  }, state);
+  await enterFarm(page, '/?quality=low');
+  await skipTutorial(page);
+
+  await page.getByRole('button', { name: 'Open Office' }).click();
+  const office = page.getByTestId('career-panel');
+  await expect(office).toContainText(/Local Supplier/i);
+  await expect(office).toContainText(/Next stage: Regional Enterprise/i);
+  await expect(office).toContainText(
+    /Complete every requirement to advance to Regional Enterprise:/i,
+  );
+  await expect(office).toContainText(/tending → harvesting → animal feeding/i);
+  await page.getByTestId('career-action-employed-worker-1').dispatchEvent('click');
+  await expect(office).toContainText(/harvesting → animal feeding → tending/i);
+
+  await page.getByTestId('career-close').click();
+  await page.getByRole('button', { name: 'Open Market' }).click();
+  const contracts = page.getByTestId('market-contracts');
+  await expect(contracts).toContainText(/Thornwood Restaurant/i);
+  await expect(contracts).toContainText(/Quality 70%\+/i);
+  await expect(contracts.getByRole('button', { name: 'Schedule' })).toHaveCount(0);
+});
+
+test('Regional Enterprise unlocks the wagon and standing delivery controls', async ({ page }) => {
+  const state = createProgressionReviewCareer(4);
+  await page.addInitScript((savedState) => {
+    window.localStorage.setItem(
+      'farmrise:save:v1',
+      JSON.stringify({ schemaVersion: 1, savedAt: Date.now(), revision: 0, state: savedState }),
+    );
+  }, state);
+  await enterFarm(page, '/?quality=low');
+  await skipTutorial(page);
+
+  await page.getByRole('button', { name: 'Open Office' }).click();
+  const office = page.getByTestId('career-panel');
+  await expect(office).toContainText(/Regional Enterprise/i);
+  await expect(office).toContainText(/Next stage: Agricultural Estate/i);
+  await expect(office).toContainText(
+    /Complete every requirement to advance to Agricultural Estate:/i,
+  );
+  await expect(office).toContainText(/Parcels owned: 5\/5/i);
+  await expect(office).toContainText(/Seasons completed: 3\/6/i);
+  await expect(office).toContainText(/Earned: \$1,200\.00\/\$4,000\.00/i);
+
+  await page.getByTestId('career-close').click();
+  await page.getByRole('button', { name: 'Open Build' }).click();
+  const wagon = page.getByTestId('build-carrier-row-wagon');
+  await expect(wagon).toContainText(/Delivery wagon.*90 capacity/i);
+  await page.getByTestId('build-carrier-wagon').dispatchEvent('click');
+  await expect(page.getByTestId('build-carrier-wagon')).toHaveCount(0);
+
+  await page.getByTestId('build-close').click();
+  await page.getByRole('button', { name: 'Open Market' }).click();
+  const schedule = page.getByRole('button', { name: 'Schedule' }).first();
+  await expect(schedule).toBeVisible();
+  await schedule.dispatchEvent('click');
+  await expect(page.getByTestId('market-contracts')).toContainText(/Repeats every/i);
+  const endSchedule = page.getByRole('button', { name: 'End schedule' });
+  await expect(endSchedule).toBeVisible();
+  await endSchedule.dispatchEvent('click');
+  await expect(page.getByRole('button', { name: 'End schedule' })).toHaveCount(0);
+});
+
+test('Run another season resumes the same loaded farm', async ({ page }) => {
+  const base = createProgressionReviewCareer(3);
+  const tick = SEASON_TICKS - 5;
+  const state = {
+    ...base,
+    tick,
+    sites: base.sites.map((site) => ({ ...site, lastSimulatedTick: tick })),
+  };
+  await page.addInitScript((savedState) => {
+    window.localStorage.setItem(
+      'farmrise:save:v1',
+      JSON.stringify({
+        schemaVersion: 1,
+        savedAt: Date.now(),
+        revision: 0,
+        state: savedState,
+      }),
+    );
+  }, state);
+  await enterFarm(page, '/?quality=low');
+
+  await expect(page.getByTestId('outcome-screen')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('outcome-again').click();
+  await expect(page.getByTestId('outcome-screen')).toBeHidden();
+  await expect(page.getByTestId('hud')).toBeVisible();
+  await expect(page.getByTestId('menu-shortcuts')).toBeVisible();
 });
 
 test('choosing a building enters placement mode', async ({ page }) => {

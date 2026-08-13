@@ -17,10 +17,10 @@ together. It is deliberately **not** the whole game.
 | Approved mechanics working together | Timed crop plots, active farm work, animal production, dynamic market orders, functional infrastructure and warned farm events all run in one session. |
 | Signature mechanic | **Warned farm events.** A drought or fox raid is announced with a countdown, and `F` spends money to prevent it. Doing nothing is a legitimate choice. |
 | Moment-to-moment loop | Read conditions → choose output → commit → work → respond to trouble → harvest and trade → reinvest. All seven steps are reachable. |
-| One meaningful trade-off | **Spot price now, or a contract that pays 15–45% more but commits you to a quantity and a deadline.** The market panel shows the premium as a percentage so the choice is legible. |
+| One meaningful trade-off | **Spot price now, or a buyer-priced contract with an additional 15–30% commitment bonus for its quantity and deadline.** The market panel compares quality-adjusted payouts so the choice is legible. |
 | Success state | Buy the neighbouring parcel for $75. Ends the season with a summary. |
 | Failure state | Bankruptcy — no seed money, nothing in store, nothing growing, nothing under construction. All four at once. |
-| Controls, camera, UI, feedback, audio | Desktop keyboard + pointer and a capability-gated mobile joystick/actions path, 13.25 m / 34° / 42° FOV / -42° azimuth follow camera, HUD with progressive disclosure, coach marks, 23 sound effects and five music tracks. |
+| Controls, camera, UI, feedback, audio | Desktop keyboard + pointer and a capability-gated mobile joystick/actions path, 13.25 m / 34° / 42° FOV / -42° azimuth follow camera, HUD with progressive disclosure, coach marks, 103 sound effects (52 active, 51 lazy future-animal variants) and five music tracks. |
 | Approved assets | All 52 authored world meshes, the animation layer, and the generated audio set. |
 | Persistence | Server-authoritative saves and trades where a backend is present; fully playable offline with local contracts. |
 | Analytics | 29 typed events covering the funnel, the loop and the outcome. |
@@ -41,7 +41,7 @@ ONBOARDING — each beat is completed by doing the real thing
   ↓
 FREE LOOP  ─────────────────────────────────────────────┐
   read the HUD and the market                           │
-  choose a crop (Q), plant (E), tend (E)                │
+  choose a crop from the seasonal seed menu (Q), plant (E), tend (E) │
   respond to a warned event (F to prevent)              │
   harvest and carry home (E; R is a transfer shortcut)  │
   sell at spot or fulfil a contract (M)                 │
@@ -62,7 +62,7 @@ Run another season (skips onboarding) or back to menu
 | `W A S D` / arrows | Walk |
 | `Shift` | Sprint |
 | `E` / left click | Perform the action named by the context prompt: plant, tend, harvest, transfer, collect, repair or respond; confirm a building placement |
-| `Q` | Cycle seed; shown beside `E` while standing on an empty bed |
+| `Q` | Open the seasonal seed menu while standing on an empty bed; choose a seed, then plant it with `E` |
 | `R` | Rotate while placing; otherwise pick up or deposit goods at the current stack/store |
 | `M` / Market icon | Market |
 | `B` / Build icon | Build & Reinvest — roads, barns, irrigation, fences, chickens and land |
@@ -71,7 +71,7 @@ Run another season (skips onboarding) or back to menu
 | `` ` `` | Debug overlay (also `?debug=overlay`) |
 
 Touch-primary mobile devices replace movement keys with an analog joystick. **Work** performs the
-same plot action as `E`, **Seed** cycles crop, **Protect** maps to prevention, and Market/Build retain
+same plot action as `E`, **Seed** opens the same seasonal seed menu, **Protect** maps to prevention, and Market/Build retain
 their illustrated buttons. Placement uses repeated canvas taps with explicit **Rotate** and
 **Cancel** actions. Desktop keeps the table above unchanged.
 

@@ -21,7 +21,16 @@ import { PROCESSORS, type ProcessorKind } from './processing.js';
 import type { UnlockId } from './milestones.js';
 
 export type CoreBuildingKind =
-  'barn' | 'irrigation' | 'road' | 'fence' | 'loading_pad' | 'cold_store' | 'worker_hut' | 'well';
+  | 'barn'
+  | 'irrigation'
+  | 'road'
+  | 'fence'
+  | 'animal_shelter'
+  | 'water_trough'
+  | 'loading_pad'
+  | 'cold_store'
+  | 'worker_hut'
+  | 'well';
 
 export type BuildingKind = CoreBuildingKind | ProcessorKind;
 
@@ -88,6 +97,27 @@ const CORE_BUILDINGS: Readonly<Record<CoreBuildingKind, BuildingDefinition>> = O
     upkeepPerDay: cents(10),
     requiresUnlock: null,
     description: 'Encloses animal shelter and sharply reduces predator losses.',
+  },
+  animal_shelter: {
+    id: 'animal_shelter',
+    displayName: 'Animal Shelter',
+    buildCost: cents(3_000),
+    buildTicks: secondsToTicks(60),
+    footprint: { width: 2, depth: 2 },
+    upkeepPerDay: cents(20),
+    requiresUnlock: 'animal_shelters',
+    description:
+      'Adds another coop and covered pen so livestock bought nearby can live on that part of the farm.',
+  },
+  water_trough: {
+    id: 'water_trough',
+    displayName: 'Water Trough',
+    buildCost: cents(1_000),
+    buildTicks: secondsToTicks(20),
+    footprint: { width: 1, depth: 1 },
+    upkeepPerDay: cents(3),
+    requiresUnlock: null,
+    description: 'Adds a permanent watering point to an animal yard.',
   },
   loading_pad: {
     id: 'loading_pad',

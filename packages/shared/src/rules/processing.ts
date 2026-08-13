@@ -10,6 +10,7 @@ import { getItem } from '../domain/items.js';
 import { cents, type Cents } from '../domain/ids.js';
 import {
   PROCESSORS,
+  RECIPES,
   getRecipe,
   type ProcessorKind,
   type RecipeDefinition,
@@ -23,6 +24,34 @@ export interface QueueEntry {
   readonly recipeId: string;
   readonly batches: number;
   readonly remainingTicks: Ticks;
+}
+
+export interface ProcessorAccessContract {
+  readonly itemId: string;
+  readonly status: string;
+}
+
+/**
+ * A processed-goods promise teaches exactly the machine needed to keep it.
+ *
+ * Normal progression still unlocks the complete processing yard together. The
+ * contract exception exists for compatibility with careers that were offered a
+ * processed item before that milestone, so accepting one can never strand the
+ * player without its required building.
+ */
+export function hasProcessorAccess(
+  kind: ProcessorKind,
+  unlocks: readonly string[],
+  contracts: readonly ProcessorAccessContract[],
+): boolean {
+  if (unlocks.includes('processing')) return true;
+  return RECIPES.some(
+    (recipe) =>
+      recipe.processor === kind &&
+      contracts.some(
+        (contract) => contract.status === 'open' && contract.itemId === recipe.outputItemId,
+      ),
+  );
 }
 
 /** Batch time after the specialization that favours this processor is applied. */

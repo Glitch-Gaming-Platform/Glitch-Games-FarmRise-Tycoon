@@ -53,6 +53,8 @@ FINDABILITY = [
     ("fox_belly", "soil_tilled", "likewise on tilled ground"),
     ("cow_hide", "ground_scrub", "the dairy cow must separate from pasture"),
     ("cow_hide", "soil_tilled", "the dairy cow must also separate from farm soil"),
+    ("sheep_wool", "ground_scrub", "sheep must remain visible in dry pasture"),
+    ("sheep_wool", "soil_tilled", "sheep must remain visible over farm soil"),
 ]
 
 PROGRESSION = [

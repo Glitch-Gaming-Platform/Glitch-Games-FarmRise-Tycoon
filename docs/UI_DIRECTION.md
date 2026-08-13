@@ -44,12 +44,12 @@ npm run art:ui-icons
 ```
 
 `tools/blender/render_ui_icons.py` opens the generated master blend, composes the actual game
-meshes, and writes 44 transparent WebP illustrations to
+meshes, and writes 48 transparent WebP illustrations to
 `apps/game/public/assets/ui/icons/`. Measured sizes are recorded in
 `art/ui_icon_report.json` and mirrored in `uiIcons.manifest.ts`.
 
-The current set is **166,366 bytes total**, under the **175 KB interface-art budget**. Twelve crop
-icons were added as lazy inventory/market presentation under ADR 0024. These images
+The current set is **165,104 bytes total**, under the **175 KB interface-art budget**. Twelve crop
+icons plus the sheep and wool progression icons are lazy inventory/market presentation. These images
 are DOM presentation art. They do not add WebGL draw calls, UVs or texture sampling to the 3D world.
 
 ## Component rules
@@ -59,6 +59,9 @@ are DOM presentation art. They do not add WebGL draw calls, UVs or texture sampl
   the farm behind it.
 - Market rows show crop art, item name, quantity/value and action in one row. “Sell now” comes before
   contracts because it is the first-session path.
+- The contextual seed chooser uses the real crop art and keeps name, seed cost, time to harvest and
+  affordability on one selectable card. It lists only unlocked seeds legal in the active season and
+  keeps unaffordable seeds visible but disabled.
 - Build rows show the placed object, price and affordability together. Locked and unaffordable
   states remain visible; they are not silently removed.
 - The HUD stays compact and transparent enough to preserve the world. It may use framed chips, but
@@ -67,6 +70,10 @@ are DOM presentation art. They do not add WebGL draw calls, UVs or texture sampl
   for a planted bed, freshness for a pile of goods. Every bar reads as "how much is left", so a full
   bar is always the good state, and every bar carries the number in words as well - a length alone
   cannot say "dry in forty seconds", and colour alone cannot say "urgent".
+- While the player is beside an animal shelter, a compact world card shows occupied slots, total
+  capacity and available slots, using the same proximity behavior as barn storage. This is local
+  capacity: a two-slot sheep needs two free slots at one shelter, and the card updates immediately
+  when the animal is bought or lost.
 - Desktop active play exposes a bottom-right menu dock for important letter shortcuts. Each button
   pairs a Blender-rendered icon, a plain-language menu name and its key cap; clicking it and pressing
   the shown letter must open the same interface.

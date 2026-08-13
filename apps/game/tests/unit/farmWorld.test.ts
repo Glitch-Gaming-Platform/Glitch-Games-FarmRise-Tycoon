@@ -1,21 +1,29 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   ANIMALS,
+  BUYER_DEFINITIONS,
   GAME_DAY_TICKS,
   BUILDINGS,
   ITEM_IDS,
   CROPS,
+  RECIPES,
   RECIPES_BY_ID,
+  STARTER_SHELTER_ID,
   actionTicks,
+  cents,
   requireCrop,
   storageUsed,
+  animalShelterProductDropTile,
 } from '@farmrise/shared';
 import { Career } from '@game/career/Career.js';
 import {
   build,
+  buildingSiteProblem,
+  acceptContract,
   buyAnimal,
   buyLand,
   collectStack,
+  deliverContract,
   harvest,
   hireWorker,
   plant,
@@ -23,6 +31,7 @@ import {
   sellableInventory,
   sellSpot,
   tend,
+  withdrawStored,
 } from '@game/world/FarmCommands.js';
 import {
   addToYard,
@@ -94,6 +103,28 @@ describe('career farming commands', () => {
 });
 
 describe('construction and collision', () => {
+  it('keeps the trough always purchasable for $10', () => {
+    const before = career.balance;
+    const result = build(career, 'water_trough', 10, 12);
+
+    expect(result.ok).toBe(true);
+    expect(career.balance).toBe(before - 1_000);
+    expect(BUILDINGS.water_trough.requiresUnlock).toBeNull();
+  });
+
+  it('unlocks the $30 animal shelter at Stage 1 and reserves its product area', () => {
+    expect(build(career, 'animal_shelter', 20, 18).ok).toBe(false);
+    career.grant(['animal_shelters']);
+    const before = career.balance;
+    const result = build(career, 'animal_shelter', 20, 18);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(career.balance).toBe(before - 3_000);
+    const drop = animalShelterProductDropTile(20, 18, 0);
+    expect(build(career, 'road', drop.tileX, drop.tileZ).ok).toBe(false);
+  });
+
   it('charges for a building, reserves its footprint, then creates storage on completion', () => {
     const beforeBalance = career.balance;
     const beforeCapacity = career.world.storageCapacity;
@@ -162,6 +193,145 @@ describe('construction and collision', () => {
 });
 
 describe('livestock and persistence', () => {
+  it('unlocks sheep after Stage 1 and shears slow, non-spoiling wool from stored corn', () => {
+    career.world.livestock.hydrate([]);
+    expect(buyAnimal(career, 'sheep').ok).toBe(false);
+    career.grant(['animal_shelters']);
+    const before = career.balance;
+
+    expect(buyAnimal(career, 'sheep').ok).toBe(true);
+    expect(career.balance).toBe(before - ANIMALS.sheep.purchaseCost);
+    const sheep = career.world.livestock.groups.find((group) => group.species === 'sheep');
+    expect(sheep?.shelterId).toBe(STARTER_SHELTER_ID);
+    expect(career.world.shelterSlotsUsedAt(STARTER_SHELTER_ID)).toBe(2);
+    expect(career.world.shelterSlotsAvailableAt(STARTER_SHELTER_ID)).toBe(2);
+
+    career.advance(ANIMALS.sheep.cycleTicks - 1);
+    expect(career.world.stores.totalOf('wool')).toBe(0);
+    career.advance(1);
+    expect(career.world.stores.totalOf('wool')).toBe(4);
+    expect(career.world.stores.storedTotalOf('corn')).toBe(1);
+
+    career.world.stores.advance(GAME_DAY_TICKS * 20, 1, 6);
+    expect(career.world.stores.totalOf('wool')).toBe(4);
+  });
+
+  it('assigns new livestock to the nearest completed shelter and drops produce there', () => {
+    career.grant(['animal_shelters']);
+    const shelter = build(career, 'animal_shelter', 20, 18);
+    expect(shelter.ok).toBe(true);
+    if (!shelter.ok) return;
+
+    // Construction sites do not attract livestock or provide capacity.
+    expect(buyAnimal(career, 'chicken', 3, { tileX: 21, tileZ: 19 }).ok).toBe(false);
+    career.advance(BUILDINGS.animal_shelter.buildTicks + 1);
+    expect(buyAnimal(career, 'chicken', 1, { tileX: 21, tileZ: 19 }).ok).toBe(true);
+
+    const remote = career.world.livestock.groups.find(
+      (group) => group.shelterId === shelter.value.id,
+    );
+    expect(remote?.count).toBe(1);
+    expect(remote?.tileX).toBe(20);
+    expect(remote?.tileZ).toBe(18);
+
+    addToYard(career, 'corn', 20);
+    career.advance(ANIMALS.chicken.cycleTicks + 1);
+    const drop = animalShelterProductDropTile(20, 18, 0);
+    expect(career.world.stores.get(`stack-${drop.tileX}-${drop.tileZ}`)?.items.eggs).toBe(4);
+  });
+
+  it('skips a full nearest shelter and assigns sheep to the nearest shelter with two free slots', () => {
+    career.world.livestock.hydrate([]);
+    career.grant(['animal_shelters']);
+    const shelter = build(career, 'animal_shelter', 20, 18);
+    expect(shelter.ok).toBe(true);
+    if (!shelter.ok) return;
+    career.advance(BUILDINGS.animal_shelter.buildTicks + 1);
+
+    expect(buyAnimal(career, 'chicken', 4, { tileX: 19, tileZ: 16 }).ok).toBe(true);
+    expect(career.world.shelterSlotsAvailableAt(STARTER_SHELTER_ID)).toBe(0);
+    expect(buyAnimal(career, 'sheep', 1, { tileX: 19, tileZ: 16 }).ok).toBe(true);
+
+    const sheep = career.world.livestock.groups.find((group) => group.species === 'sheep');
+    expect(sheep?.shelterId).toBe(shelter.value.id);
+    expect(career.world.shelterSlotsUsedAt(shelter.value.id)).toBe(2);
+    expect(career.world.shelterSlotsAvailableAt(shelter.value.id)).toBe(2);
+  });
+
+  it('does not silently buy into another shelter when a contextual shelter is full', () => {
+    career.grant(['animal_shelters']);
+    const shelter = build(career, 'animal_shelter', 20, 18);
+    expect(shelter.ok).toBe(true);
+    if (!shelter.ok) return;
+    career.advance(BUILDINGS.animal_shelter.buildTicks + 1);
+
+    expect(
+      buyAnimal(career, 'chicken', 4, {
+        tileX: 20,
+        tileZ: 18,
+        shelterId: shelter.value.id,
+      }).ok,
+    ).toBe(true);
+    expect(career.world.shelterSlotsAvailableAt(STARTER_SHELTER_ID)).toBeGreaterThanOrEqual(2);
+
+    const sheep = buyAnimal(career, 'sheep', 1, {
+      tileX: 20,
+      tileZ: 18,
+      shelterId: shelter.value.id,
+    });
+    expect(sheep.ok).toBe(false);
+    expect(career.world.livestock.countOf('sheep')).toBe(0);
+  });
+
+  it('rejects a sheep when site-wide free slots are fragmented across full local shelters', () => {
+    career.world.livestock.hydrate([]);
+    career.grant(['animal_shelters']);
+    const shelter = build(career, 'animal_shelter', 20, 18);
+    expect(shelter.ok).toBe(true);
+    if (!shelter.ok) return;
+    career.advance(BUILDINGS.animal_shelter.buildTicks + 1);
+    career.world.livestock.hydrate([
+      {
+        id: 'animals-starter',
+        species: 'chicken',
+        shelterId: STARTER_SHELTER_ID,
+        count: 3,
+        cycleTicks: 0,
+        tileX: career.world.level.shelter.tileX,
+        tileZ: career.world.level.shelter.tileZ,
+        sheltered: false,
+      },
+      {
+        id: 'animals-remote',
+        species: 'chicken',
+        shelterId: shelter.value.id,
+        count: 3,
+        cycleTicks: 0,
+        tileX: 20,
+        tileZ: 18,
+        sheltered: false,
+      },
+    ]);
+
+    expect(career.world.shelterCapacity() - career.world.animalSlotsUsed()).toBe(2);
+    expect(career.world.maxShelterSlotsAvailable()).toBe(1);
+    const result = buyAnimal(career, 'sheep', 1, { tileX: 19, tileZ: 16 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/no single shelter/i);
+  });
+
+  it('does not move an existing flock when a nearer shelter finishes later', () => {
+    const starter = career.world.livestock.groups[0]!;
+    career.grant(['animal_shelters']);
+    const shelter = build(career, 'animal_shelter', 20, 18);
+    expect(shelter.ok).toBe(true);
+    if (!shelter.ok) return;
+    career.advance(BUILDINGS.animal_shelter.buildTicks + 1);
+
+    expect(starter.shelterId).toBe(STARTER_SHELTER_ID);
+    expect(career.world.livestock.groups).toHaveLength(1);
+  });
+
   it('keeps tutorial eggs on the ground until the lesson can be completed', () => {
     career.world.dropAt(19, 17, 'eggs', 4, 1);
     const stack = career.world.stores.stores.find((store) => store.id === 'stack-19-17')!;
@@ -332,6 +502,7 @@ describe('livestock and persistence', () => {
       {
         id: 'animals-cow-test',
         species: 'cow',
+        shelterId: STARTER_SHELTER_ID,
         count: 2,
         cycleTicks: 0,
         tileX: shelter.tileX,
@@ -374,6 +545,70 @@ describe('livestock and persistence', () => {
 });
 
 describe('processing and workers', () => {
+  it('loads processing inputs from the carried pack before collected storage', () => {
+    career.grant(['processing']);
+    const placed = build(career, 'preserve_kitchen', 20, 18);
+    expect(placed.ok).toBe(true);
+    if (!placed.ok) return;
+    career.advance(BUILDINGS.preserve_kitchen.buildTicks + 1);
+    career.world.carry.pickUp('pumpkin', 3);
+
+    expect(queueProcessing(career, placed.value.id, 'recipe-preserves', 1).ok).toBe(true);
+    expect(career.world.carry.items.pumpkin ?? 0).toBe(0);
+    expect(career.world.processing.forBuilding(placed.value.id)?.queue).toHaveLength(1);
+  });
+
+  it('does not remotely load an uncollected field pile into a processor', () => {
+    career.grant(['processing']);
+    const placed = build(career, 'mill', 20, 18);
+    expect(placed.ok).toBe(true);
+    if (!placed.ok) return;
+    career.advance(BUILDINGS.mill.buildTicks + 1);
+    career.world.dropAt(22, 20, 'wheat', 4, 1);
+
+    expect(queueProcessing(career, placed.value.id, 'recipe-flour', 1).ok).toBe(false);
+  });
+
+  it('withdraws from the selected storage building and clamps to carrier capacity', () => {
+    const placed = build(career, 'barn', 20, 18);
+    expect(placed.ok).toBe(true);
+    if (!placed.ok) return;
+    career.advance(BUILDINGS.barn.buildTicks + 1);
+    const store = career.world.stores.stores.find(
+      (candidate) => candidate.buildingId === placed.value.id,
+    );
+    expect(store).toBeDefined();
+    if (!store) return;
+    career.world.stores.deposit(store.id, 'wheat', 20, 1);
+
+    const taken = withdrawStored(career, placed.value.id, 19, 18, 'wheat', 20);
+    expect(taken).toEqual({ ok: true, value: { taken: 8 } });
+    expect(career.world.carry.items.wheat).toBe(8);
+    expect(store.items.wheat).toBe(12);
+    expect(withdrawStored(career, placed.value.id, 19, 18, 'wheat', 1).ok).toBe(false);
+  });
+
+  it('lets an accepted processed-goods contract reveal only its required processor', () => {
+    career.grant(['contracts']);
+    const acceptedTick = career.tick;
+    const accepted = acceptContract(career, {
+      id: 'offer-preserves-regression',
+      buyerId: 'growers_co_op',
+      itemId: 'preserves',
+      quantity: 21,
+      unitPrice: cents(342),
+      minimumQuality: 0,
+      deadlineTick: acceptedTick + 1,
+    });
+
+    expect(accepted.ok).toBe(true);
+    expect(career.contracts.at(-1)?.deadlineTick).toBe(
+      acceptedTick + BUYER_DEFINITIONS.growers_co_op.deadlineTicks,
+    );
+    expect(build(career, 'preserve_kitchen', 20, 18).ok).toBe(true);
+    expect(build(career, 'mill', 22, 18).ok).toBe(false);
+  });
+
   it('counts processed goods when a batch finishes, not when it is queued', () => {
     career.grant(['processing']);
     const placed = build(career, 'mill', 20, 18);
@@ -390,6 +625,63 @@ describe('processing and workers', () => {
     expect(career.world.stores.totalOf('flour')).toBe(2);
     expect(career.world.storageCapacity).toBe(storageCapacity);
   });
+
+  it.each(RECIPES)(
+    'turns inputs into $outputItemId and fulfills its matching contract',
+    (recipe) => {
+      const processingCareer = fundedCareer();
+      processingCareer.grant(['contracts', 'processing']);
+      const placement = Array.from({ length: 16 * 16 }, (_, index) => ({
+        tileX: 8 + (index % 16),
+        tileZ: 8 + Math.floor(index / 16),
+      })).find(
+        ({ tileX, tileZ }) =>
+          Math.abs(tileX - 19) + Math.abs(tileZ - 16) > 3 &&
+          buildingSiteProblem(processingCareer, recipe.processor, tileX, tileZ) === null,
+      );
+      expect(placement).toBeDefined();
+      if (!placement) return;
+      const placed = build(processingCareer, recipe.processor, placement.tileX, placement.tileZ);
+      expect(placed.ok, placed.ok ? '' : placed.reason).toBe(true);
+      if (!placed.ok) return;
+      processingCareer.advance(BUILDINGS[recipe.processor].buildTicks + 1, [], false);
+      addToYard(processingCareer, recipe.inputItemId, recipe.inputQuantity);
+
+      expect(queueProcessing(processingCareer, placed.value.id, recipe.id, 1).ok).toBe(true);
+      processingCareer.advance(recipe.batchTicks + 1, [], false);
+
+      const outputStack = processingCareer.world.stores.stores.find(
+        (store) => store.id.startsWith('stack-') && (store.items[recipe.outputItemId] ?? 0) > 0,
+      );
+      expect(outputStack).toBeDefined();
+      if (!outputStack) return;
+      expect(
+        collectStack(processingCareer, outputStack.tileX, outputStack.tileZ, outputStack.id).ok,
+      ).toBe(true);
+      expect(
+        processingCareer.world.carry.items[recipe.outputItemId],
+        JSON.stringify(processingCareer.world.carry.items),
+      ).toBe(recipe.outputQuantity);
+
+      const contractId = `contract-${recipe.outputItemId}`;
+      expect(
+        acceptContract(processingCareer, {
+          id: contractId,
+          buyerId: 'growers_co_op',
+          itemId: recipe.outputItemId,
+          quantity: recipe.outputQuantity,
+          unitPrice: cents(1),
+          minimumQuality: 0,
+          deadlineTick: processingCareer.tick + 1,
+        }).ok,
+      ).toBe(true);
+      const delivered = deliverContract(processingCareer, contractId, recipe.outputQuantity);
+      expect(delivered.ok, delivered.ok ? '' : delivered.reason).toBe(true);
+      expect(processingCareer.contracts.find((entry) => entry.id === contractId)?.status).toBe(
+        'fulfilled',
+      );
+    },
+  );
 
   it('lets field hands tend and haulers move a completed repetitive job', () => {
     career.grant(['workers']);
@@ -431,5 +723,31 @@ describe('processing and workers', () => {
     expect(haulCareer.world.stores.get('stack-test')?.items.wheat).toBeLessThan(10);
     expect(haulCareer.world.stores.totalOf('wheat')).toBe(before);
     expect(haulCareer.statistics.goodsHauled).toBeGreaterThan(0);
+  });
+
+  it('hires into the selected hut and refuses to redirect when that hut is occupied', () => {
+    career.grant(['workers']);
+    const placements: Array<{ tileX: number; tileZ: number }> = [];
+    for (let tileZ = 8; tileZ < 28 && placements.length < 2; tileZ += 1) {
+      for (let tileX = 8; tileX < 28 && placements.length < 2; tileX += 1) {
+        if (buildingSiteProblem(career, 'worker_hut', tileX, tileZ) !== null) continue;
+        const placed = build(career, 'worker_hut', tileX, tileZ);
+        if (placed.ok) placements.push({ tileX, tileZ });
+      }
+    }
+    const huts = career.world.structures.buildings.filter(
+      (building) => building.kind === 'worker_hut',
+    );
+    expect(huts).toHaveLength(2);
+    career.advance(BUILDINGS.worker_hut.buildTicks + 1);
+
+    expect(hireWorker(career, 'field_hand', huts[0]!.id).ok).toBe(true);
+    expect(hireWorker(career, 'hauler', huts[0]!.id).ok).toBe(false);
+    expect(hireWorker(career, 'hauler', huts[1]!.id).ok).toBe(true);
+    expect(career.world.workforce.workers.map((worker) => worker.hutBuildingId)).toEqual([
+      huts[0]!.id,
+      huts[1]!.id,
+    ]);
+    expect(placements).toHaveLength(2);
   });
 });

@@ -65,8 +65,8 @@ the new balance, and appends a ledger entry. There is no field through which a c
 an amount — asserted by a test that pins the request schema's key list, and by a test that sends
 `unitPrice` and `payout` and confirms they are ignored.
 
-The persistent-career buyer board introduced in save v2 is currently an offline-first Grade 2
-system. Its contracts, trust and payouts are transition-validated in the career save rather than
+The persistent-career buyer board introduced in save v2 remains an offline-first Grade 2 system in
+the current save v3. Its contracts, trust and payouts are transition-validated in the career save rather than
 routed through the older server order table. Do not describe those career-board deliveries as fully
 authoritative until dedicated intent routes replace that boundary.
 
@@ -84,7 +84,7 @@ Instead `validateSaveTransition` rejects anything physically impossible:
 | Item gain ≤ `MAX_PLAUSIBLE_ITEMS_PER_TICK × elapsed` | Goods materialising |
 | Milestones and unlocks follow the shared progression table | Inserting processors or workers early |
 | Local stores and carriers stay within their own capacity | Deleting the hauling decision |
-| Land, buildings, animals, workers and carriers match known costs/unlocks | Granting yourself the estate |
+| Land, buildings, animal shelter assignments/capacity, workers and carriers match known costs/unlocks | Granting yourself the estate or inventing a remote shelter |
 | Growth ≤ crop maximum, and ≤ elapsed ticks | Instant harvests |
 | Loans and insurance match fixed offers/policies | Inventing free credit or full cover |
 | Town projects match materials, cost, timer and prosperity sources | Granting permanent town bonuses |

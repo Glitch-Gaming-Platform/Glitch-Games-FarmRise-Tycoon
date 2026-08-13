@@ -2,7 +2,7 @@
  * A development-only acceptance career for reviewing progression in a real
  * browser without spending several real hours earning every prerequisite.
  *
- * It is deliberately created as a normal v2 save document and then loaded
+ * It is deliberately created as a normal v3 save document and then loaded
  * through FarmScene's resume path. Nothing reaches into live models or grants
  * capabilities after load, so the panels and commands exercise the same code
  * as a real career. Bootstrap disables autosave while this fixture is active.
@@ -25,7 +25,7 @@ import {
   type WorkerRole,
 } from '@farmrise/shared';
 
-export type ProgressionReviewStage = 3 | 5;
+export type ProgressionReviewStage = 2 | 3 | 4 | 5;
 
 export function createProgressionReviewCareer(
   reviewStage: ProgressionReviewStage = 3,
@@ -34,23 +34,32 @@ export function createProgressionReviewCareer(
   const site = base.sites[0];
   if (!site) throw new Error('The progression review career needs the starter site.');
 
+  const ownedParcels = ESTATE_PARCELS.filter(
+    (parcel) => reviewStage >= 3 || parcel.id !== 'parcel-south-works',
+  );
   const buildings: FarmSiteSaveState['buildings'] = [
     completedBuilding('building-barn', 'barn', 9, 18),
-    completedBuilding('building-loading-pad', 'loading_pad', 9, 30),
-    completedBuilding('building-cold-store', 'cold_store', 21, 25),
-    completedBuilding('building-mill', 'mill', 9, 25),
+    completedBuilding('building-loading-pad', 'loading_pad', 9, 3),
+    completedBuilding('building-mill', 'mill', 18, 18),
     completedBuilding('building-creamery', 'creamery', 25, 9),
-    completedBuilding('building-preserve-kitchen', 'preserve_kitchen', 21, 29),
-    completedBuilding('building-worker-hut-1', 'worker_hut', 12, 25),
-    completedBuilding('building-worker-hut-2', 'worker_hut', 15, 25),
-    completedBuilding('building-worker-hut-3', 'worker_hut', 18, 25),
+    completedBuilding('building-preserve-kitchen', 'preserve_kitchen', 20, 20),
+    completedBuilding('building-animal-shelter-1', 'animal_shelter', 25, 16),
+    completedBuilding('building-animal-shelter-2', 'animal_shelter', 28, 18),
+    ...(reviewStage >= 3
+      ? [
+          completedBuilding('building-cold-store', 'cold_store', 21, 25),
+          completedBuilding('building-worker-hut-1', 'worker_hut', 12, 25),
+          completedBuilding('building-worker-hut-2', 'worker_hut', 15, 25),
+          completedBuilding('building-worker-hut-3', 'worker_hut', 18, 25),
+        ]
+      : []),
     ...(reviewStage >= 5 ? [completedBuilding('building-well', 'well', 27, 20)] : []),
   ];
 
   const reviewedSite: FarmSiteSaveState = {
     ...site,
-    ownedParcelIds: ESTATE_PARCELS.map((parcel) => parcel.id),
-    plots: ESTATE_PARCELS.flatMap((parcel) =>
+    ownedParcelIds: ownedParcels.map((parcel) => parcel.id),
+    plots: ownedParcels.flatMap((parcel) =>
       parcel.beds.map((bed) => ({
         id: asPlotId(bed.id),
         cropId: null,
@@ -70,48 +79,67 @@ export function createProgressionReviewCareer(
       {
         ...site.stores[0]!,
         id: YARD_STORE_ID,
-        items: { wheat: 50 },
-        quality: { wheat: 0.95 },
+        items: { wheat: 50, wool: 4 },
+        quality: { wheat: 0.95, wool: 1 },
       },
       storeFor('building-barn', 9, 18, BARN_CAPACITY_UNITS, {
         corn: 20,
         clover: 20,
         pumpkin: 10,
+        ...(reviewStage < 3 ? { flour: 20, cheese: 10, preserves: 10 } : {}),
       }),
-      storeFor(
-        'building-cold-store',
-        21,
-        25,
-        COLD_STORE_CAPACITY_UNITS,
-        {
-          flour: 20,
-          cheese: 10,
-          preserves: 10,
-        },
-        true,
-      ),
-      storeFor('building-loading-pad', 9, 30, LOADING_PAD_CAPACITY, {}),
+      ...(reviewStage >= 3
+        ? [
+            storeFor(
+              'building-cold-store',
+              21,
+              25,
+              COLD_STORE_CAPACITY_UNITS,
+              {
+                flour: 20,
+                cheese: 10,
+                preserves: 10,
+              },
+              true,
+            ),
+          ]
+        : []),
+      storeFor('building-loading-pad', 9, 3, LOADING_PAD_CAPACITY, {}),
     ],
     animals: [
       { ...site.animals[0]!, count: 4, cycleTicks: 0 },
       {
         id: 'animals-cows',
         species: 'cow',
-        count: 2,
+        shelterId: 'building-animal-shelter-1',
+        count: 1,
         cycleTicks: 0,
-        tileX: 27,
-        tileZ: 14,
+        tileX: 25,
+        tileZ: 16,
+        sheltered: false,
+      },
+      {
+        id: 'animals-sheep',
+        species: 'sheep',
+        shelterId: 'building-animal-shelter-2',
+        count: 1,
+        cycleTicks: 0,
+        tileX: 28,
+        tileZ: 18,
         sheltered: false,
       },
     ],
     processors: [],
-    workers: [
-      reviewWorker('worker-1', 'field_hand', 'Mara', 'building-worker-hut-1'),
-      reviewWorker('worker-2', 'hauler', 'Eli', 'building-worker-hut-2'),
-    ],
+    workers:
+      reviewStage >= 3
+        ? [
+            reviewWorker('worker-1', 'field_hand', 'Mara', 'building-worker-hut-1'),
+            reviewWorker('worker-2', 'hauler', 'Eli', 'building-worker-hut-2'),
+          ]
+        : [],
     carried: {
       ...site.carried,
-      ownedCarriers: ['arms', 'handcart', 'wagon'],
+      ownedCarriers: reviewStage >= 5 ? ['arms', 'handcart', 'wagon'] : ['arms', 'handcart'],
     },
   };
 
@@ -128,8 +156,8 @@ export function createProgressionReviewCareer(
       ]),
     ) as CareerSaveState['buyers'],
     town: {
-      prosperity: 500,
-      completedProjectIds: ['project-market-road'],
+      prosperity: reviewStage >= 3 ? 500 : 100,
+      completedProjectIds: reviewStage >= 3 ? ['project-market-road'] : ['project-seed-box'],
       activeProject: null,
     },
     sites: [reviewedSite],
@@ -139,16 +167,16 @@ export function createProgressionReviewCareer(
     ),
     statistics: {
       ...base.statistics,
-      lifetimeEarned: cents(reviewStage >= 5 ? 400_000 : 120_000),
+      lifetimeEarned: cents(reviewStage >= 5 ? 400_000 : reviewStage === 2 ? 80_000 : 120_000),
       lifetimeSpent: cents(35_000),
       peakBalance: cents(250_000),
       cropsHarvested: 180,
       cyclesCompleted: 45,
       goodsHauled: 120,
       goodsProcessed: 40,
-      contractsCompleted: 20,
+      contractsCompleted: reviewStage >= 3 ? 20 : 4,
       itemsSold: 400,
-      seasonsCompleted: reviewStage >= 5 ? 6 : 3,
+      seasonsCompleted: reviewStage >= 5 ? 6 : reviewStage === 2 ? 2 : 3,
       buildingsBuilt: buildings.length,
     },
   };

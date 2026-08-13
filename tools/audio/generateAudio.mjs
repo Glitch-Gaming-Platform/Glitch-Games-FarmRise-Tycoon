@@ -17,6 +17,7 @@ const forceAll = process.argv.includes('--force');
 const forceSfx = forceAll || process.argv.includes('--force-sfx');
 const forceMusic = forceAll || process.argv.includes('--force-music');
 const musicOnly = process.argv.includes('--music-only');
+const selectedSfxId = argumentValue('--sfx-id');
 const selectedMusicId = argumentValue('--music-id');
 
 const apiKey = process.env.ELEVENLABS_API_KEY;
@@ -44,8 +45,17 @@ if (musicOnly && previousReport?.soundEffects) {
   report.soundEffects.push(...previousReport.soundEffects);
 } else {
   for (const brief of SFX_BRIEFS) {
+    if (selectedSfxId && brief.id !== selectedSfxId) {
+      const previous = previousReport?.soundEffects?.find((entry) => entry.id === brief.id);
+      if (previous) report.soundEffects.push(previous);
+      continue;
+    }
     report.soundEffects.push(await generateSoundEffect(brief));
   }
+}
+
+if (selectedSfxId && !SFX_BRIEFS.some((brief) => brief.id === selectedSfxId)) {
+  throw new Error(`Unknown --sfx-id "${selectedSfxId}".`);
 }
 
 for (const brief of MUSIC_BRIEFS) {
@@ -82,6 +92,21 @@ async function generateSoundEffect(brief) {
     await writeFile(rawPath, response.bytes);
   }
 
+  const filters = [
+    // Remove only leading dead air. Removing trailing silence with
+    // silenceremove also mistakes deliberate gaps (the two warning knocks,
+    // coin sequences) for the end of the effect.
+    'silenceremove=start_periods=1:start_duration=0.01:start_threshold=-52dB',
+    'highpass=f=35',
+    ...(brief.gainDb ? [`volume=${brief.gainDb}dB`] : []),
+    ...(brief.fadeOutSeconds
+      ? [
+          `afade=t=out:st=${Math.max(0, brief.maxDurationSeconds - brief.fadeOutSeconds)}:d=${brief.fadeOutSeconds}`,
+        ]
+      : []),
+    'alimiter=limit=0.94',
+  ];
+
   run('ffmpeg', [
     '-y',
     '-hide_banner',
@@ -96,10 +121,7 @@ async function generateSoundEffect(brief) {
     '-ar',
     '44100',
     '-af',
-    // Remove only leading dead air. Removing trailing silence with
-    // silenceremove also mistakes deliberate gaps (the two warning knocks,
-    // coin sequences) for the end of the effect.
-    'silenceremove=start_periods=1:start_duration=0.01:start_threshold=-52dB,highpass=f=35,alimiter=limit=0.94',
+    filters.join(','),
     '-t',
     String(brief.maxDurationSeconds),
     '-c:a',
@@ -121,6 +143,8 @@ async function generateSoundEffect(brief) {
       modelId: SFX_MODEL,
       durationSeconds: brief.durationSeconds,
       promptInfluence: brief.promptInfluence,
+      ...(brief.gainDb ? { gainDb: brief.gainDb } : {}),
+      ...(brief.fadeOutSeconds ? { fadeOutSeconds: brief.fadeOutSeconds } : {}),
       requestId,
     },
     ...metrics,

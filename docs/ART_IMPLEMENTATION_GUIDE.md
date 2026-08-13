@@ -8,7 +8,7 @@ How to make an asset that belongs in this game. Read
 Every asset is built by a Python script in `tools/blender/`. There is no hand-modelling step.
 
 ```bash
-npm run art:build     # rebuild all 102 assets, export GLB, write art/build_report.json
+npm run art:build     # rebuild all 103 assets, export GLB, write art/build_report.json
 npm run art:review    # render the core sheets plus four accessibility variants
 npm run art:ui-icons  # render transparent DOM-interface WebPs + art/ui_icon_report.json
 npm run art:check     # palette contrast audit (no Blender needed) - exits non-zero on failure
@@ -114,12 +114,12 @@ Enforced at build time. `assert_budget` raises and stops the build.
 | --- | ---: | --- |
 | `crop` | 900 | One asset is a **whole plot bed**, not one plant |
 | `building` | 900 | |
-| `character` | 2,600 | |
+| `character` | 3,500 | Final ceiling for the always-visible ULTRA hero mesh; the immutable low pack is unchanged. |
 | `animal` | 700 | |
 | `prop` | 300 | |
 
-Current worst cases: `SM_char_farmer` at 2,310, `SM_building_barn` at 892 and ready grapes at 894.
-Total across 102 assets: **37,712 triangles**, split so only common crops plus relevant seasonal
+Current worst cases: `SM_char_farmer` at 3,488, `SM_building_barn` at 892 and ready grapes at 894.
+Total across 103 assets: **37,428 triangles**, split so only common crops plus relevant seasonal
 packs are resident.
 
 Raising a budget requires updating this table and saying why in the commit. A budget that is merely
@@ -253,9 +253,9 @@ network, and it means a missing GLB shows placeholder primitives rather than a b
 7. Every playable building kind has an authored base mesh. Mill wheels, cold-store/creamery fans,
    well cranks, processor steam, irrigation flow, construction rise and completion dust make
    operational state visible; broken structures stop and shake.
-8. Chickens use exact walk/rest/peck gait state, cows walk/graze/rest and foxes switch between
-   idle/travel/raid/flee motion. Troughs ripple, irrigation structures carry a visible running stream,
-   and player movement/work emits pooled dust.
+8. Chickens use exact walk/rest/peck gait state, cows and sheep walk/graze/rest with species-specific
+   quadruped motion, and foxes switch between idle/travel/raid/flee motion. Troughs ripple, irrigation
+   structures carry a visible running stream, and player movement/work emits pooled dust.
 9. Vertex AO and the shared generated surface-detail atlas add crevice, contact and material breakup
    without multiplying authored materials or shipping a bitmap world texture.
 10. Terrain uses a one-metre colour/normal field, pasture/earth-aware grass and dirt scatter,
@@ -267,15 +267,16 @@ network, and it means a missing GLB shows placeholder primitives rather than a b
    with a contrast audit, so a second season is mostly data.
 2. **World-space economy presentation.** Sales, event prevention and parcel purchases need authored
    farm-side beats if those UI actions are meant to carry the same visual weight as field work.
-3. **LODs — only if profiling demands it.** The 37,712 authored triangles are distributed across
+3. **LODs — only if profiling demands it.** The 37,428 authored triangles are distributed across
    lazy seasonal packs; add LODs only if a loaded-season device trace is geometry-bound.
 
 ## Needs a professional artist or specialist
 
-4. **Locomotion-scale redesign.** The completed skeletal rig, compact walk, capped visual stride warp
-   and IK remove the former forward-kick silhouette, but 0.385 m legs still cannot honestly cover the
-   current 6.5 m/s arcade walk without some sliding. Closing the physical distance gap needs a
-   gameplay-speed or character-proportion decision, then specialist animation retuning.
+4. **Locomotion-scale follow-up.** The completed skeletal rig, compact rear-only walk, capped visual
+   stride warp and IK remove the former forward-kick silhouette. The final 2.1252 m/s walk is much
+   closer to the 0.385 m legs' honest reach, while the 5.20674 m/s sprint still accepts measured slip
+   as an arcade-travel compromise. Eliminating that remainder would require another gameplay-speed
+   or character-proportion decision, then specialist animation retuning.
 5. **Hand-painted texture pass**, if the project ever wants painted foliage or scanned ground. UVs
     now exist for the generated greyscale atlas, but shipped bitmap colour/normal textures would
     still need a texture artist plus a KTX2 pipeline — re-run the compression measurements first.

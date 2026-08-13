@@ -14,7 +14,9 @@ describe('debug flags', () => {
   });
 
   it('exposes the non-persistent progression acceptance career only when requested', () => {
+    expect(resolveDebugFlags('?debug=licensed')).toMatchObject({ progressionReviewStage: 2 });
     expect(resolveDebugFlags('?debug=progression')).toMatchObject({ progressionReviewStage: 3 });
+    expect(resolveDebugFlags('?debug=regional')).toMatchObject({ progressionReviewStage: 4 });
     expect(resolveDebugFlags('?debug=estate')).toMatchObject({ progressionReviewStage: 5 });
     expect(resolveDebugFlags('', false).progressionReviewStage).toBeNull();
   });

@@ -11,6 +11,7 @@ import {
   BASE_STORAGE_UNITS,
   COLD_STORE_CAPACITY_UNITS,
   LOADING_PAD_CAPACITY,
+  animalShelterProductDropTile,
   buildingFootprint,
   normalizeBuildingRotation,
   upkeepForTicks,
@@ -71,6 +72,38 @@ export class BuildingModel {
         tileZ < building.tileZ + footprint.depth
       );
     });
+  }
+
+  /** Nearest footprint edge, so solid buildings remain usable from outside their walls. */
+  nearest(
+    tileX: number,
+    tileZ: number,
+    maxTiles: number,
+    include: (building: PlacedBuilding) => boolean = () => true,
+  ): PlacedBuilding | undefined {
+    let nearest: PlacedBuilding | undefined;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (const building of this.#buildings) {
+      if (!include(building)) continue;
+      const footprint = buildingFootprint(building.kind, building.rotation);
+      const minX = building.tileX;
+      const maxX = building.tileX + footprint.width - 1;
+      const minZ = building.tileZ;
+      const maxZ = building.tileZ + footprint.depth - 1;
+      const dx = tileX < minX ? minX - tileX : tileX > maxX ? tileX - maxX : 0;
+      const dz = tileZ < minZ ? minZ - tileZ : tileZ > maxZ ? tileZ - maxZ : 0;
+      const distance = dx + dz;
+      if (
+        distance > maxTiles ||
+        distance > nearestDistance ||
+        (distance === nearestDistance && nearest && building.id >= nearest.id)
+      ) {
+        continue;
+      }
+      nearest = building;
+      nearestDistance = distance;
+    }
+    return nearest;
   }
 
   completed(kind?: BuildingKind): PlacedBuilding[] {
@@ -173,6 +206,12 @@ export class BuildingModel {
     if (building.kind === 'fence') {
       this.grid.setFlag(building.tileX, building.tileZ, TileFlag.Enclosed, true);
     }
+    if (building.kind === 'animal_shelter') {
+      const drop = animalShelterProductDropTile(building.tileX, building.tileZ, building.rotation);
+      // Products wait outside the door on a walkable tile. Reserving it when
+      // construction begins prevents a later building from hiding the basket.
+      this.grid.setFlag(drop.tileX, drop.tileZ, TileFlag.Occupied, true);
+    }
     addBuildingCollision(
       this.grid,
       building.kind,
@@ -217,6 +256,7 @@ export class BuildingModel {
 
 const BLOCKING_KINDS = new Set<BuildingKind>([
   'barn',
+  'animal_shelter',
   'cold_store',
   'worker_hut',
   'mill',

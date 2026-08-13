@@ -14,10 +14,10 @@ export const ALLOWED_TRANSITIONS: Readonly<Record<GamePhase, readonly GamePhase[
     loading: ['playing', 'menu'],
     playing: ['paused', 'menu', 'loading', 'outcome'],
     paused: ['playing', 'menu'],
-    // A finished run can only be left deliberately: replay reloads the scene,
-    // or the player returns to the menu. There is no path back into 'playing',
-    // which is what stops a completed run being resumed.
-    outcome: ['loading', 'menu'],
+    // A season review keeps the persistent farm loaded, so continuing returns
+    // directly to play. Loading remains legal for review/debug flows that do
+    // intentionally replace the scene.
+    outcome: ['playing', 'loading', 'menu'],
   },
 );
 

@@ -60,6 +60,7 @@ export interface LandOption {
 }
 
 export interface BuildSnapshot {
+  readonly context?: 'livestock' | null;
   readonly balance: Cents;
   readonly options: readonly BuildOption[];
   readonly animals: readonly AnimalOption[];
@@ -148,11 +149,12 @@ export class BuildPanel {
     });
     clear(this.#list);
 
-    for (const option of snapshot.options) {
+    for (const option of snapshot.context === 'livestock' ? [] : snapshot.options) {
       const definition = BUILDINGS[option.kind];
       this.#list.append(
         this.#row({
           testId: `build-${option.kind}`,
+          rowTestId: `build-row-${option.kind}`,
           icon: buildIcon(option.kind),
           title: buildingName(this.i18n, option.kind, definition.displayName),
           meta: `${this.i18n.formatCents(option.cost)}  ·  ${domainText(
@@ -193,7 +195,9 @@ export class BuildPanel {
       this.#list.append(
         this.#row({
           testId: `build-animal-${option.species}`,
-          icon: option.species === 'chicken' ? 'chicken' : 'cow',
+          rowTestId: `build-animal-row-${option.species}`,
+          icon:
+            option.species === 'chicken' ? 'chicken' : option.species === 'sheep' ? 'sheep' : 'cow',
           title: animal,
           meta: this.i18n.t('build.animalMeta', {
             cost: this.i18n.formatCents(definition.purchaseCost),
@@ -212,16 +216,17 @@ export class BuildPanel {
       );
     }
 
-    if (snapshot.carriers.length > 0) {
+    if (!snapshot.context && snapshot.carriers.length > 0) {
       this.#list.append(
         localizedText(this.i18n, 'h3', 'build.hauling', { class: 'fr-panel-card__section' }),
       );
     }
-    for (const option of snapshot.carriers) {
+    for (const option of snapshot.context ? [] : snapshot.carriers) {
       const definition = CARRIERS[option.kind];
       this.#list.append(
         this.#row({
           testId: `build-carrier-${option.kind}`,
+          rowTestId: `build-carrier-row-${option.kind}`,
           icon: 'land',
           title: domainText(this.i18n, 'carrier', option.kind, 'name', definition.displayName),
           meta: this.i18n.t('build.carrierMeta', {
@@ -245,15 +250,17 @@ export class BuildPanel {
     // Land, listed last and visually distinct. Starter Extension deliberately
     // appears immediately above North Field so onboarding and the long-term
     // objective remain visible together.
-    this.#list.append(
-      localizedText(this.i18n, 'h3', 'build.expand', { class: 'fr-panel-card__section' }),
-    );
-    if (snapshot.land.length === 0) {
+    if (!snapshot.context) {
+      this.#list.append(
+        localizedText(this.i18n, 'h3', 'build.expand', { class: 'fr-panel-card__section' }),
+      );
+    }
+    if (!snapshot.context && snapshot.land.length === 0) {
       this.#list.append(
         localizedText(this.i18n, 'p', 'build.ownedAllFields', { class: 'fr-market__empty' }),
       );
     }
-    for (const parcel of snapshot.land) {
+    for (const parcel of snapshot.context ? [] : snapshot.land) {
       const progress = Math.round(parcel.progress * 100);
       this.#list.append(
         this.#row({
@@ -332,6 +339,8 @@ function buildIcon(kind: BuildingKind): UiIconId {
     irrigation: 'irrigation',
     road: 'road',
     fence: 'fence',
+    animal_shelter: 'animalShelter',
+    water_trough: 'waterTrough',
     loading_pad: 'loadingPad',
     cold_store: 'coldStore',
     worker_hut: 'workerHut',

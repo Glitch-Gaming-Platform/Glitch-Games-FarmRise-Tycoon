@@ -63,6 +63,8 @@ import {
   createChickenPose,
 } from '../animals/chickenMotion.js';
 import { COW_COLLISION_RADIUS, cowPose, createCowPose } from '../animals/cowMotion.js';
+import { SHEEP_COLLISION_RADIUS, createSheepPose, sheepPose } from '../animals/sheepMotion.js';
+import { visibleAnimalCountForGroup } from '../animals/visibleAnimalInstances.js';
 import type { TextLocalizer } from '@engine/i18n/Localization.js';
 
 export const FARM_SCENE_ID = 'farm';
@@ -294,6 +296,7 @@ export class FarmScene implements GameScene {
       career,
       player,
       playerController,
+      interaction,
       incidents,
       careerDirector,
       input,
@@ -484,35 +487,53 @@ export class FarmScene implements GameScene {
 
     write(player.collisionId, player.position.x, player.position.z, player.radius);
 
-    const chickenCount = Math.min(
-      world.livestock.groups
-        .filter((group) => group.species === 'chicken')
-        .reduce((sum, group) => sum + group.count, 0),
-      64,
-    );
-    if (chickenCount > 0) {
-      const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
-      const pose = createChickenPose();
-      const simulationTime = ticksToSeconds(world.tick);
-      for (let index = 0; index < chickenCount; index += 1) {
-        chickenPose(shelter, index, chickenCount, simulationTime, 0, 1, pose);
-        write(`chicken-${index}`, pose.x, pose.z, CHICKEN_COLLISION_RADIUS);
+    const groups = world.livestock.groups;
+    const chickenPoseState = createChickenPose();
+    const simulationTime = ticksToSeconds(world.tick);
+    for (const group of groups) {
+      if (group.species !== 'chicken') continue;
+      const count = visibleAnimalCountForGroup(groups, 'chicken', group.id, 64);
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let localIndex = 0; localIndex < count; localIndex += 1) {
+        chickenPose(shelter, localIndex, count, simulationTime, 0, 1, chickenPoseState);
+        write(
+          `chicken-${group.id}-${localIndex}`,
+          chickenPoseState.x,
+          chickenPoseState.z,
+          CHICKEN_COLLISION_RADIUS,
+        );
       }
     }
 
-    const cowCount = Math.min(
-      world.livestock.groups
-        .filter((group) => group.species === 'cow')
-        .reduce((sum, group) => sum + group.count, 0),
-      16,
-    );
-    if (cowCount > 0) {
-      const shelter = world.grid.tileToWorld(world.level.shelter.tileX, world.level.shelter.tileZ);
-      const pose = createCowPose();
-      const simulationTime = ticksToSeconds(world.tick);
-      for (let index = 0; index < cowCount; index += 1) {
-        cowPose(shelter, index, cowCount, simulationTime, 1, pose);
-        write(`cow-${index}`, pose.x, pose.z, COW_COLLISION_RADIUS);
+    const cowPoseState = createCowPose();
+    for (const group of groups) {
+      if (group.species !== 'cow') continue;
+      const count = visibleAnimalCountForGroup(groups, 'cow', group.id, 16);
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let localIndex = 0; localIndex < count; localIndex += 1) {
+        cowPose(shelter, localIndex, count, simulationTime, 1, cowPoseState);
+        write(
+          `cow-${group.id}-${localIndex}`,
+          cowPoseState.x,
+          cowPoseState.z,
+          COW_COLLISION_RADIUS,
+        );
+      }
+    }
+
+    const sheepPoseState = createSheepPose();
+    for (const group of groups) {
+      if (group.species !== 'sheep') continue;
+      const count = visibleAnimalCountForGroup(groups, 'sheep', group.id, 24);
+      const shelter = world.shelters.worldPosition(group.shelterId);
+      for (let localIndex = 0; localIndex < count; localIndex += 1) {
+        sheepPose(shelter, localIndex, count, simulationTime, 1, sheepPoseState);
+        write(
+          `sheep-${group.id}-${localIndex}`,
+          sheepPoseState.x,
+          sheepPoseState.z,
+          SHEEP_COLLISION_RADIUS,
+        );
       }
     }
 
@@ -541,7 +562,10 @@ export class FarmScene implements GameScene {
 
     const library = new ModelLibrary();
     let loaded = 0;
-    const families = modelFamiliesForSeasons(seasons);
+    const families = [
+      ...modelFamiliesForSeasons(seasons),
+      ...(loader.declares('model:animals-sheep') ? ['model:animals-sheep'] : []),
+    ];
     for (const [index, id] of families.entries()) {
       try {
         const gltf = await loader.load<GLTF>(id, context.signal);

@@ -14,7 +14,7 @@ import type { Vec2 } from '@engine/physics/PhysicsPort.js';
  * 0.60 m of ground per walk cycle and 1.10 m per run cycle, flight phase
  * included. At a believable 2.3 cycles/s walking and 3.1 running, that is a
  * baseline of about 1.4 and 3.4 m/s. The shipped walk speed now includes the
- * requested 20% increase over the previous 1.54 m/s tuning.
+ * requested 15% final increase over the previous 1.848 m/s tuning.
  *
  * The previous numbers were 6.5 and 10.4 - a walk faster than a human sprint,
  * on legs less than half a human's. Nothing in the renderer could make that
@@ -23,13 +23,14 @@ import type { Vec2 } from '@engine/physics/PhysicsPort.js';
  * produce. Two audits documented that and correctly declined to fix it
  * unilaterally, because the honest fix is here rather than in the rig.
  *
- * The cost is that the farm takes about 2.7x longer to cross at a sprint, so
- * sprint is now the travel speed and walking is for the last few metres. The
+ * The cost is that the farm still takes about 2x longer to cross than it did
+ * at the original arcade sprint, so sprint remains the travel speed and
+ * walking is for the last few metres. The
  * benefit is that the character's feet are attached to the world for the first
  * time. `Fox.speed` is scaled by the same factor so that intercepting a raider
  * takes the same chase it always did.
  */
-export const DEFAULT_WALK_SPEED = 1.848;
+export const DEFAULT_WALK_SPEED = 2.1252;
 export const DEFAULT_SPRINT_MULTIPLIER = 2.45;
 
 export type PlayerActivity = 'idle' | 'walking' | 'working';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANIMALS } from '@farmrise/shared';
+import { ANIMALS, STARTER_SHELTER_ID } from '@farmrise/shared';
 import { OnboardingAnimalBoost } from '@game/onboarding/OnboardingAnimalBoost.js';
 import { makeCareer } from '../helpers/career.js';
 
@@ -29,6 +29,7 @@ describe('OnboardingAnimalBoost', () => {
       {
         id: 'animals-cows',
         species: 'cow',
+        shelterId: STARTER_SHELTER_ID,
         count: 1,
         cycleTicks: 0,
         tileX: career.world.level.shelter.tileX,

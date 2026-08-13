@@ -6,6 +6,7 @@ export * from './animals.js';
 export * from './specializations.js';
 export * from './processing.js';
 export * from './buildings.js';
+export * from './shelters.js';
 export * from './events.js';
 export * from './incidents.js';
 export * from './items.js';

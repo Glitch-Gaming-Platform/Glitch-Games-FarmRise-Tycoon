@@ -148,13 +148,19 @@ describe('offline buyer board', () => {
     }
   });
 
-  it('offers a premium over raw spot value', async () => {
+  it('adds a 15-30% commitment bonus to each buyer price', async () => {
     const { ContractBoard } = await import('@game/career/ContractBoard.js');
-    const { spotPriceFor } = await import('@farmrise/shared');
-    const board = new ContractBoard(await makeContractCareer());
+    const { applyContractCommitmentBonus } = await import('@farmrise/shared');
+    const { offeredUnitPrice } = await import('@game/world/FarmCommands.js');
+    const career = await makeContractCareer();
+    const board = new ContractBoard(career);
     board.refresh();
     for (const entry of board.available()) {
-      expect(entry.offer.unitPrice).toBeGreaterThan(spotPriceFor(entry.offer.itemId));
+      const current = offeredUnitPrice(career, entry.offer.buyerId, entry.offer.itemId);
+      expect(entry.offer.unitPrice).toBeGreaterThanOrEqual(
+        applyContractCommitmentBonus(current, 0),
+      );
+      expect(entry.offer.unitPrice).toBeLessThanOrEqual(applyContractCommitmentBonus(current, 1));
     }
   });
 

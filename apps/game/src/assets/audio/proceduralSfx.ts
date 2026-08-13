@@ -23,6 +23,7 @@ import {
   type Voice,
 } from './synth.js';
 import { SOUND, type SoundId } from './soundIds.js';
+import { FARM_ANIMAL_SOUND_VARIANTS, type FarmAnimalSoundId } from './animalSoundVariants.js';
 
 interface Recipe {
   readonly duration: number;
@@ -52,7 +53,9 @@ function texture(seed: number, cutoff: number, sampleRate: number): Voice {
   return lowpass(noise(seed), cutoff, sampleRate);
 }
 
-const RECIPES: Record<SoundId, Recipe> = {
+export type RuntimeSoundId = SoundId | FarmAnimalSoundId;
+
+const RECIPES: Partial<Record<RuntimeSoundId, Recipe>> = {
   [SOUND.uiClick]: {
     duration: 0.07,
     build: (sr) =>
@@ -108,6 +111,50 @@ const RECIPES: Record<SoundId, Recipe> = {
     duration: 0.12,
     build: (sr) => shaped(texture(17, 900, sr), percussive(0.035)),
   },
+  [SOUND.cartRoll]: {
+    duration: 0.24,
+    build: (sr) =>
+      mix(
+        [shaped(texture(19, 720, sr), adsr(0.01, 0.04, 0.35, 0.16, 0.24)), 0.55],
+        [shaped(sweptSine(190, 145, 0.2, 0.25), percussive(0.08)), 0.35],
+      ),
+  },
+  [SOUND.pickup]: {
+    duration: 0.34,
+    build: (sr) =>
+      mix(
+        [shaped(texture(73, 1800, sr), adsr(0.01, 0.05, 0.3, 0.2, 0.34)), 0.55],
+        [delayed(marimba(note(-12), 0.12), 0.12), 0.45],
+      ),
+  },
+  [SOUND.deposit]: {
+    duration: 0.35,
+    build: (sr) =>
+      mix(
+        [shaped(sine(105), percussive(0.08)), 0.7],
+        [shaped(texture(79, 1150, sr), percussive(0.045)), 0.5],
+        [delayed(marimba(note(-17), 0.13), 0.08), 0.45],
+      ),
+  },
+  [SOUND.shooAnimals]: {
+    duration: 0.6,
+    build: (sr) =>
+      mix(
+        [shaped(texture(83, 3600, sr), percussive(0.025)), 0.7],
+        [delayed(shaped(texture(89, 3400, sr), percussive(0.025)), 0.16), 0.65],
+        [delayed(shaped(texture(97, 900, sr), percussive(0.045)), 0.3), 0.55],
+      ),
+  },
+  [SOUND.repair]: {
+    duration: 0.75,
+    build: (sr) =>
+      mix(
+        [shaped(texture(101, 2100, sr), percussive(0.025)), 0.55],
+        [delayed(shaped(sine(310), percussive(0.04)), 0.12), 0.45],
+        [delayed(marimba(note(-5), 0.2), 0.34), 0.7],
+        [delayed(shaped(texture(103, 1600, sr), percussive(0.02)), 0.48), 0.45],
+      ),
+  },
 
   [SOUND.buildPlace]: {
     duration: 0.28,
@@ -127,6 +174,28 @@ const RECIPES: Record<SoundId, Recipe> = {
         [delayed(shaped(texture(41, 1400, sr), percussive(0.03)), 0.26), 0.5],
         [delayed(marimba(note(4), 0.22), 0.42), 0.9],
         [delayed(marimba(note(11), 0.3), 0.56), 0.9],
+      ),
+  },
+
+  [SOUND.processingStart]: {
+    duration: 0.85,
+    build: (sr) =>
+      mix(
+        [shaped(texture(107, 1500, sr), percussive(0.035)), 0.5],
+        [
+          delayed(shaped(sweptSine(90, 165, 0.5, 0.55), adsr(0.02, 0.12, 0.45, 0.5, 0.72)), 0.08),
+          0.55,
+        ],
+        [delayed(marimba(note(-12), 0.2), 0.2), 0.45],
+      ),
+  },
+  [SOUND.processingComplete]: {
+    duration: 0.85,
+    build: (sr) =>
+      mix(
+        [shaped(sweptSine(170, 80, 0.45, 0.5), adsr(0.01, 0.1, 0.35, 0.45, 0.6)), 0.45],
+        [delayed(shaped(texture(109, 1200, sr), percussive(0.05)), 0.38), 0.55],
+        [delayed(marimba(note(4), 0.22), 0.48), 0.65],
       ),
   },
 
@@ -193,6 +262,118 @@ const RECIPES: Record<SoundId, Recipe> = {
       ),
   },
 
+  [SOUND.droughtWarning]: {
+    duration: 1.25,
+    build: (sr) =>
+      mix(
+        [shaped(texture(113, 900, sr), adsr(0.08, 0.25, 0.35, 0.75, 1.25)), 0.55],
+        [delayed(shaped(sweptSine(155, 120, 0.45, 0.5), percussive(0.18)), 0.42), 0.38],
+      ),
+  },
+  [SOUND.droughtImpact]: {
+    duration: 1.0,
+    build: (sr) =>
+      mix(
+        [shaped(texture(127, 1100, sr), adsr(0.01, 0.12, 0.3, 0.65, 1)), 0.75],
+        [shaped(sine(68), percussive(0.12)), 0.45],
+      ),
+  },
+  [SOUND.foxRaidWarning]: {
+    duration: 0.9,
+    build: (sr) =>
+      mix(
+        [shaped(sweptSine(820, 540, 0.16, 0.45), percussive(0.06)), 0.58],
+        [delayed(shaped(texture(131, 2400, sr), percussive(0.025)), 0.28), 0.45],
+        [delayed(shaped(texture(137, 1500, sr), adsr(0.01, 0.06, 0.22, 0.38, 0.55)), 0.34), 0.35],
+      ),
+  },
+  [SOUND.cartAxleWarning]: {
+    duration: 1.1,
+    build: (sr) =>
+      mix(
+        [shaped(sweptSine(210, 125, 0.7, 0.45), adsr(0.04, 0.18, 0.35, 0.6, 1.05)), 0.48],
+        [shaped(texture(139, 1000, sr), adsr(0.02, 0.18, 0.25, 0.65, 1.1)), 0.4],
+      ),
+  },
+  [SOUND.cartAxleImpact]: {
+    duration: 1.1,
+    build: (sr) =>
+      mix(
+        [shaped(texture(149, 2300, sr), percussive(0.035)), 0.65],
+        [shaped(sine(82), percussive(0.1)), 0.75],
+        [delayed(shaped(texture(151, 850, sr), adsr(0.01, 0.08, 0.3, 0.55, 0.75)), 0.14), 0.55],
+      ),
+  },
+  [SOUND.roadWashoutWarning]: {
+    duration: 1.25,
+    build: (sr) =>
+      mix(
+        [shaped(texture(157, 2600, sr), adsr(0.08, 0.22, 0.45, 0.72, 1.25)), 0.5],
+        [delayed(shaped(texture(163, 1200, sr), percussive(0.045)), 0.48), 0.4],
+        [delayed(shaped(texture(167, 1100, sr), percussive(0.04)), 0.7), 0.35],
+      ),
+  },
+  [SOUND.roadWashoutImpact]: {
+    duration: 1.35,
+    build: (sr) =>
+      mix(
+        [shaped(texture(173, 3000, sr), adsr(0.02, 0.16, 0.5, 0.8, 1.35)), 0.65],
+        [shaped(sweptSine(95, 48, 0.9, 0.6), percussive(0.24)), 0.48],
+      ),
+  },
+  [SOUND.blightWarning]: {
+    duration: 1.0,
+    build: (sr) =>
+      mix(
+        [shaped(texture(179, 3300, sr), adsr(0.02, 0.12, 0.3, 0.58, 1)), 0.48],
+        [delayed(shaped(texture(181, 4800, sr), percussive(0.025)), 0.42), 0.45],
+      ),
+  },
+  [SOUND.blightImpact]: {
+    duration: 1.05,
+    build: (sr) =>
+      mix(
+        [shaped(texture(191, 4200, sr), adsr(0.01, 0.09, 0.28, 0.7, 1.05)), 0.6],
+        [delayed(shaped(texture(193, 2500, sr), percussive(0.035)), 0.16), 0.45],
+        [delayed(shaped(texture(197, 2400, sr), percussive(0.035)), 0.36), 0.4],
+      ),
+  },
+  [SOUND.processorBreakdownWarning]: {
+    duration: 1.1,
+    build: (sr) =>
+      mix(
+        [shaped(sweptSine(380, 245, 0.65, 0.55), adsr(0.02, 0.14, 0.32, 0.65, 1.05)), 0.48],
+        [shaped(texture(199, 1800, sr), adsr(0.01, 0.09, 0.25, 0.7, 1.1)), 0.5],
+      ),
+  },
+  [SOUND.processorBreakdownImpact]: {
+    duration: 1.2,
+    build: (sr) =>
+      mix(
+        [shaped(texture(211, 2500, sr), percussive(0.04)), 0.7],
+        [shaped(sine(76), percussive(0.1)), 0.65],
+        [delayed(shaped(sweptSine(250, 55, 0.7, 0.6), percussive(0.2)), 0.12), 0.48],
+      ),
+  },
+  [SOUND.coldSnapWarning]: {
+    duration: 1.2,
+    build: (sr) =>
+      mix(
+        [shaped(texture(223, 5000, sr), adsr(0.06, 0.22, 0.3, 0.7, 1.2)), 0.38],
+        [delayed(bell(note(24), 0.35), 0.38), 0.32],
+        [delayed(bell(note(28), 0.28), 0.58), 0.26],
+      ),
+  },
+  [SOUND.coldSnapImpact]: {
+    duration: 1.1,
+    build: (sr) =>
+      mix(
+        [shaped(texture(227, 5200, sr), percussive(0.05)), 0.65],
+        [shaped(sweptSine(180, 75, 0.65, 0.4), percussive(0.16)), 0.38],
+        [delayed(shaped(texture(229, 3100, sr), adsr(0.01, 0.08, 0.25, 0.55, 0.8)), 0.12), 0.4],
+      ),
+  },
+
   [SOUND.foxAlert]: {
     duration: 0.28,
     // Thin, sharp, and pitched high enough to cut through the music bed.
@@ -218,6 +399,71 @@ const RECIPES: Record<SoundId, Recipe> = {
         [delayed(shaped(sweptSine(700, 500, 0.09), percussive(0.05)), 0.09), 0.6],
       ),
   },
+  [FARM_ANIMAL_SOUND_VARIANTS.hen[1]]: {
+    duration: 0.45,
+    build: () =>
+      mix(
+        [shaped(sweptSine(700, 850, 0.08), percussive(0.035)), 0.6],
+        [delayed(shaped(sweptSine(820, 560, 0.12), percussive(0.055)), 0.08), 0.58],
+        [delayed(shaped(sweptSine(740, 920, 0.07), percussive(0.035)), 0.22), 0.5],
+      ),
+  },
+  [FARM_ANIMAL_SOUND_VARIANTS.hen[2]]: {
+    duration: 0.38,
+    build: () =>
+      mix(
+        [shaped(sweptSine(590, 720, 0.06), percussive(0.03)), 0.55],
+        [delayed(shaped(sweptSine(680, 520, 0.09), percussive(0.05)), 0.11), 0.55],
+      ),
+  },
+  [SOUND.sheep]: {
+    duration: 0.65,
+    build: () =>
+      mix(
+        [shaped(sweptSine(390, 520, 0.18, 0.6), adsr(0.015, 0.08, 0.42, 0.38, 0.62)), 0.6],
+        [shaped(sweptSine(195, 260, 0.2, 0.55), adsr(0.015, 0.08, 0.35, 0.38, 0.62)), 0.35],
+      ),
+  },
+  [FARM_ANIMAL_SOUND_VARIANTS.sheep[1]]: {
+    duration: 0.58,
+    build: () =>
+      mix(
+        [shaped(sweptSine(440, 590, 0.16, 0.58), adsr(0.01, 0.07, 0.4, 0.32, 0.56)), 0.62],
+        [shaped(sweptSine(220, 295, 0.18, 0.52), adsr(0.01, 0.07, 0.3, 0.32, 0.56)), 0.3],
+      ),
+  },
+  [FARM_ANIMAL_SOUND_VARIANTS.sheep[2]]: {
+    duration: 0.7,
+    build: () =>
+      mix(
+        [shaped(sweptSine(330, 410, 0.22, 0.64), adsr(0.02, 0.1, 0.38, 0.4, 0.68)), 0.6],
+        [shaped(sweptSine(165, 205, 0.22, 0.58), adsr(0.02, 0.1, 0.3, 0.4, 0.68)), 0.32],
+      ),
+  },
+  [SOUND.cow]: {
+    duration: 1.0,
+    build: () =>
+      mix(
+        [shaped(sweptSine(125, 105, 0.75, 0.45), adsr(0.04, 0.16, 0.5, 0.62, 1)), 0.72],
+        [shaped(sweptSine(250, 210, 0.72, 0.4), adsr(0.04, 0.16, 0.38, 0.62, 1)), 0.28],
+      ),
+  },
+  [FARM_ANIMAL_SOUND_VARIANTS.cow[1]]: {
+    duration: 0.82,
+    build: () =>
+      mix(
+        [shaped(sweptSine(145, 125, 0.6, 0.48), adsr(0.03, 0.14, 0.45, 0.48, 0.8)), 0.7],
+        [shaped(sweptSine(290, 250, 0.58, 0.42), adsr(0.03, 0.14, 0.32, 0.48, 0.8)), 0.26],
+      ),
+  },
+  [FARM_ANIMAL_SOUND_VARIANTS.cow[2]]: {
+    duration: 0.9,
+    build: (sr) =>
+      mix(
+        [shaped(sweptSine(112, 96, 0.68, 0.42), adsr(0.04, 0.16, 0.46, 0.5, 0.88)), 0.62],
+        [delayed(shaped(texture(239, 650, sr), percussive(0.12)), 0.58), 0.28],
+      ),
+  },
   [SOUND.raidLoss]: {
     duration: 0.9,
     build: (sr) =>
@@ -225,6 +471,17 @@ const RECIPES: Record<SoundId, Recipe> = {
         [shaped(texture(71, 2800, sr), adsr(0.01, 0.08, 0.22, 0.55, 0.9)), 0.55],
         [delayed(shaped(sweptSine(760, 560, 0.11), percussive(0.05)), 0.08), 0.5],
         [delayed(shaped(sweptSine(690, 480, 0.12), percussive(0.06)), 0.28), 0.45],
+      ),
+  },
+
+  [SOUND.seasonTransition]: {
+    duration: 1.5,
+    build: (sr) =>
+      mix(
+        [shaped(texture(233, 3100, sr), adsr(0.08, 0.25, 0.25, 0.9, 1.5)), 0.3],
+        [delayed(marimba(note(0), 0.34), 0.2), 0.65],
+        [delayed(marimba(note(4), 0.38), 0.42), 0.65],
+        [delayed(marimba(note(9), 0.46), 0.66), 0.7],
       ),
   },
 
@@ -268,13 +525,13 @@ const RECIPES: Record<SoundId, Recipe> = {
 };
 
 /** Renders one sound to raw samples. Exported so tests can inspect it. */
-export function renderSound(id: SoundId, sampleRate: number): Float32Array<ArrayBuffer> {
+export function renderSound(id: RuntimeSoundId, sampleRate: number): Float32Array<ArrayBuffer> {
   const recipe = RECIPES[id];
   if (!recipe) throw new Error(`No synthesis recipe for sound "${id}".`);
   return render(recipe.build(sampleRate), { duration: recipe.duration, sampleRate });
 }
 
-export const ALL_SOUND_IDS = Object.keys(RECIPES) as SoundId[];
+export const ALL_SOUND_IDS = Object.keys(RECIPES) as RuntimeSoundId[];
 
 /**
  * Renders every sound into the AudioContext.

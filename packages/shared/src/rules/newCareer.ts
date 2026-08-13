@@ -18,6 +18,7 @@ import { BASE_STORAGE_UNITS } from '../domain/buildings.js';
 import { HOMESTEAD_PARCEL_ID, PARCELS_BY_ID } from '../domain/parcels.js';
 import { asPlotId } from '../domain/ids.js';
 import { STARTING_UNLOCKS } from '../domain/milestones.js';
+import { STARTER_SHELTER_ID } from '../domain/shelters.js';
 import { secondsToTicks } from '../domain/time.js';
 import { STARTING_BALANCE } from './economy.js';
 import { seedFromString } from './rng.js';
@@ -104,6 +105,7 @@ export function newCareerSite(seed: number): FarmSiteSaveState {
         species: 'chicken',
         count: STARTER_CHICKENS,
         cycleTicks: ANIMALS.chicken.cycleTicks - secondsToTicks(10),
+        shelterId: STARTER_SHELTER_ID,
         tileX: STARTER_SHELTER.tileX,
         tileZ: STARTER_SHELTER.tileZ,
         sheltered: false,

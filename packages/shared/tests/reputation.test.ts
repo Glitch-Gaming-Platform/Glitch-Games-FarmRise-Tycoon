@@ -4,9 +4,13 @@ import {
   BUYER_IDS,
   DEFAULT_BUYER_ID,
   MAX_TRUST,
+  RECIPES,
+  acceptedContractDeadline,
   buyerAvailability,
   cents,
   failurePenalty,
+  getItem,
+  isContractItemUnlocked,
   meetsQualityBar,
   recordDelivery,
   recordFailure,
@@ -16,6 +20,7 @@ import {
   trustTierLabel,
   trustVolumeMultiplier,
   unitPriceFor,
+  unlocksUpToStage,
   type Relationship,
 } from '../src/index.js';
 
@@ -25,6 +30,7 @@ describe('the buyer table', () => {
   it('makes the opening buyer available to a brand-new farm', () => {
     const opening = BUYER_DEFINITIONS[DEFAULT_BUYER_ID];
     expect(opening.unlocksAtStage).toBe(0);
+    expect(opening.requiresUnlock).toBeNull();
     expect(opening.minimumTrust).toBe(0);
   });
 
@@ -40,6 +46,45 @@ describe('the buyer table', () => {
       const buyer = BUYER_DEFINITIONS[id];
       expect(Math.abs(buyer.trustPerFailure)).toBeGreaterThanOrEqual(buyer.trustPerDelivery / 2);
     }
+  });
+
+  it('only names real goods, with a recipe behind every processed contract item', () => {
+    for (const buyer of Object.values(BUYER_DEFINITIONS)) {
+      for (const itemId of buyer.itemPreference) {
+        const item = getItem(itemId);
+        expect(item, `${buyer.id} asks for unknown item ${itemId}`).toBeDefined();
+        if (item?.category === 'processed') {
+          expect(
+            RECIPES.some((recipe) => recipe.outputItemId === itemId),
+            `${itemId} has no production recipe`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+
+  it('introduces every buyer at a reachable milestone', () => {
+    for (const buyer of Object.values(BUYER_DEFINITIONS)) {
+      const unlocks = unlocksUpToStage(buyer.unlocksAtStage as 0 | 1 | 2 | 3 | 4 | 5);
+      expect(buyerAvailability(buyer.id, buyer.unlocksAtStage, 0, unlocks).ok, buyer.id).toBe(true);
+      const availability = buyerAvailability(buyer.id, buyer.unlocksAtStage, 0, unlocks);
+      expect(availability.ok && availability.value.available, buyer.id).toBe(true);
+    }
+  });
+});
+
+describe('contract production access', () => {
+  it('does not offer goods before their production capability unlocks', () => {
+    expect(isContractItemUnlocked('wheat', [])).toBe(true);
+    expect(isContractItemUnlocked('eggs', [])).toBe(true);
+    expect(isContractItemUnlocked('clover', [])).toBe(false);
+    expect(isContractItemUnlocked('clover', ['soil_management'])).toBe(true);
+    expect(isContractItemUnlocked('milk', [])).toBe(false);
+    expect(isContractItemUnlocked('milk', ['specialization'])).toBe(true);
+    expect(isContractItemUnlocked('flour', [])).toBe(false);
+    expect(isContractItemUnlocked('cheese', ['processing'])).toBe(true);
+    expect(isContractItemUnlocked('preserves', ['processing'])).toBe(true);
+    expect(isContractItemUnlocked('imaginary-goods', ['processing'])).toBe(false);
   });
 });
 
@@ -113,29 +158,38 @@ describe('what trust is worth', () => {
 
 describe('buyerAvailability', () => {
   it('hides a buyer the farm has not reached the stage for', () => {
-    const result = buyerAvailability('thornwood_restaurant', 0, 100);
+    const result = buyerAvailability('thornwood_restaurant', 0, 100, ['buyer_restaurant']);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.available).toBe(false);
     expect(result.value.reason).toMatch(/introduced/i);
   });
 
-  it('hides a fussy buyer until the farm has a track record', () => {
-    const result = buyerAvailability('thornwood_restaurant', 3, 0);
+  it('hides a buyer until its milestone introduction has been earned', () => {
+    const result = buyerAvailability('thornwood_restaurant', 3, 0, []);
     if (!result.ok) throw new Error(result.reason);
     expect(result.value.available).toBe(false);
-    expect(result.value.reason).toMatch(/track record/i);
+    expect(result.value.reason).toMatch(/introduced/i);
   });
 
-  it('opens up once both the stage and the trust are there', () => {
-    const result = buyerAvailability('thornwood_restaurant', 3, 100);
+  it('opens up once the stage and buyer introduction are there', () => {
+    const result = buyerAvailability('thornwood_restaurant', 3, 0, ['buyer_restaurant']);
     if (!result.ok) throw new Error(result.reason);
     expect(result.value.available).toBe(true);
     expect(result.value.reason).toBeNull();
   });
 
   it('fails on an unknown buyer rather than inventing one', () => {
-    expect(buyerAvailability('nobody', 5, 100).ok).toBe(false);
+    expect(buyerAvailability('nobody', 5, 100, []).ok).toBe(false);
+  });
+});
+
+describe('contract deadlines', () => {
+  it('starts the complete delivery window when the player accepts', () => {
+    const acceptedTick = 12_345;
+    expect(acceptedContractDeadline('growers_co_op', acceptedTick)).toBe(
+      acceptedTick + BUYER_DEFINITIONS.growers_co_op.deadlineTicks,
+    );
   });
 });
 

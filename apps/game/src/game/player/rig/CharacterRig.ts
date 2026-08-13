@@ -126,8 +126,9 @@ const LOCK_FADE_STRIDE_SCALE = 1.9;
  *   2. The walk and run clips were re-solved against the leg's actual reach:
  *      0.60 m of ground per walk cycle and 1.10 m per run cycle, against 0.37
  *      and 0.38 before.
- *   3. `Player.walkSpeed` came down from 6.5 m/s, then was raised to 1.848 m/s
- *      by gameplay tuning; the 2.45 sprint multiplier gives 4.5276 m/s.
+ *   3. `Player.walkSpeed` came down from 6.5 m/s, then received its final 15%
+ *      gameplay increase to 2.1252 m/s; the 2.45 sprint multiplier gives
+ *      5.20674 m/s.
  *
  * The strict rear-only walk has a shorter measured stride, so these ceilings
  * now remain active safety limits. The character strides faster up to the cap,

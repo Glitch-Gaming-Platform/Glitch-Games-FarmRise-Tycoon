@@ -12,6 +12,7 @@ import { EventBus } from '@engine/core/EventBus.js';
 export interface AnimalGroup {
   readonly id: string;
   readonly species: AnimalSpecies;
+  readonly shelterId: string;
   count: number;
   cycleTicks: number;
   tileX: number;
@@ -22,13 +23,12 @@ export interface AnimalGroup {
 export interface AnimalProduce {
   readonly itemId: string;
   readonly quantity: number;
-  readonly tileX: number;
-  readonly tileZ: number;
+  readonly shelterId: string;
 }
 
 export interface AnimalModelEvents extends Record<string, unknown> {
-  'animal:purchased': { species: AnimalSpecies; count: number };
-  'animal:produced': { itemId: string; quantity: number };
+  'animal:purchased': { species: AnimalSpecies; count: number; shelterId: string };
+  'animal:produced': { itemId: string; quantity: number; shelterId: string };
   'animal:hungry': {
     species: AnimalSpecies;
     feedItemId: string;
@@ -75,22 +75,36 @@ export class AnimalModel {
     );
   }
 
-  add(species: AnimalSpecies, count: number, tileX: number, tileZ: number): void {
-    const existing = this.#groups.find((group) => group.species === species);
+  /** Shelter slots occupied at one stable shelter identity. */
+  usedSlotsAt(shelterId: string): number {
+    return this.#groups
+      .filter((group) => group.shelterId === shelterId)
+      .reduce((sum, group) => sum + group.count * (ANIMALS[group.species]?.shelterSlots ?? 1), 0);
+  }
+
+  add(
+    species: AnimalSpecies,
+    count: number,
+    shelter: { readonly id: string; readonly tileX: number; readonly tileZ: number },
+  ): void {
+    const existing = this.#groups.find(
+      (group) => group.species === species && group.shelterId === shelter.id,
+    );
     if (existing) existing.count += count;
     else {
       this.#groups.push({
         id: `animals-${this.#nextId}`,
         species,
+        shelterId: shelter.id,
         count,
         cycleTicks: 0,
-        tileX,
-        tileZ,
+        tileX: shelter.tileX,
+        tileZ: shelter.tileZ,
         sheltered: false,
       });
       this.#nextId += 1;
     }
-    this.events.emit('animal:purchased', { species, count });
+    this.events.emit('animal:purchased', { species, count, shelterId: shelter.id });
   }
 
   /** Removes animals to an incident. Never takes the last of a species. */
@@ -148,10 +162,13 @@ export class AnimalModel {
       produced.push({
         itemId: definition.producesItemId,
         quantity,
-        tileX: group.tileX,
-        tileZ: group.tileZ,
+        shelterId: group.shelterId,
       });
-      this.events.emit('animal:produced', { itemId: definition.producesItemId, quantity });
+      this.events.emit('animal:produced', {
+        itemId: definition.producesItemId,
+        quantity,
+        shelterId: group.shelterId,
+      });
     }
     return produced;
   }

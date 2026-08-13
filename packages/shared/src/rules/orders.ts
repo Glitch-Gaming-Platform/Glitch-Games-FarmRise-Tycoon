@@ -14,6 +14,24 @@ import type { Inventory } from './storage.js';
 
 export type OrderStatus = 'open' | 'fulfilled' | 'expired' | 'cancelled';
 
+/**
+ * Extra pay for committing stock to a quantity and deadline.
+ *
+ * Buyer, trust and market rules calculate the underlying offer first. This
+ * bonus then makes the commitment itself worth another 15-30% without erasing
+ * the differences between buyers.
+ */
+export const MIN_CONTRACT_COMMITMENT_BONUS = 0.15;
+export const MAX_CONTRACT_COMMITMENT_BONUS = 0.3;
+
+export function applyContractCommitmentBonus(currentUnitPrice: Cents, randomUnit: number): Cents {
+  const sample = Number.isFinite(randomUnit) ? Math.min(1, Math.max(0, randomUnit)) : 0;
+  const bonus =
+    MIN_CONTRACT_COMMITMENT_BONUS +
+    sample * (MAX_CONTRACT_COMMITMENT_BONUS - MIN_CONTRACT_COMMITMENT_BONUS);
+  return cents(currentUnitPrice * (1 + bonus));
+}
+
 export interface MarketOrder {
   readonly id: OrderId;
   readonly buyerId: string;

@@ -12,12 +12,33 @@
 import type { Unsubscribe } from '@engine/core/types.js';
 import type { AudioSystem } from '@engine/audio/AudioSystem.js';
 import type { AssetLoader } from '@assets/loaders/AssetLoader.js';
-import { SOUND } from '@assets/audio/soundIds.js';
+import { SOUND, type SoundId } from '@assets/audio/soundIds.js';
+import { IMPLEMENTED_ANIMAL_SOUND_VARIANTS } from '@assets/audio/animalSoundVariants.js';
 import { ALL_SOUND_IDS, registerProceduralSfx } from '@assets/audio/proceduralSfx.js';
 import type { MusicId } from '@assets/audio/musicIds.js';
 import type { FarmScene } from '@game/scenes/FarmScene.js';
 import type { GameStateMachine } from '@game/states/GameStateMachine.js';
+import { ANIMALS, type AnimalSpecies } from '@farmrise/shared';
 import { MusicPlayer } from './MusicPlayer.js';
+
+const INCIDENT_WARNING_SOUND: Readonly<Record<string, SoundId>> = {
+  'incident-drought': SOUND.droughtWarning,
+  'incident-fox-raid': SOUND.foxRaidWarning,
+  'incident-cart-axle': SOUND.cartAxleWarning,
+  'incident-blocked-road': SOUND.roadWashoutWarning,
+  'incident-blight': SOUND.blightWarning,
+  'incident-processor-breakdown': SOUND.processorBreakdownWarning,
+  'incident-cold-snap': SOUND.coldSnapWarning,
+};
+
+const INCIDENT_IMPACT_SOUND: Readonly<Record<string, SoundId>> = {
+  'incident-drought': SOUND.droughtImpact,
+  'incident-cart-axle': SOUND.cartAxleImpact,
+  'incident-blocked-road': SOUND.roadWashoutImpact,
+  'incident-blight': SOUND.blightImpact,
+  'incident-processor-breakdown': SOUND.processorBreakdownImpact,
+  'incident-cold-snap': SOUND.coldSnapImpact,
+};
 
 export interface PrepareAudioOptions {
   /** Uses a short mono procedural bed instead of decoding the 92 MB PCM music file. */
@@ -116,19 +137,49 @@ export function bindSceneAudio(scene: FarmScene, audio: AudioSystem): Unsubscrib
   const session = scene.session;
   const enemies = scene.enemyDirector;
   const playerController = scene.playerController;
-  if (!world || !interaction || !incidents || !session || !playerController) {
+  const career = scene.career;
+  const careerDirector = scene.careerDirector;
+  if (
+    !world ||
+    !interaction ||
+    !incidents ||
+    !session ||
+    !playerController ||
+    !career ||
+    !careerDirector
+  ) {
     throw new Error('bindSceneAudio requires a loaded FarmScene.');
   }
 
   const play = (id: string, volume = 1) => audio.play(id, { bus: 'sfx', volume, detuneJitter: 25 });
+  const animalVariant = { chicken: 0, sheep: 0, cow: 0 } satisfies Record<AnimalSpecies, number>;
+  const nextAnimalSound = (species: AnimalSpecies): string => {
+    const variants = IMPLEMENTED_ANIMAL_SOUND_VARIANTS[species];
+    const index = animalVariant[species] % variants.length;
+    animalVariant[species] += 1;
+    return variants[index] ?? variants[0] ?? SOUND.chicken;
+  };
+  const nextAnimalProductSound = (itemId: string): string | null => {
+    const species = Object.values(ANIMALS).find(
+      (definition) => definition.producesItemId === itemId,
+    )?.id;
+    return species ? nextAnimalSound(species) : null;
+  };
   const subscriptions: Unsubscribe[] = [];
 
   subscriptions.push(
-    interaction.events.on('interaction:performed', ({ action }) => {
+    interaction.events.on('interaction:performed', ({ action, responseKind }) => {
       if (action === 'plant') play(SOUND.plant);
-      else if (action === 'tend' || action === 'respond') play(SOUND.tend);
-      else if (action === 'repair') play(SOUND.buildPlace, 0.7);
-      else play(SOUND.harvest);
+      else if (action === 'tend') play(SOUND.tend);
+      else if (action === 'harvest') play(SOUND.harvest);
+      else if (action === 'collect') play(SOUND.pickup, 0.75);
+      else if (action === 'deposit') play(SOUND.deposit, 0.75);
+      else if (action === 'repair') play(SOUND.repair, 0.75);
+      else if (responseKind === 'move_animals') play(SOUND.shooAnimals, 0.85);
+      else if (responseKind === 'repair') play(SOUND.repair, 0.8);
+      else if (responseKind === 'haul_to_shelter') play(SOUND.deposit, 0.7);
+      else if (responseKind === 'unload_processor') play(SOUND.pickup, 0.7);
+      else play(SOUND.tend);
     }),
     // A refusal gets the soft deny, never a harsh buzzer: the player is
     // usually exploring, and exploring must not feel punished.
@@ -141,37 +192,74 @@ export function bindSceneAudio(scene: FarmScene, audio: AudioSystem): Unsubscrib
     }),
     // Hauling is the most repeated action in the mid game, so its cue is
     // quiet and short: audible confirmation, never a fanfare.
-    session.events.on('session:hauled', () => play(SOUND.buildPlace, 0.45)),
+    session.events.on('session:hauled', ({ stored, refused }) =>
+      play(stored > 0 || refused > 0 ? SOUND.deposit : SOUND.pickup, 0.65),
+    ),
+    session.events.on('session:responded', () => play(SOUND.eventPrevented, 0.7)),
+    session.events.on('session:career-changed', ({ action }) => {
+      if (action !== 'queueProcessing' && action !== 'claimMilestone') {
+        play(SOUND.uiConfirm, 0.55);
+      }
+    }),
     world.events.on('world:building-completed', () => play(SOUND.buildComplete)),
     world.events.on('world:building-placed', () => play(SOUND.buildPlace)),
-    world.events.on('world:animal-purchased', () => play(SOUND.chicken, 0.55)),
+    world.events.on('world:animal-purchased', ({ species }) =>
+      play(nextAnimalSound(species), 0.55),
+    ),
     world.events.on('world:parcel-acquired', () => play(SOUND.goalReached)),
     world.events.on('world:storage-full', () => play(SOUND.uiDeny, 0.6)),
-    world.events.on('world:produce', () => play(SOUND.chicken, 0.5)),
+    world.events.on('world:goods-spoiled', () => play(SOUND.uiDeny, 0.5)),
+    world.events.on('world:animal-hungry', ({ species }) => play(nextAnimalSound(species), 0.4)),
+    world.events.on('world:animal-lost', () => play(SOUND.raidLoss, 0.9)),
+    world.events.on('world:produce', ({ itemId }) => {
+      const sound = nextAnimalProductSound(itemId);
+      if (sound) play(sound, 0.5);
+    }),
+    world.processing.events.on('processing:queued', () => play(SOUND.processingStart, 0.7)),
+    world.processing.events.on('processing:completed', () => play(SOUND.processingComplete, 0.75)),
 
-    // The warning is the most important sound in the game: it is the only
-    // cue that a decision window has opened. It gets the ui bus, which is
-    // not ducked, and full volume.
-    incidents.events.on('incident:warned', () =>
-      audio.play(SOUND.eventWarning, { bus: 'ui', volume: 1 }),
+    // Warnings use distinct incident identities on the unducked UI bus. The
+    // generic cue remains a fallback for future incidents until they receive
+    // their own authored brief.
+    incidents.events.on('incident:warned', ({ definition }) =>
+      audio.play(INCIDENT_WARNING_SOUND[definition.id] ?? SOUND.eventWarning, {
+        bus: 'ui',
+        volume: 1,
+      }),
     ),
     incidents.events.on('incident:impact', ({ instance, definition }) => {
-      // Foxes announce their own arrival below. Layering the generic weather
-      // impact over the bark made the critical alert less distinct.
+      // Foxes announce their arrival below. Layering another impact over the
+      // bark makes the active threat harder to identify.
       if (definition.id === 'incident-fox-raid') return;
       const answered = instance.responseProgress > 0;
-      play(answered ? SOUND.eventPrevented : SOUND.eventImpact, answered ? 0.65 : 1);
+      const impact = INCIDENT_IMPACT_SOUND[definition.id] ?? SOUND.eventImpact;
+      play(answered ? SOUND.eventPrevented : impact, answered ? 0.65 : 1);
     }),
     incidents.events.on('incident:resolved', ({ mitigated }) => {
       if (mitigated) play(SOUND.eventPrevented);
     }),
 
     playerController.events.on('player:stepped', ({ sprinting }) =>
-      audio.play(SOUND.footstep, {
+      audio.play(world.carry.carrier === 'arms' ? SOUND.footstep : SOUND.cartRoll, {
         bus: 'sfx',
         volume: sprinting ? 0.58 : 0.42,
         detuneJitter: 45,
       }),
+    ),
+
+    career.events.on('career:season-changed', () =>
+      audio.play(SOUND.seasonTransition, { bus: 'ui', volume: 0.8 }),
+    ),
+    careerDirector.events.on('career:milestone-claimed', () => play(SOUND.goalReached, 0.8)),
+    careerDirector.events.on('career:project-completed', () => play(SOUND.buildComplete, 0.8)),
+    careerDirector.events.on('career:contract-failed', () =>
+      audio.play(SOUND.uiDeny, { bus: 'ui', volume: 0.8 }),
+    ),
+    careerDirector.events.on('career:warning', () =>
+      audio.play(SOUND.uiDeny, { bus: 'ui', volume: 0.7 }),
+    ),
+    careerDirector.events.on('career:restructured', () =>
+      audio.play(SOUND.runFail, { bus: 'ui', volume: 0.65 }),
     ),
   );
 
@@ -179,7 +267,6 @@ export function bindSceneAudio(scene: FarmScene, audio: AudioSystem): Unsubscrib
     subscriptions.push(
       enemies.events.on('enemy:spawned', () => audio.play(SOUND.foxAlert, { bus: 'ui' })),
       enemies.events.on('enemy:scared-off', () => play(SOUND.foxFlee, 0.65)),
-      enemies.events.on('enemy:raid-succeeded', () => play(SOUND.raidLoss, 0.9)),
     );
   }
 

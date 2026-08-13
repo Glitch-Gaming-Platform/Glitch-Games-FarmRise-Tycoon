@@ -3,9 +3,55 @@ import { cents } from '@farmrise/shared';
 import { BuildPanel } from '@ui/panels/BuildPanel.js';
 import { CareerPanel } from '@ui/panels/CareerPanel.js';
 import { MarketPanel } from '@ui/panels/MarketPanel.js';
+import { SeedPanel } from '@ui/panels/SeedPanel.js';
 import { TownPanel } from '@ui/panels/TownPanel.js';
 
 describe('progression management panels', () => {
+  it('shows seasonal seed art, price, harvest time, selection, and affordability', () => {
+    const selectSeed = vi.fn();
+    const panel = new SeedPanel({ onSelectSeed: selectSeed, onClose: vi.fn() });
+    panel.update({
+      seasonName: 'Spring',
+      balance: cents(200),
+      options: [
+        {
+          cropId: 'wheat',
+          displayName: 'Wheat',
+          cost: cents(135),
+          growthTicks: 5_400,
+          baseYield: 6,
+          affordable: true,
+          selected: true,
+        },
+        {
+          cropId: 'strawberry',
+          displayName: 'Strawberry',
+          cost: cents(339),
+          growthTicks: 21_600,
+          baseYield: 8,
+          affordable: false,
+          selected: false,
+        },
+      ],
+    });
+
+    expect(panel.root.textContent).toMatch(/Spring seed cart.*\$2\.00/i);
+    expect(panel.root.textContent).toMatch(/Wheat.*\$1\.35 seed.*1m 30s.*up to 6/i);
+    expect(panel.root.textContent).toMatch(/Strawberry.*\$3\.39 seed.*6m.*up to 8/i);
+    expect(
+      panel.root
+        .querySelector<HTMLButtonElement>('[data-testid="seed-option-wheat"]')
+        ?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(
+      panel.root.querySelector<HTMLButtonElement>('[data-testid="seed-option-strawberry"]')
+        ?.disabled,
+    ).toBe(true);
+
+    panel.root.querySelector<HTMLButtonElement>('[data-testid="seed-option-wheat"]')!.click();
+    expect(selectSeed).toHaveBeenCalledWith('wheat');
+  });
+
   it('releases keyboard focus when building placement closes the build panel', () => {
     const panel = new BuildPanel({
       onSelectBuilding: vi.fn(),
@@ -50,6 +96,7 @@ describe('progression management panels', () => {
       options: [],
       animals: [
         { species: 'chicken', affordable: true, shelterRequired: 1 },
+        { species: 'sheep', affordable: true, shelterRequired: 2 },
         { species: 'cow', affordable: true, shelterRequired: 4 },
       ],
       shelterFree: 8,
@@ -57,12 +104,20 @@ describe('progression management panels', () => {
       carriers: [{ kind: 'wagon', affordable: true }],
     });
 
+    panel.root.querySelector<HTMLButtonElement>('[data-testid="build-animal-sheep"]')!.click();
     panel.root.querySelector<HTMLButtonElement>('[data-testid="build-animal-cow"]')!.click();
     panel.root.querySelector<HTMLButtonElement>('[data-testid="build-carrier-wagon"]')!.click();
+    expect(onBuyAnimal).toHaveBeenCalledWith('sheep');
     expect(onBuyAnimal).toHaveBeenCalledWith('cow');
     expect(onBuyCarrier).toHaveBeenCalledWith('wagon');
-    expect(panel.root.textContent).toMatch(/stored Corn.*Eggs.*sell them at Market/i);
-    expect(panel.root.textContent).toMatch(/stored Clover.*Milk.*sell them at Market/i);
+    expect(panel.root.textContent).toMatch(/stored Corn.*Eggs.*sell the goods at Market/i);
+    expect(panel.root.textContent).toMatch(/stored Clover.*Milk.*sell the goods at Market/i);
+    expect(panel.root.textContent).toMatch(/stored Corn.*Wool.*sell the goods at Market/i);
+    expect(
+      panel.root
+        .querySelector<HTMLElement>('[data-testid="build-animal-row-sheep"] img')
+        ?.getAttribute('src'),
+    ).toMatch(/sheep\.webp$/);
   });
 
   it('lists the $20 three-bed extension above the locked North Field', () => {
@@ -124,15 +179,76 @@ describe('progression management panels', () => {
     expect(onBuyLand).toHaveBeenCalledWith('parcel-starter-extension');
   });
 
+  it('marks requirements independently and enables advancement only when all are complete', () => {
+    const panel = new CareerPanel({
+      onClaimMilestone: vi.fn(),
+      onChooseSpecialization: vi.fn(),
+      onQueueProcessing: vi.fn(),
+      onHireWorker: vi.fn(),
+      onPrioritizeWorker: vi.fn(),
+      onTakeLoan: vi.fn(),
+      onRepayLoan: vi.fn(),
+      onBuyInsurance: vi.fn(),
+      onCancelInsurance: vi.fn(),
+      onClose: vi.fn(),
+    });
+    const snapshot = {
+      balance: cents(15_000),
+      stageName: 'Smallholding',
+      health: 'Healthy',
+      milestone: {
+        id: 'milestone-smallholder',
+        title: 'Buy the North Field',
+        nextStageName: 'Homestead',
+        summary: 'The distant fields need better hauling.',
+        progress: 0.75,
+        ready: false,
+        requirements: ['✓ Earned: $150.00/$150.00', '○ Parcels owned: 1/3'],
+      },
+      specializations: [],
+      processors: [],
+      workers: [],
+      loans: [],
+      insurance: [],
+    } as const;
+
+    panel.update(snapshot);
+    expect(panel.root.textContent).toContain('✓ Earned: $150.00/$150.00');
+    expect(panel.root.textContent).toContain('○ Parcels owned: 1/3');
+    expect(
+      panel.root.querySelector<HTMLButtonElement>(
+        '[data-testid="career-claim-milestone-smallholder"]',
+      )?.disabled,
+    ).toBe(true);
+
+    panel.update({
+      ...snapshot,
+      milestone: {
+        ...snapshot.milestone,
+        progress: 1,
+        ready: true,
+        requirements: ['✓ Earned: $150.00/$150.00', '✓ Parcels owned: 3/3'],
+      },
+    });
+    expect(panel.root.textContent).toContain('✓ Parcels owned: 3/3');
+    const advance = panel.root.querySelector<HTMLButtonElement>(
+      '[data-testid="career-claim-milestone-smallholder"]',
+    );
+    expect(advance?.disabled).toBe(false);
+    expect(advance?.textContent).toBe('Advance to Homestead');
+  });
+
   it('routes milestone, processor, worker and town actions through their panels', () => {
     const claim = vi.fn();
     const queue = vi.fn();
     const employ = vi.fn();
+    const prioritize = vi.fn();
     const career = new CareerPanel({
       onClaimMilestone: claim,
       onChooseSpecialization: vi.fn(),
       onQueueProcessing: queue,
       onHireWorker: employ,
+      onPrioritizeWorker: prioritize,
       onTakeLoan: vi.fn(),
       onRepayLoan: vi.fn(),
       onBuyInsurance: vi.fn(),
@@ -146,7 +262,7 @@ describe('progression management panels', () => {
       milestone: {
         id: 'milestone-test',
         title: 'Test milestone',
-        roleName: 'Supplier',
+        nextStageName: 'Local Supplier',
         summary: 'Ready.',
         progress: 1,
         ready: true,
@@ -166,6 +282,14 @@ describe('progression management panels', () => {
       ],
       workers: [
         {
+          id: 'employed-worker-1',
+          workerId: 'worker-1',
+          title: 'Mara',
+          meta: 'Field hand; priorities tending → harvesting',
+          action: 'Prioritize harvesting',
+          enabled: true,
+        },
+        {
           id: 'hauler',
           title: 'Hire hauler',
           meta: 'A free hut is ready.',
@@ -184,9 +308,18 @@ describe('progression management panels', () => {
       .querySelector<HTMLButtonElement>('[data-testid="career-action-processor-row"]')!
       .click();
     career.root.querySelector<HTMLButtonElement>('[data-testid="career-action-hauler"]')!.click();
+    career.root
+      .querySelector<HTMLButtonElement>('[data-testid="career-action-employed-worker-1"]')!
+      .click();
     expect(claim).toHaveBeenCalledWith('milestone-test');
     expect(queue).toHaveBeenCalledWith('building-mill', 'recipe-flour');
     expect(employ).toHaveBeenCalledWith('hauler');
+    expect(prioritize).toHaveBeenCalledWith('worker-1');
+    expect(career.root.textContent).toContain('Next stage: Local Supplier');
+    expect(career.root.textContent).toContain(
+      'Complete every requirement to advance to Local Supplier:',
+    );
+    expect(career.root.textContent).toContain('Advance to Local Supplier');
 
     const fund = vi.fn();
     const town = new TownPanel({ onStartProject: fund, onClose: vi.fn() });
@@ -263,7 +396,7 @@ describe('progression management panels', () => {
 
   it('distinguishes accepting an offer from delivering an accepted contract', () => {
     const act = vi.fn();
-    const market = new MarketPanel({ onSellSpot: vi.fn(), onFulfil: act, onClose: vi.fn() });
+    const market = new MarketPanel({ onSellSpot: vi.fn(), onContract: act, onClose: vi.fn() });
     market.update({
       balance: cents(10_000),
       rows: [],
@@ -283,6 +416,10 @@ describe('progression management panels', () => {
           ticksRemaining: 600,
           held: 0,
           canFulfil: true,
+          minimumQuality: 0.7,
+          recurringEveryTicks: 0,
+          ticksUntilWindow: 0,
+          canSchedule: true,
         },
         {
           action: 'deliver',
@@ -296,22 +433,36 @@ describe('progression management panels', () => {
           ticksRemaining: 600,
           held: 3,
           canFulfil: true,
+          minimumQuality: 0,
+          recurringEveryTicks: 14_400,
+          ticksUntilWindow: 0,
+          canSchedule: false,
         },
       ],
     });
 
     expect(market.root.textContent).toContain('Accept contract');
+    expect(market.root.textContent).toContain('Quality 70%+');
+    expect(market.root.textContent).toContain('Repeats every 4m');
     expect(market.root.textContent).toContain('Deliver 3');
     market.root.querySelector<HTMLButtonElement>('[data-testid="market-fulfil-wheat"]')!.click();
     market.root.querySelector<HTMLButtonElement>('[data-testid="market-fulfil-corn"]')!.click();
+    market.root
+      .querySelector<HTMLButtonElement>('[data-testid="market-schedule-offer-1"]')!
+      .click();
+    market.root
+      .querySelector<HTMLButtonElement>('[data-testid="market-cancel-contract-1"]')!
+      .click();
     expect(act).toHaveBeenNthCalledWith(1, 'offer-1', 'accept');
     expect(act).toHaveBeenNthCalledWith(2, 'contract-1', 'deliver');
+    expect(act).toHaveBeenNthCalledWith(3, 'offer-1', 'schedule');
+    expect(act).toHaveBeenNthCalledWith(4, 'contract-1', 'cancel');
   });
 
   it('hides the contract surface before the progression unlock', () => {
     const market = new MarketPanel({
       onSellSpot: vi.fn(),
-      onFulfil: vi.fn(),
+      onContract: vi.fn(),
       onClose: vi.fn(),
     });
     market.update({

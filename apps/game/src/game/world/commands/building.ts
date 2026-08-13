@@ -7,9 +7,11 @@
 import {
   ANIMALS,
   BUILDINGS,
+  animalShelterProductDropTile,
   buildingFootprint,
   cents,
   getAnimal,
+  hasBuildingAccess,
   isAnimalSpecies,
   normalizeBuildingRotation,
   ok,
@@ -42,7 +44,7 @@ export function build(
   const world = career.world;
   const definition = BUILDINGS[kind];
   if (!definition) return ruleViolation(`Unknown building "${kind}".`);
-  if (definition.requiresUnlock && !career.unlocks.includes(definition.requiresUnlock)) {
+  if (!hasBuildingAccess(kind, career.unlocks, career.contracts)) {
     return ruleViolation('You do not know how to build that yet.');
   }
 
@@ -99,10 +101,34 @@ export function buildingSiteProblem(
       if (world.grid.hasFlag(x, z, TileFlag.Soil)) return 'You cannot build on a crop bed.';
     }
   }
+  if (kind === 'animal_shelter') {
+    const drop = animalShelterProductDropTile(tileX, tileZ, rotation);
+    if (!world.grid.inBounds(drop.tileX, drop.tileZ)) {
+      return 'The shelter needs a collection space inside the farm boundary.';
+    }
+    if (!world.parcels.ownsTile(drop.tileX, drop.tileZ)) {
+      return 'The shelter door must open onto land you own.';
+    }
+    if (
+      world.grid.hasFlag(drop.tileX, drop.tileZ, TileFlag.Soil) ||
+      !world.grid.canPlace(drop.tileX, drop.tileZ, 1, 1)
+    ) {
+      return 'The shelter needs a clear collection space outside its door.';
+    }
+  }
   return null;
 }
 
-export function buyAnimal(career: Career, species: string, count = 1): Result<void> {
+export function buyAnimal(
+  career: Career,
+  species: string,
+  count = 1,
+  nearTile?: {
+    readonly tileX: number;
+    readonly tileZ: number;
+    readonly shelterId?: string;
+  },
+): Result<void> {
   if (!isAnimalSpecies(species)) return ruleViolation(`Unknown animal "${species}".`);
   const definition = getAnimal(species);
   if (!definition) return ruleViolation(`Unknown animal "${species}".`);
@@ -119,13 +145,35 @@ export function buyAnimal(career: Career, species: string, count = 1): Result<vo
   if (career.balance < total) return ruleViolation('Not enough money.');
 
   const world = career.world;
-  const used = world.animalSlotsUsed();
-  if (used + count * definition.shelterSlots > world.shelterCapacity()) {
-    return ruleViolation('Not enough shelter space. Build more fencing first.');
+  const requiredSlots = count * definition.shelterSlots;
+  const selectedShelter = nearTile?.shelterId ? world.shelters.get(nearTile.shelterId) : undefined;
+  if (nearTile?.shelterId && !selectedShelter) {
+    return ruleViolation('That animal shelter is not completed.');
+  }
+  if (
+    selectedShelter &&
+    world.shelters.capacityFor(selectedShelter.id) - world.shelterSlotsUsedAt(selectedShelter.id) <
+      requiredSlots
+  ) {
+    return ruleViolation('That shelter does not have enough room.');
+  }
+
+  const shelter =
+    selectedShelter ??
+    world.shelters.nearestWithSpace(
+      nearTile?.tileX ?? world.level.shelter.tileX,
+      nearTile?.tileZ ?? world.level.shelter.tileZ,
+      requiredSlots,
+      (shelterId) => world.shelterSlotsUsedAt(shelterId),
+    );
+  if (!shelter) {
+    return ruleViolation(
+      'No single shelter has enough room. Build another shelter or add nearby fencing first.',
+    );
   }
 
   career.adjustBalance(cents(-total), 'livestock');
-  world.livestock.add(definition.id, count, world.level.shelter.tileX, world.level.shelter.tileZ);
+  world.livestock.add(definition.id, count, shelter);
   return ok(undefined);
 }
 

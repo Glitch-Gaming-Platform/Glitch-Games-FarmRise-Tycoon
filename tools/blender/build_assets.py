@@ -60,6 +60,13 @@ FAMILIES = {
     "props": "PROPS",
 }
 
+# Additive packs for quality tiers whose legacy geometry is intentionally
+# immutable. These are measured separately so they do not inflate the Ultra
+# catalog totals or compression comparison with duplicate geometry.
+LOW_SUPPLEMENTS = {
+    "animals-sheep": "ANIMALS_SHEEP",
+}
+
 
 def wipe_scene() -> None:
     """
@@ -276,6 +283,12 @@ def main() -> dict:
         if sizes:
             family_sizes[family] = sizes
 
+    low_supplement_sizes = {}
+    for family, collection_name in LOW_SUPPLEMENTS.items():
+        sizes = export_family(family, collection_name, {"raw": {}})
+        if sizes:
+            low_supplement_sizes[family] = sizes
+
     bpy.ops.wm.save_as_mainfile(filepath=BLEND_OUT)
 
     report = {
@@ -288,6 +301,7 @@ def main() -> dict:
         "assets": built,
         "total_triangles": sum(a["triangles"] for a in built),
         "family_bytes": family_sizes,
+        "low_supplement_bytes": low_supplement_sizes,
         "blend": os.path.relpath(BLEND_OUT, ROOT),
     }
     with open(REPORT, "w") as handle:

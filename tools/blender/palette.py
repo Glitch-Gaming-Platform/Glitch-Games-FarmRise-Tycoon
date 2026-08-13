@@ -131,6 +131,11 @@ PALETTE: dict[str, str] = {
     "cow_udder": "#E7AAA5",
     "cow_hoof": "#44372F",
     "cow_horn": "#D8C7A2",
+    "sheep_wool": "#F1E8D6",
+    "sheep_wool_shadow": "#D2C5AE",
+    "sheep_face": "#5B5149",
+    "sheep_inner_ear": "#C78F88",
+    "sheep_hoof": "#3D342F",
 
     # --- Environment dressing --------------------------------------------
     # Trees and flowers are still built from broad colour masses rather than
@@ -209,7 +214,12 @@ TRI_BUDGET = {
     # 6-24 separate plant draws, so this is cheaper overall, not costlier.
     "crop": 900,
     "building": 900,
-    "character": 2600,
+    # The ULTRA player is the only always-visible hero mesh. The final
+    # 3,500-triangle ceiling funds dialogue-grade face, hand, boot and joint
+    # ceiling funds readable face, hand and boot construction at the shipping
+    # camera while remaining one skinned draw call. Low quality continues to
+    # use the immutable legacy character pack.
+    "character": 3500,
     "animal": 700,
     "prop": 300,
 }

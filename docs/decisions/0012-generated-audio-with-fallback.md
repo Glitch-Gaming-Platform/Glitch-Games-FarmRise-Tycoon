@@ -29,7 +29,7 @@ several farm music loops without making audio availability a loading-screen fail
 
 - Soil, water, animals and acoustic instruments now have real texture while the game still works
   offline or with missing files.
-- The default audio preload is 4,184,601 encoded bytes. Loading all music choices at boot would add
+- The current default audio preload is 4,770,199 encoded bytes. Loading all music choices at boot would add
   another 15,615,156 bytes and about 374.7 MB of decoded PCM, so a future selector must load and
   release tracks deliberately.
 - MP3 has broader browser support than a smaller Opus-only delivery, at the cost of larger music

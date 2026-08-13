@@ -6,13 +6,15 @@ This document defines the intended full-game progression beyond the first playab
 not replace the approved mechanics and core-loop blueprint. The current first playable becomes the
 opening stage of this progression.
 
-Implementation snapshot (August 10, 2026): the persistent career, save-v1 migration, four-parcel
-estate, hauling, buyer relationships/contracts, specialization, soil/quality, processors, workers,
-finance, incidents, seasons, town projects, progression UI, transition validation, procedural and
-authored presentation, and timed autosave are implemented. The current shipped vertical scope ends
-with the complete Millbrook estate. Multi-site travel/coarse simulation, machinery and stage-driven
-lazy world-asset packs remain later slices and are intentionally not granted by current milestones;
-see ADR 0020.
+Implementation snapshot (August 13, 2026): the persistent career, explicit save-v1/v2 migration to
+save v3, the complete five-parcel Millbrook estate, hauling, buyer relationships/contracts,
+specialization, soil/quality, processors, workers, finance, incidents, seasons, town projects,
+multi-shelter livestock assignment with visible per-shelter capacity including Stage-1 sheep/wool production, progression UI,
+transition validation, procedural and authored
+presentation, and timed autosave are implemented. The current shipped vertical scope ends with the
+complete Millbrook estate. Multi-site travel/coarse simulation, machinery and stage-driven lazy
+world-asset packs remain later slices and are intentionally not granted by current milestones; see
+ADR 0020 and ADR 0026.
 
 Numbers in this document are balance targets for prototyping, not final tuning. Progression should
 be validated through playtests before later stages are implemented.
@@ -542,14 +544,15 @@ Pressures:
 - disease and fencing risk;
 - daily labor and welfare obligations.
 
-Candidate animals:
+Implemented and candidate animals:
 
 - Goats: moderate feed and water, milk production, strong fencing need.
-- Cows: high feed, water and space, large steady output.
-- Sheep: pasture-based output with seasonal wool cycles.
+- Cows: implemented with high feed, water and space, plus large steady milk output.
+- Sheep: implemented after Stage 1 with a long corn-fed wool cycle and nearest-shelter assignment.
 - Bees: honey plus crop pollination, with weather sensitivity.
 
-The first added animal should be the one that produces the clearest new resource tradeoff.
+Any further animal should produce a resource tradeoff that is distinct from the existing chicken,
+sheep and dairy-cow loops.
 
 ### Processing
 
@@ -676,7 +679,12 @@ Automation should move the player upward in responsibility, not remove meaningfu
 
 Standing contracts introduce recurring commitments.
 
-The player chooses:
+In the shipped estate, an unlocked supplier may take an ordinary one-off offer or schedule the same
+quantity, quality bar and buyer window as a standing delivery. A completed occurrence re-arms for
+the next window; a missed occurrence applies the normal trust and money penalty and then re-arms.
+The player may end the schedule from the Market panel.
+
+The longer-term design may widen this into player-selected:
 
 - quantity;
 - frequency;
@@ -3086,10 +3094,12 @@ with remaining time over every in-progress building.
 
 ### 42.3 Animal rendering
 
-The current simulation stores animal groups and the view renders up to 64 chickens around one
-shelter. It sums all animal counts as if they were chickens.
+The current simulation stores species-specific animal groups with stable shelter assignment. The
+view renders representative subsets of up to 64 chickens, 24 sheep and 16 cows, distributed around
+their nearest completed shelters. Rendering and collision use the same deterministic per-species
+pose path, and large groups are proportionally capped rather than reinterpreted as chickens.
 
-New species require:
+Further species still require:
 
 - per-species visual groups;
 - per-shelter or pasture location;
@@ -3185,7 +3195,7 @@ changes it. Geometry, vertex tint, particles and water layers should be attempte
 
 Yes.
 
-The current 102 world assets cover Millbrook progression plus sixteen complete crop species and only
+The current 103 world assets cover Millbrook progression plus sixteen complete crop species and only
 fragments of the later regional/machinery stages.
 The progression plan requires additional assets whenever the player gains a visible capability.
 
@@ -3351,8 +3361,8 @@ These are production-planning ranges, not mandatory counts.
 
 ### 43.4 UI-art budget
 
-The current transparent interface-art set is 166,366 bytes under the 175 KB total budget recorded
-in ADR 0024. Every crop has a distinct lazy inventory/market icon.
+The current 48-icon transparent interface-art set is 165,104 bytes under the 175 KB total budget
+recorded in ADR 0024. Every crop has a distinct lazy inventory/market icon, as do sheep and wool.
 
 The full progression cannot keep every crop, worker, building, machine, buyer and project inside
 that original whole-game limit.
@@ -3370,10 +3380,11 @@ Do not silently raise the budget.
 
 ### 43.5 Model payload and compression
 
-The current complete model catalog is about 979 KB gzip. Crop packs are now split into common,
-spring, summer, autumn and winter GLBs; the initial spring path is about 626 KB gzip because common
-world families and the active crop pack are both loaded. ADR 0024 records the split and the need for
-loaded-season device profiling before compression changes.
+The current complete model catalog is about 966 KB gzip. Crop packs are now split into common,
+spring, summer, autumn and winter GLBs; the critical Spring model path is about 581 KB gzip because
+common world families and the active crop pack are both loaded, with the 86 KB props pack preloaded
+separately. ADR 0024 records the split and the need for loaded-season device profiling before
+compression changes.
 
 More content requires:
 

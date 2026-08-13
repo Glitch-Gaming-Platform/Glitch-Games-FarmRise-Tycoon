@@ -13,11 +13,12 @@
  */
 import { z } from 'zod';
 import { centsSchema, idStringSchema, tickSchema } from './common.js';
-import { farmSiteSchema } from './site.js';
+import { farmSiteSchema, farmSiteSchemaV2 } from './site.js';
 import { BUYER_IDS } from '../domain/buyers.js';
 import { SPECIALIZATION_IDS } from '../domain/specializations.js';
 
-export const CAREER_SCHEMA_VERSION = 2;
+export const CAREER_SCHEMA_VERSION = 3;
+export const CAREER_SCHEMA_VERSION_V2 = 2;
 
 const buyerIdSchema = z.enum(BUYER_IDS as [string, ...string[]]);
 
@@ -42,7 +43,7 @@ export const acceptedContractSchema = z.object({
   deadlineTick: tickSchema,
   /** A standing contract re-arms on its cadence instead of closing. */
   recurringEveryTicks: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
-  status: z.enum(['open', 'fulfilled', 'failed']),
+  status: z.enum(['open', 'fulfilled', 'failed', 'cancelled']),
 });
 export type AcceptedContract = z.infer<typeof acceptedContractSchema>;
 
@@ -184,6 +185,13 @@ export const careerSaveStateSchema = z.object({
   rng: rngStreamsSchema,
 });
 export type CareerSaveState = z.infer<typeof careerSaveStateSchema>;
+
+/** Frozen version-2 career shape, retained only for deterministic migration. */
+export const careerSaveStateSchemaV2 = careerSaveStateSchema.extend({
+  schemaVersion: z.literal(CAREER_SCHEMA_VERSION_V2),
+  sites: z.array(farmSiteSchemaV2).min(1).max(4),
+});
+export type CareerSaveStateV2 = z.infer<typeof careerSaveStateSchemaV2>;
 
 export const careerEnvelopeSchema = z.object({
   saveId: z.string(),

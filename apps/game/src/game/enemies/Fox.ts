@@ -23,6 +23,7 @@ export class Fox {
     private readonly speed = 1.3,
     readonly raidTicks = 180,
     readonly collisionId = 'fox',
+    readonly targetGroupId: string | null = null,
   ) {
     this.position = { x: startX, z: startZ };
   }

@@ -57,27 +57,39 @@ changes stay quiet.
 | Plant | `farm.plant` | Wired to successful interaction only. Soil press and granular crunch. |
 | Tend | `farm.tend` | Wired to successful interaction only. Short watering-can pour. |
 | Harvest | `farm.harvest` | Wired. Snap, leaf rustle and basket knock communicate completion. |
+| Pick up field or processor goods | `farm.pickup` | Wired for both context Work and the haul shortcut. Crate lift and canvas grip replace the old harvest sound. |
+| Put carried goods into storage | `farm.deposit` | Wired for both context Work and the haul shortcut. A settled crate thump replaces the old building-placement cue. |
 | Walk / sprint | `farm.footstep` | Wired by distance travelled, not frame count. Sprinting is louder; pitch jitter prevents fatigue. |
+| Move with a handcart or larger carrier | `farm.cart_roll` | Wired from the same distance cadence as footsteps, but swaps to a short wheel-and-axle movement beat while a carrier is selected. |
+| Repair a structure, route or processor | `farm.repair` | Wired to both direct repair and incident repair work. Ratchet, knock and latch are distinct from construction. |
+| Drive animals into shelter | `farm.shoo_animals` | Wired only to the `move_animals` response. Two hand claps and a boot scuff replace the unrelated watering sound. |
 | Crop growth tick / crop becomes ready | None | Intentionally silent. Several plots can update together and would create notification spam. |
 | Place a building | `farm.build_place` | Wired end to end. The reinvest panel selects, the pointer positions, and a click or touch tap commits. |
 | Open build menu (`B`) | `ui.open` / `ui.click` | Wired. The reinvest panel opens on `B` and closes on `B`, `Esc` or its own button. |
 | Construction completes | `farm.build_complete` | Wired. Three hammer strikes plus a modest achievement chime. |
-| Buy an animal | `animal.chicken` | Wired end to end via the reinvest panel. |
-| Animal produces goods | `animal.chicken` | Wired at low volume. One cluck, never a flock loop. |
+| Buy an animal | `animal.chicken` / `animal.sheep` / `animal.cow` | Wired by species end to end via the reinvest panel. Each implemented livestock species has one restrained natural call. |
+| Animal produces goods | Species call | Eggs, wool and milk trigger the matching animal at low volume. Processor output does not masquerade as an animal. |
+| Animal misses a feed cycle | Species call | Wired quietly because the player must notice the stalled production, but it fires only at the missed cycle rather than looping. |
+| Animal loss | `animal.raid_loss` | Wired at the authoritative loss event, so direct incident loss and a successful fox attack share one cue without double-playing. |
 | Storage overflows | `ui.deny` | Wired quietly; the HUD toast explains what was lost. |
 | Open / close market panel | `ui.open` / `ui.click` | Wired. The panel is mounted and opens on `M`. |
 | Spot sale | `market.sell` | Wired end to end. |
 | Contract fulfilment | `market.contract` | Wired end to end; heavier than a spot sale. Contracts are generated locally when offline. |
 | Payout at least 8,000 cents | `market.big_payout` | Wired as a reusable payout tier. |
 | Generic balance or upkeep change | None | Intentionally silent. Upkeep can change money frequently and is not a discrete player action. |
-| Event warning | `event.warning` | Wired on the `ui` bus at full volume. This is the most important informational cue. |
-| Unmitigated event impact | `event.impact` | Wired. Restrained wind and low rumble, not a cinematic explosion. |
+| Event warning | Incident-specific warning | Wired on the `ui` bus at full volume. Every implemented incident is identifiable before impact; `event.warning` remains only as a future-content fallback. |
+| Unmitigated event impact | Incident-specific impact | Drought, axle failure, road washout, blight, processor seizure and cold snap have distinct physical consequences. Fox arrival uses `animal.fox_alert`; `event.impact` remains the fallback. |
 | Prevention succeeds | `event.prevented` | Wired. Gate latch plus reassuring low chime. |
 | Prevention is refused | `ui.deny` | Wired. `F` outside a warning window explains itself in a toast. |
 | Foxes spawn | `animal.fox_alert` | Wired on the `ui` bus because it opens an active response window. |
 | Fox scared away | `animal.fox_flee` | Wired. A receding yelp and scrub rustle, distinct from the alert. |
 | Fox raid takes an animal | `animal.raid_loss` | Wired. Wing flutter and distressed clucks without injury audio. |
+| Queue a processor batch | `processing.start` | Wired from the processor model. Belt catch and wooden gears confirm that stored inputs became active work. |
+| Processor completes goods | `processing.complete` | Wired from the processor model before the output stack refresh. Machine wind-down and tray drop identify finished production. |
 | Buy neighbouring land | `goal.land_purchased` | Wired end to end. This is the slice's success condition. |
+| Claim a milestone / finish a town project | `goal.land_purchased` / `farm.build_complete` | Wired to the long-horizon director events. Existing accomplishment language is reused because the meaning is recognition or completed labour. |
+| Season changes | `season.transition` | Wired once at the calendar boundary. Breeze, leaves and a short wooden phrase replace the generic run-success sting. |
+| Contract failure / financial warning / restructuring | `ui.deny` / `run.fail` | Wired on the `ui` bus. Routine warnings stay compact; restructuring receives the sympathetic setback phrase. |
 | Run succeeds / fails | `run.success` / `run.fail` | Wired to the outcome screen on the `ui` bus. |
 | Onboarding beat shown | `ui.open` (quiet) | Wired. Low volume so a prompt never competes with the action it is describing. |
 | Onboarding beat completed | `ui.confirm` (quiet) | Wired. A small confirmation that the player did the thing. |
@@ -87,7 +99,7 @@ changes stay quiet.
 
 ## Sound-effect catalog
 
-All effects are mono MP3 at 44.1 kHz and 96 kbps. The whole delivered effect set is **343,020
+All effects are mono MP3 at 44.1 kHz and 96 kbps. The whole delivered effect set is **1,930,539
 bytes**. Repeated effects use runtime detune rather than storing multiple near-identical files.
 
 | Group | Files | Design role |
@@ -97,12 +109,50 @@ bytes**. Repeated effects use runtime detune rather than storing multiple near-i
 | Building | `farm_build_place`, `farm_build_complete` | Placement is weight; completion is labour plus restrained reward. |
 | Market | `market_sell`, `market_contract`, `market_big_payout` | Three economic tiers without electronic cash-register language. |
 | Events | `event_warning`, `event_impact`, `event_prevented` | Warning, consequence and safety are unmistakably different. |
-| Animals | `animal_fox_alert`, `animal_fox_flee`, `animal_chicken`, `animal_raid_loss` | Informational calls, never continuous ambient loops. |
+| Direct handling | `farm_pickup`, `farm_deposit`, `farm_shoo_animals`, `farm_repair`, `farm_cart_roll` | Semantic action feedback that no longer borrows harvest, watering or building sounds. |
+| Processing | `processing_start`, `processing_complete` | One-shots at queue and completion; no unmanaged machinery loops. |
+| Incident identities | 13 `incident_*` files | Seven unique warnings and six physical impacts. Fox impact reuses its dedicated attack bark. |
+| Animals | Fox cues plus 60 farm-animal variants | The 20-animal reference library has three distinct one-shots per animal. Hen, sheep and cow variants rotate in current gameplay; the other 51 clips remain lazy until those animals exist. |
+| Seasons | `season_transition` | Reserved for the calendar boundary. |
 | Outcomes | `goal_land_purchased`, `run_success`, `run_fail` | Short acoustic stings reserved for major progression. |
 
 The exact prompts, requested durations and prompt-influence settings are in
 `tools/audio/audioBriefs.mjs`. The generated request metadata, delivered duration, byte count and
 music seam measurement are in `art/audio/generation_report.json`.
+
+### Farm-animal reference library
+
+The supplied reference sheet is represented by 20 named animals and exactly three distinct
+one-shots per animal. Stable ids live in `assets/audio/animalSoundVariants.ts`; generated files and
+measured lazy/preload policy live in `assets/manifests/animalAudio.manifest.ts`.
+
+| Animal | Three authored meanings |
+| --- | --- |
+| Cow | Long low, short contact moo, contented nasal low/breath |
+| Pig | Oink, relaxed grunts, brief excited squeal |
+| Horse | Neigh, friendly whinny, relaxed snort |
+| Goat | Full bleat, short questioning maa, contented grunts |
+| Pigeon | Rounded coo, brighter coo, takeoff flutter and faint coo |
+| Rabbit | Sniff/tooth-purr, hind-foot thump, quiet squeak |
+| Sheep | Calm bleat, short questioning baa, low contented bleat |
+| Deer | Doe contact bleat, alarm snort, low contact grunt |
+| Hen | Contented cluck, egg-laying cackle, soft bok-bok pair |
+| Rooster | Full crow, short crow, warning cluck and wing rustle |
+| Turkey | Gobble, quiet clucks, soft purr/trill |
+| Dove | Soft coo, longer coo, landing flutter and faint coo |
+| Bee | Hover buzz, fly-by buzz, flower-landing buzz pulses |
+| Duck | Clear quack, two conversational quacks, soft raspy quack |
+| Duckling | Three peeps, questioning peep, excited peeps and tiny step |
+| Dog | Friendly bark, two soft woofs, gentle whine and breath |
+| Cat | Meow, chirp-trill, contented purr pulse |
+| Donkey | Full bray, short bray, nasal snort/grumble |
+| Parrot | Squawk, nonverbal chatter, friendly chirps and wing rustle |
+| Chick | Three peeps, questioning peep, excited peeps and straw step |
+
+Hen, sheep and cow use round-robin playback so repeated purchases, production cycles and missed feed
+cycles do not replay one identical call. Future-only animals remain encoded but lazy: adding a pig
+definition later does not require regenerating audio, while today's browser does not fetch or decode
+pig clips.
 
 ## Background music
 
@@ -134,9 +184,12 @@ untouched pair of adjacent source samples: playback continues across the repeat 
 inside the original composition. The generated end-to-start blend sits inside the file, away from
 the runtime repeat boundary.
 
-`npm run audio:verify` decodes the shipped MP3 files, rejects anything shorter than four minutes,
-and tests the actual repeated boundary. All five currently have **0.000 ms of near-silence at the
-boundary**, no ending fade, and a maximum sample jump of **0.0213 full-scale**. Results are written to
+`npm run audio:verify` decodes every shipped MP3. For effects it rejects clips with no clearly
+audible 10 ms window or with an energetic final 75 ms that indicates a hard-truncated generation.
+For music it rejects anything shorter than four minutes and tests the actual repeated boundary. All
+five loops currently have **0.000 ms of near-silence at the boundary**, no ending fade, and a maximum
+sample jump of **0.0213 full-scale**. The 103 effects have a minimum peak activity of **-19.5 dB** and
+a maximum final-tail level of **-28.3 dB**. Results are written to
 `art/audio/verification_report.json`.
 
 Music is mixed to approximately -18 LUFS with a -1.5 dB true-peak ceiling. The runtime music bus is
@@ -187,18 +240,19 @@ After regeneration:
 2. Run `npm run audio:verify`, then audition every music boundary for at least five consecutive
    loops.
 3. Copy measured byte counts from `art/audio/generation_report.json` into
-   `assets/manifests/audio.manifest.ts`.
+   `assets/manifests/audio.manifest.ts` and `animalAudio.manifest.ts`.
 4. Run `npx vitest run --project game` and `npm run verify`.
 
 ## Budgets and measured inventory
 
 | Metric | Delivered | Runtime policy |
 | --- | ---: | --- |
-| 23 sound effects | 343,020 bytes encoded | Prefetched; decoded after gesture; procedural fallback available. |
+| 52 active sound effects | 928,618 bytes encoded | Prefetched; decoded after gesture; procedural fallback available. Includes all three hen, sheep and cow variants. |
+| 51 future animal effects | 1,001,921 bytes encoded | Shipped lazy and not fetched or decoded until a future animal implementation requests them. |
 | Default music loop | 3,841,581 bytes encoded | Prefetched and decoded once; about 92.2 MB decoded PCM. |
 | Mobile default music | 0 encoded bytes fetched | Procedural mono loop, at most 22,050 Hz; roughly 2.35 MB decoded PCM. |
 | Four alternate loops | 15,615,156 bytes encoded | Lazy; load one at a time and release the previous decoded buffer. |
-| All delivered audio | 19,799,757 bytes encoded | Only 4,184,601 bytes are on the default audio preload path. |
+| All delivered audio | 21,387,276 bytes encoded | Only 4,770,199 bytes are on the default audio preload path. |
 
 Do not solve variety by adding files automatically. First prefer detune, volume variation and
 contextual reuse. Add a new clip only when the player must distinguish a meaning the existing

@@ -179,3 +179,64 @@ test('a nearby barn status card renders without browser errors at the normal cam
   await page.waitForTimeout(500);
   await expect(page.getByTestId('menu-shortcuts')).toBeVisible();
 });
+
+test('an accepted preserves contract reveals its kitchen, produces jars, and can be fulfilled', async ({
+  page,
+}) => {
+  const state = preparedCareer((site, career) => {
+    career.stage = 1;
+    career.balance = 10_000;
+    career.unlocks = ['contracts', 'buyer_co_op'];
+    career.contracts = [
+      {
+        id: 'offer-preserves-e2e',
+        buyerId: 'growers_co_op',
+        itemId: 'preserves',
+        quantity: 3,
+        delivered: 0,
+        unitPrice: 342,
+        minimumQuality: 0,
+        acceptedTick: career.tick,
+        deadlineTick: career.tick + 1,
+        recurringEveryTicks: 0,
+        status: 'open',
+      },
+    ];
+    site.buildings.push({
+      id: 'building-preserve-contract',
+      kind: 'preserve_kitchen',
+      tileX: 16,
+      tileZ: 17,
+      rotation: 0,
+      remainingBuildTicks: 0,
+      broken: false,
+    });
+    site.processors.push({
+      id: 'processor-building-preserve-contract',
+      buildingId: 'building-preserve-contract',
+      queue: [{ recipeId: 'recipe-preserves', batches: 1, remainingTicks: 1 }],
+      held: {},
+    });
+  });
+
+  await enterSavedFarm(page, state);
+  await page.getByRole('button', { name: 'Open build' }).click();
+
+  await expect(page.getByTestId('build-preserve_kitchen')).toBeVisible();
+  await expect(page.getByTestId('build-preserve_kitchen')).toBeEnabled();
+  await expect(page.getByTestId('build-mill')).toHaveCount(0);
+  await expect(page.getByTestId('build-creamery')).toHaveCount(0);
+  await page.getByTestId('build-close').click();
+
+  await expect(page.getByTestId('hud-prompt')).toContainText('Pick up 3 Preserves');
+  await page.keyboard.press('e');
+  await page.keyboard.press('m');
+
+  const delivery = page.getByTestId('market-fulfil-preserves');
+  await expect(delivery).toBeEnabled();
+  await expect(delivery).toContainText('Deliver 3');
+  await delivery.click();
+
+  await expect(page.getByRole('log')).toContainText(/Paid .* for 3 Preserves/i);
+  await expect(page.getByTestId('market-fulfil-preserves')).toHaveCount(0);
+});

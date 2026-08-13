@@ -21,7 +21,7 @@ import {
   createRng,
   decayProsperity,
   interestForTicks,
-  normalizeEstateLayout,
+  normalizeCareerCompatibility,
   premiumForTicks,
   seasonAt,
   seasonsBetween,
@@ -89,7 +89,7 @@ export class Career {
 
   /** Builds a career and its active site from a validated save document. */
   static fromSaveState(state: CareerSaveState): Career {
-    const normalized = normalizeEstateLayout(state).state;
+    const normalized = normalizeCareerCompatibility(state).state;
     const site =
       normalized.sites.find((entry) => entry.id === normalized.activeSiteId) ?? normalized.sites[0];
     if (!site) throw new Error('A career save must contain at least one site.');

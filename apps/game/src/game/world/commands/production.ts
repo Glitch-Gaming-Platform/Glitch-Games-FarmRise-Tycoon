@@ -8,6 +8,7 @@
  */
 import {
   SPECIALIZATIONS,
+  WORKER_ROLES,
   cents,
   getRecipe,
   isSpecializationId,
@@ -19,8 +20,18 @@ import {
   type Result,
   type SpecializationId,
   type WorkerRole,
+  type Inventory,
 } from '@farmrise/shared';
 import type { Career } from '../../career/Career.js';
+
+/** Inputs the player can deliberately load: collected storage plus their current load. */
+export function processableInventory(career: Career): Inventory {
+  const available = { ...career.world.stores.storedCombined() };
+  for (const [itemId, quantity] of Object.entries(career.world.carry.items)) {
+    available[itemId] = (available[itemId] ?? 0) + quantity;
+  }
+  return available;
+}
 
 /** Queues batches at a processor the player is standing at. */
 export function queueProcessing(
@@ -44,7 +55,7 @@ export function queueProcessing(
     recipeId,
     batches,
     queue: processor.queue,
-    available: world.stores.combined(),
+    available: processableInventory(career),
     balance: career.balance,
     processorKind: building.kind as never,
     specialization: career.specialization,
@@ -52,8 +63,17 @@ export function queueProcessing(
   });
   if (!result.ok) return result;
 
-  const taken = world.stores.withdrawAnywhere(recipe.inputItemId, recipe.inputQuantity * batches);
-  if (!taken.ok) return taken;
+  const required = recipe.inputQuantity * batches;
+  const carried = Math.min(world.carry.items[recipe.inputItemId] ?? 0, required);
+  if (carried > 0) {
+    const taken = world.carry.put(recipe.inputItemId, carried);
+    if (!taken.ok) return taken;
+  }
+  const stored = required - carried;
+  if (stored > 0) {
+    const taken = world.stores.withdrawStoredAnywhere(recipe.inputItemId, stored);
+    if (!taken.ok) return taken;
+  }
 
   career.adjustBalance(cents(-result.value.cost), 'processing');
   world.processing.enqueue(processor.id, result.value.queue, recipeId, batches);
@@ -78,12 +98,22 @@ export function unloadProcessor(career: Career, buildingId: string): Result<{ re
   return ok({ recovered: total });
 }
 
-export function hireWorker(career: Career, role: string): Result<{ id: string }> {
+export function hireWorker(
+  career: Career,
+  role: string,
+  preferredHutId?: string,
+): Result<{ id: string }> {
   const world = career.world;
   const occupied = new Set(
     world.workforce.workers.map((worker) => worker.hutBuildingId).filter(Boolean),
   );
   const freeHuts = world.structures.completed('worker_hut').filter((hut) => !occupied.has(hut.id));
+  const preferredHut = preferredHutId
+    ? freeHuts.find((hut) => hut.id === preferredHutId)
+    : undefined;
+  if (preferredHutId && !preferredHut) {
+    return ruleViolation('That worker hut is not completed or is already occupied.');
+  }
 
   const check = validateHire(role, {
     workers: world.workforce.workers,
@@ -93,7 +123,7 @@ export function hireWorker(career: Career, role: string): Result<{ id: string }>
   });
   if (!check.ok) return check;
 
-  const hut = freeHuts[0];
+  const hut = preferredHut ?? freeHuts[0];
   career.adjustBalance(cents(-check.value.cost), 'hiring');
   const worker = world.workforce.hire(
     role as WorkerRole,
@@ -110,8 +140,16 @@ export function setWorkerPriorities(
   workerId: string,
   priorities: readonly string[],
 ): Result<void> {
-  if (!career.world.workforce.get(workerId))
-    return ruleViolation('Nobody by that name works here.');
+  const worker = career.world.workforce.get(workerId);
+  if (!worker) return ruleViolation('Nobody by that name works here.');
+  const allowed = WORKER_ROLES[worker.role].tasks;
+  if (
+    priorities.length !== allowed.length ||
+    new Set(priorities).size !== priorities.length ||
+    priorities.some((priority) => !allowed.includes(priority as (typeof allowed)[number]))
+  ) {
+    return ruleViolation('Choose each of that worker’s jobs exactly once.');
+  }
   career.world.workforce.setPriorities(workerId, priorities);
   return ok(undefined);
 }

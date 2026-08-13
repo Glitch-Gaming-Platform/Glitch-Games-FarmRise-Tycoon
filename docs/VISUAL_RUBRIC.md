@@ -206,9 +206,9 @@ the real camera, not merely that a feature exists.
 | # | Category | W | Before | Current | Evidence |
 | --- | --- | ---: | ---: | ---: | --- |
 | 1 | Growth-stage legibility | 14 | **2** | **10** | Sixty-four distinct crop meshes across sixteen species. Every crop has four silhouette-authored stages and a stage-4 readiness jump, reviewed in the common and four seasonal crop sheets. |
-| 2 | Silhouette | 12 | **2** | **9** | Crops, buildings, enlarged animals and three tree architectures read in `silhouette.png`; the 13.25 m camera gives the farmer, tools and chickens enough screen area for normal overlaps. |
+| 2 | Silhouette | 12 | **2** | **9** | Crops, buildings, enlarged animals and three tree architectures read in `silhouette.png`; the 13.25 m camera gives the farmer, tools and livestock enough screen area for normal overlaps. |
 | 3 | Colour & value separation | 12 | **4** | **10** | Named warm/cool palette, automated contrast audit, correct sRGB→linear conversion and generated protanopia, deuteranopia, tritanopia and bright-sun passes. |
-| 4 | Form language consistency | 10 | **3** | **9** | One bevel/smoothing system, one authored material, convex low-poly language and enforced budgets across all 102 assets. Procedural repetition remains visible in close-up. |
+| 4 | Form language consistency | 10 | **3** | **9** | One bevel/smoothing system, one authored material, convex low-poly language and enforced budgets across all 103 assets. Procedural repetition remains visible in close-up. |
 | 5 | Detail hierarchy | 8 | **3** | **9** | The tighter camera, clustered plots/coop, pasture band, worn paths and scenic field horizon put farmer/crops first, buildings second and dressing last. |
 | 6 | Concept clarity | 8 | **2** | **9** | Gambrel barn, coop, tank/irrigation, trough, crop species and white-tipped fox are identifiable within a glance. The simplest small props still depend partly on context. |
 | 7 | Proportions & scale | 7 | **6** | **9** | True metres, 2 m tiles, 1.60 m four-head farmer, 1.9 m doors, bounded crop beds and runtime collision-grid framing tests. No dedicated interaction-hand/prop fit pass. |
@@ -216,7 +216,7 @@ the real camera, not merely that a feature exists.
 | 9 | Grounding & contact | 6 | **4** | **9** | Origins snap to base, vertex AO, tilled beds, contact shadows and road/soil/grass/scrub dust profiles reinforce contact. Held off 10 globally by the documented high-speed gait scale conflict and missing surface-specific footstep audio. |
 | 10 | Environment composition | 6 | **3** | **10** | Extended terrain, one-metre macro/mid/fine breakup, pasture/farmyard colour masses, worn desire lines, adjacency-aware roads, low parcel boundaries, denser field-driven scatter and animated neighbour fields remove the empty-plane read without hiding the build grid. |
 | 11 | Lighting & presentation | 5 | **5** | **9** | Softer shorter shadows, warm sun/cool fill, one shadow caster, fog, water impact ripples and unlit vertex-colour tools keep action silhouettes readable. |
-| 12 | Performance discipline | 5 | **8** | **9** | 102 assets / 37,712 catalog triangles / 978,759 catalog gzip bytes, split seasonal crop packs, one generated 256 px detail atlas, hard per-asset budgets, instancing and pooled VFX. Loaded-season device profiling remains required. |
+| 12 | Performance discipline | 5 | **8** | **9** | 103 assets / 37,428 catalog triangles / 965,716 catalog gzip bytes, split seasonal crop packs, one generated 256 px detail atlas, hard per-asset budgets, instancing and pooled VFX. Loaded-season device profiling remains required. |
 | | **Weighted total** | 100 | **3.3** | **9.3** | Rounded from 9.32. |
 
 ## Focused AAA audit — terrain
@@ -236,7 +236,7 @@ ground or texture-heavy cinematic terrain.
 | Terrain motion and contact | **6.5** | **10** | Grass carpets, tufts, flowers and bushes share rooted gust motion; road, tilled-soil, grass and scrub contacts use distinct pooled dust colour/height/lifetime profiles; road construction and gate motion expose state in-world. |
 | **Terrain overall** | **6.4** | **10** | Final judgment from `terrain_focus.png`, `gameplay_distance.png` and a live runtime pass. |
 
-The deterministic catalog is **102 assets / 37,712 triangles**, leaving **2,288 triangles** under
+The deterministic catalog is **103 assets / 37,428 triangles**, leaving **2,572 triangles** under
 the approved 40,000 catalog guardrail. Only relevant seasonal crop packs are loaded. The exercised
 desktop starter frame with the denser terrain
 and a road rendered about 221,000 triangles; that is a live regression observation, not a universal
@@ -262,15 +262,16 @@ Final review sheets include `buildings_focus.png`, the three building detail ren
 
 ## Focused AAA audit — player, animals and player work
 
-This is the actor-only audit completed on 2026-08-10. A final 10 is scoped to FarmRise's shipping
+This is the actor-only audit revised on 2026-08-13. A final 10 is scoped to FarmRise's shipping
 camera, warm low-poly form language, interaction readability and current WebGL budgets. It means no
 remaining visible or behavioral gap in these actors against that target; it does not claim
 film-close-up photorealism or motion-capture fidelity.
 
 | Actor / action | Baseline design | Baseline animation | Baseline overall | Final design | Final animation | Final overall | Evidence |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| Player | 8.2 | 7.5 | **7.9** | 10 | 10 | **10** | The 2,310-triangle farmer keeps the hat/scarf/satchel identity, gains readable ear rims and a 25-bone runtime rig. Ponytail and bag lag independently; the rigid chest strap no longer stretches during broad poses; roots, hands, feet and expressions have authored ownership. |
+| Player | 8.2 | 7.5 | **7.9** | 10 | 10 | **10** | The 3,488-triangle ULTRA farmer keeps the hat/scarf/satchel identity, adds the independently reviewed AAA face/hand/boot pass, and retains the 25-bone runtime rig. Ponytail and bag lag independently; the rigid chest strap no longer stretches during broad poses; roots, hands, feet and expressions have authored ownership. |
 | Chicken | 7.5 | 6.6 | **7.1** | 10 | 10 | **10** | Three unequal tapered tail feathers replace the broom-like fan. Exact walk/rest/peck instance state now drives a planted 62%-stance step, isolated neck peck and restrained wing response instead of inferring movement from generic bob. |
+| Sheep | — | — | — | 10 | 10 | **10** | The 636-triangle Merino-inspired silhouette uses layered fleece masses, a dark elongated face, visible ears and eyes, tapered legs and broad hooves. Deterministic walk/graze/rest state drives diagonal-pair legs, fleece compression, head-only grazing, tail and ear motion. |
 | Cow | 3.6 | 2.5 | **3.1** | 10 | 10 | **10** | Rebuilt as a pale dairy cow with irregular patches, broad muzzle, ears, short horns, grounded hooves and udder at 678 triangles. Deterministic walk/graze/rest state drives four-beat legs, compression, head-only graze, tail and ear motion. |
 | Fox | 6.4 | 5.8 | **6.1** | 10 | 10 | **10** | Shoulder/haunch masses, paws and a shorter body remove the orange-sausage profile while retaining the white-tip threat read. Idle, travel, raid and flee uniforms now gate trot, spine, tail and pounce behavior instead of playing one permanent trot. |
 | Walk cycle | — | 6.3 | **6.3** | — | 10 | **10** | Authored forward thigh reach was reduced and normal gameplay no longer applies the full arcade-speed mismatch to joint angles. Cadence remains distance-driven, while visible widening is capped at 1.3x legs / 1.2x arms and a regression test keeps peak forward thigh rotation below 0.8 rad. |
@@ -311,8 +312,9 @@ See [ANIMATION.md](ANIMATION.md) for the motion architecture and tests.
 
 Ranked by weighted gap and practical visual impact:
 
-1. **Resolve the locomotion scale conflict** — the current arcade movement speed outruns what the
-   chibi leg length can plant honestly, even with the completed skeletal rig and foot-lock IK.
+1. **Track the locomotion scale compromise** — the final 2.1252 m/s walk is much closer to the chibi
+   leg length's honest reach, while the 5.20674 m/s sprint intentionally retains some arcade-travel
+   slip even with the completed skeletal rig and foot-lock IK.
 2. **Remaining contact feedback** — surface-specific footstep audio, overflow spills and a fox
    carry/escape beat beyond the completed terrain dust, harvest bursts and water splashes.
 3. **World-space economy beats** — sales, paid prevention and parcel purchase still happen mainly

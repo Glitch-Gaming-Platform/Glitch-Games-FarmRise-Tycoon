@@ -960,26 +960,81 @@ def character_farmer():
     boot sole, and hands with thumbs.
     """
     b = MeshBuilder("SM_char_farmer", budget="character")
-    chest, neck = 0.78, 1.18
+    chest, neck = 0.72, 1.08
+
+    def front_prism(colour, outline, depth, loc, rot=(0, 0, 0), scale=(1, 1, 1)):
+        """A thin authored face mark that follows the head instead of floating."""
+        vertices = [(x, y, z) for y in (-depth * 0.5, depth * 0.5)
+                    for x, z in outline]
+        count = len(outline)
+        faces = [tuple(range(count)),
+                 tuple(range(count * 2 - 1, count - 1, -1))]
+        for index in range(count):
+            following = (index + 1) % count
+            faces.append((index, following,
+                          count + following, count + index))
+        b.polyhedron(colour, vertices, faces, loc=loc, rot=rot, scale=scale)
+
+    def ring_loft(colour, rings, segments=8, caps=True):
+        """Join authored cross-sections into one continuous deforming volume."""
+        vertices = []
+        for x, y, z, radius_x, radius_y in rings:
+            for index in range(segments):
+                angle = index * TAU / segments
+                vertices.append((x + math.cos(angle) * radius_x,
+                                 y + math.sin(angle) * radius_y, z))
+        faces = []
+        for ring in range(len(rings) - 1):
+            start = ring * segments
+            following_ring = (ring + 1) * segments
+            for index in range(segments):
+                following = (index + 1) % segments
+                faces.append((start + index, start + following,
+                              following_ring + following,
+                              following_ring + index))
+        if caps:
+            faces.append(tuple(range(segments - 1, -1, -1)))
+            top_start = (len(rings) - 1) * segments
+            faces.append(tuple(top_start + index for index in range(segments)))
+        b.polyhedron(colour, vertices, faces)
+
+    def mirrored_outline(outline, side):
+        """Mirror a front-facing outline while preserving polygon winding."""
+        if side > 0:
+            return outline
+        return [(-x, z) for x, z in reversed(outline)]
 
     # --- legs and boots ---------------------------------------------------
     # Separate tapered thigh/shin volumes and a rounded knee give the virtual
     # rig enough silhouette to sell a step. The previous single vertical tube
     # could swing, but always looked like a peg rotating from the hip.
-    b.cylinder("pants_denim", 0.17, 0.25, loc=(0, 0, 0.56), segments=8,
-               radius_top=0.15, scale=(1.08, 0.66, 1.0))
+    # The pelvis is deliberately broader than the two legs beneath it. The
+    # narrower version made the whole body read as two parallel posts with a
+    # shirt balanced on top; this compact shorts mass gives the chibi body a
+    # stable centre without moving any of the runtime rig's joints.
+    b.cylinder("pants_denim", 0.20, 0.27, loc=(0, 0, 0.56), segments=8,
+               radius_top=0.182, scale=(1.08, 0.74, 1.0))
     for sx in (-1, 1):
         hip = (sx * 0.09, 0.0, 0.56)
         knee = (sx * 0.105, -0.014, 0.36)
         ankle = (sx * 0.105, 0.012, 0.16)
-        b.cylinder_between("pants_denim", hip, knee, 0.084,
-                           segments=7, radius_top=0.076)
-        b.sphere("pants_denim", 0.078, loc=knee,
-                 scale=(0.90, 0.82, 0.78), u=6, v=4)
-        b.cylinder_between("pants_denim", knee, ankle, 0.073,
-                           segments=7, radius_top=0.063)
-        # A rounded toe and separate sole create a real foot profile instead
-        # of another cuboid stacked under the leg.
+        # One continuous six-ring leg gives the capsule skinning actual
+        # support sections above and below the knee. The previous thigh,
+        # knee-ball and shin islands bent in the right direction but exposed a
+        # hard toy hinge in side review.
+        ring_loft(
+            "pants_denim",
+            ((hip[0], hip[1], hip[2], 0.096, 0.086),
+             (sx * 0.102, -0.011, 0.405, 0.087, 0.079),
+             (knee[0], knee[1], knee[2], 0.085, 0.079),
+             (sx * 0.105, -0.008, 0.315, 0.087, 0.080),
+             (sx * 0.105, 0.002, 0.245, 0.091, 0.084),
+             (ankle[0], ankle[1], ankle[2], 0.078, 0.072)),
+            segments=8,
+        )
+        # Cuff, heel, rounded toe and sole create one readable boot profile.
+        # Keeping those jobs in separate broad forms is what prevents the shoe
+        # from collapsing into a featureless square at gameplay distance.
         #
         # The boot MUST overlap the shin. It previously topped out at 0.161
         # while the shin ended at 0.18, leaving a two-centimetre gap that was
@@ -988,23 +1043,77 @@ def character_farmer():
         # continuity to the shin, so it read as a detached block hovering under
         # the trouser. Overlapping geometry is not sloppy here, it is what makes
         # a hard-surface limb survive being posed.
-        b.sphere("boot_leather", 0.10, loc=(sx * 0.105, -0.065, 0.10),
-                 scale=(0.80, 1.30, 0.74), u=7, v=4)
-        b.box("timber_dark", size=(0.17, 0.25, 0.035),
-              loc=(sx * 0.105, -0.055, 0.025))
+        b.cylinder("boot_leather", 0.076, 0.075,
+                   loc=(sx * 0.105, 0.006, 0.137), segments=9,
+                   radius_top=0.070, scale=(1.0, 0.88, 1.0), caps=False)
+        b.sphere("boot_leather", 0.092, loc=(sx * 0.105, -0.073, 0.078),
+                 scale=(0.92, 0.98, 0.60), u=10, v=6)
+        b.sphere("boot_leather", 0.060,
+                 loc=(sx * 0.105, 0.045, 0.059),
+                 scale=(0.90, 0.74, 0.68), u=7, v=5)
+        sole_outline = [(-0.078, -0.088), (-0.052, -0.105),
+                        (0.052, -0.105), (0.078, -0.088),
+                        (0.067, 0.065), (-0.067, 0.065)]
+        sole_vertices = [(x, y, z) for z in (-0.006, 0.006)
+                         for x, y in sole_outline]
+        sole_faces = [
+            (0, 1, 2, 3, 4, 5), (11, 10, 9, 8, 7, 6),
+            (0, 6, 7, 1), (1, 7, 8, 2), (2, 8, 9, 3),
+            (3, 9, 10, 4), (4, 10, 11, 5), (5, 11, 6, 0),
+        ]
+        b.polyhedron("timber_dark", sole_vertices, sole_faces,
+                     loc=(sx * 0.105, -0.020, 0.014))
 
     # --- torso ------------------------------------------------------------
-    # An eight-sided tapered volume catches broad light bands and removes the
-    # rectangular toy-block torso that made the old farmer look unfinished in
-    # close-up. It remains simple enough to deform cleanly in the virtual rig.
-    b.cylinder("shirt_blue", 0.22, 0.46, loc=(0, 0, chest + 0.10),
-               segments=8, radius_top=0.19, scale=(1.0, 0.62, 1.0))
-    for z in (0.72, 0.86, 1.00):
-        b.cylinder("shirt_stripe", 0.222, 0.045, loc=(0, 0, z),
-                   segments=8, scale=(1.0, 0.63, 1.0))
+    # A four-ring loft creates an authored chest-to-belly curve instead of a
+    # straight-sided cone. It remains open at top and bottom because the collar
+    # and pelvis overlap those hidden boundaries; the triangle budget is spent
+    # on the visible silhouette rather than sealed interior faces.
+    torso_rings = ((0.60, 0.220, 0.158),
+                   (0.68, 0.245, 0.174),
+                   (0.92, 0.246, 0.168),
+                   (1.05, 0.212, 0.146))
+    torso_segments = 12
+    torso_vertices = []
+    for z, radius_x, radius_y in torso_rings:
+        for index in range(torso_segments):
+            angle = index * TAU / torso_segments
+            torso_vertices.append((math.cos(angle) * radius_x,
+                                   math.sin(angle) * radius_y, z))
+    torso_faces = []
+    for ring in range(len(torso_rings) - 1):
+        start = ring * torso_segments
+        following = (ring + 1) * torso_segments
+        for index in range(torso_segments):
+            next_index = (index + 1) % torso_segments
+            torso_faces.append((start + index, start + next_index,
+                                following + next_index, following + index))
+    b.polyhedron("shirt_blue", torso_vertices, torso_faces)
+    # Each stripe follows the shirt taper. Equal-radius rings protruded as
+    # white fins in deep work poses and advertised the primitive construction.
+    stripe_rings = (
+        (0.66, (0.238, 0.166), (0.247, 0.176)),
+        (0.80, (0.249, 0.172), (0.248, 0.171)),
+        (0.94, (0.243, 0.167), (0.237, 0.163)),
+    )
+    for z, lower_radii, upper_radii in stripe_rings:
+        stripe_vertices = []
+        for ring_z, (radius_x, radius_y) in (
+                (z - 0.019, lower_radii), (z + 0.019, upper_radii)):
+            for index in range(torso_segments):
+                angle = index * TAU / torso_segments
+                stripe_vertices.append((math.cos(angle) * radius_x,
+                                        math.sin(angle) * radius_y, ring_z))
+        stripe_faces = []
+        for index in range(torso_segments):
+            following = (index + 1) % torso_segments
+            stripe_faces.append((index, following,
+                                 torso_segments + following,
+                                 torso_segments + index))
+        b.polyhedron("shirt_stripe", stripe_vertices, stripe_faces)
     # A belt breaks the torso into two masses so it is not one slab.
     b.cylinder("timber_dark", 0.224, 0.055, loc=(0, 0, 0.665),
-               segments=8, scale=(1.0, 0.64, 1.0))
+               segments=8, scale=(1.0, 0.64, 1.0), caps=False)
     b.box("straw_hat_band", size=(0.075, 0.27, 0.075), loc=(0, -0.005, 0.665))
 
     # A bright kerchief and diagonal satchel strap restore the asymmetry that
@@ -1015,16 +1124,32 @@ def character_farmer():
         [(-0.13, -0.145, 0.0), (0.13, -0.145, 0.0), (0.0, -0.175, -0.17),
          (-0.11, -0.115, -0.01), (0.11, -0.115, -0.01), (0.0, -0.145, -0.15)],
         [(0, 1, 2), (5, 4, 3), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)],
-        loc=(0, 0, 1.13),
+        loc=(0, 0, 1.07),
     )
-    b.box("timber_dark", size=(0.055, 0.032, 0.62),
-          loc=(0.055, -0.151, 0.89), rot=(0, -0.48, 0))
-    b.box("timber_warm", size=(0.23, 0.13, 0.30),
-          loc=(0.255, 0.045, 0.59), rot=(0, 0.08, -0.04))
-    b.box("timber_light", size=(0.18, 0.018, 0.055),
-          loc=(0.255, -0.026, 0.65))
+    # Two overlapping strap pieces approximate the chest curve instead of one
+    # rigid diagonal bar. Both remain inside the dedicated strap bone capsule.
+    b.box("timber_dark", size=(0.050, 0.024, 0.320),
+          loc=(-0.055, -0.148, 1.000), rot=(0, -0.42, 0))
+    b.box("timber_dark", size=(0.052, 0.026, 0.380),
+          loc=(0.125, -0.148, 0.755), rot=(0, -0.56, 0))
+    # Chamfered pouch: broad enough to remain iconic, but no longer a cuboid
+    # plank in the side silhouette.
+    # A compressed rounded pouch gives the side view a gusseted silhouette;
+    # the previous extruded hexagon still read as a timber board from the
+    # gameplay-facing side camera.
+    ring_loft(
+        "timber_warm",
+        ((0.270, 0.080, 0.710, 0.070, 0.030),
+         (0.270, 0.080, 0.665, 0.108, 0.046),
+         (0.270, 0.080, 0.565, 0.114, 0.050),
+         (0.270, 0.080, 0.495, 0.096, 0.043),
+         (0.270, 0.080, 0.470, 0.052, 0.028)),
+        segments=8,
+    )
+    b.box("timber_light", size=(0.19, 0.014, 0.072),
+          loc=(0.270, 0.026, 0.670))
     b.cylinder("straw_hat_band", 0.021, 0.018,
-               loc=(0.255, -0.040, 0.64),
+               loc=(0.270, 0.016, 0.650),
                rot=(math.pi / 2, 0, 0), segments=5)
     # Collar as a ring around the neck, not a plate across the chest.
     #
@@ -1035,37 +1160,100 @@ def character_farmer():
     # read as a separate object resting on the torso, because that is what
     # rectangles at that angle do. A short cylinder hugging the neck is read as
     # part of the garment, because it follows the form underneath it.
-    b.cylinder("trim_white", 0.104, 0.055, loc=(0, 0, chest + 0.355), segments=10)
+    b.cylinder("trim_white", 0.108, 0.046, loc=(0, 0, chest + 0.350),
+               segments=12, caps=False)
 
     # --- arms and hands ---------------------------------------------------
     # Elbows are authored into the resting silhouette. Runtime animation then
     # rotates upper/lower regions from an already-human pose instead of trying
     # to make a straight cylinder resemble a working arm.
     for sx in (-1, 1):
-        shoulder = (sx * 0.19, 0.0, 1.06)
-        elbow = (sx * 0.275, -0.014, 0.88)
-        wrist = (sx * 0.295, -0.055, 0.73)
+        shoulder = (sx * 0.168, 0.0, 1.018)
+        elbow = (sx * 0.275, -0.014 + sx * 0.006, 0.88)
+        wrist = (sx * 0.295, -0.055 + sx * 0.012, 0.73)
+        # A rounded sleeve cap joins arm to torso. It preserves the exact
+        # shoulder pivot while removing the visibly capped-cylinder seam that
+        # made the arms look assembled from spare parts.
+        b.sphere("shirt_blue", 0.084, loc=shoulder,
+                 scale=(0.98, 0.88, 0.82), u=10, v=6)
         b.cylinder_between("shirt_blue", shoulder, elbow, 0.070,
-                           segments=7, radius_top=0.058)
+                           segments=8, radius_top=0.058, caps=False)
         # A rolled cuff creates a readable elbow hinge. The old uninterrupted
         # blue-to-skin tube stayed visually straight even when the rig bent it.
         b.cylinder_between("shirt_blue_dark",
                            (sx * 0.255, -0.010, 0.922), elbow, 0.064,
-                           segments=6, radius_top=0.058)
-        b.cylinder_between("skin", elbow, wrist, 0.052,
-                           segments=7, radius_top=0.044)
-        b.sphere("skin", 0.060, loc=(sx * 0.30, -0.064, 0.695), u=8, v=5)
-        # A thumb. One extra primitive, and the hand stops being a ball.
-        b.sphere("skin", 0.026, loc=(sx * 0.30, -0.112, 0.72),
-                 scale=(0.8, 1.2, 0.8), u=5, v=3)
+                           segments=6, radius_top=0.058, caps=False)
+        b.cylinder_between("skin", elbow, wrist, 0.056,
+                           segments=8, radius_top=0.041, caps=False)
+        # A vertical palm with a lower finger pad reads as a relaxed hand,
+        # rather than the old spherical mitten. The thumb sits on the inward
+        # edge where its separation remains visible in both three-quarter and
+        # gameplay views.
+        hand_rings = ((0.744, 0.038, 0.032),
+                      (0.710, 0.053, 0.041),
+                      (0.670, 0.054, 0.042),
+                      (0.638, 0.033, 0.031))
+        hand_segments = 10
+        hand_center_y = -0.074 + sx * 0.012
+        hand_vertices = []
+        for z, radius_x, radius_y in hand_rings:
+            for index in range(hand_segments):
+                angle = index * TAU / hand_segments
+                x = sx * 0.302 + math.cos(angle) * radius_x
+                y = hand_center_y + math.sin(angle) * radius_y
+                if z in (0.710, 0.670) and math.cos(angle) * sx < -0.30:
+                    x -= sx * 0.010
+                    y -= 0.003
+                hand_vertices.append((x, y, z))
+        hand_faces = []
+        for ring in range(len(hand_rings) - 1):
+            start = ring * hand_segments
+            following_ring = (ring + 1) * hand_segments
+            for index in range(hand_segments):
+                following = (index + 1) % hand_segments
+                hand_faces.append((start + index, start + following,
+                                   following_ring + following,
+                                   following_ring + index))
+        hand_faces.append(tuple(range(hand_segments - 1, -1, -1)))
+        top_start = (len(hand_rings) - 1) * hand_segments
+        hand_faces.append(tuple(top_start + index
+                                for index in range(hand_segments)))
+        b.polyhedron("skin", hand_vertices, hand_faces)
+        b.sphere("skin", 0.033,
+                 loc=(sx * 0.262, hand_center_y - 0.033, 0.696),
+                 rot=(0.0, sx * -0.52, 0.0),
+                 scale=(0.95, 1.20, 0.75), u=6, v=4)
 
     # --- head -------------------------------------------------------------
     # Short neck. Eight centimetres of bare neck on a four-heads-tall chibi
     # reads as a giraffe; the collar above now closes most of that gap.
-    b.cylinder("skin", 0.072, 0.07, loc=(0, 0, neck + 0.01), segments=8)
-    b.sphere("skin", 0.205, loc=(0, 0, neck + 0.24), scale=(1.0, 0.94, 1.02), u=14, v=8)
+    b.cylinder("skin", 0.090, 0.07, loc=(0, 0, neck + 0.01),
+               segments=8, caps=False)
+    _, head_vertices = b.sphere(
+        "skin", 0.235, loc=(0, 0, neck + 0.24),
+        scale=(1.02, 0.92, 1.00), u=22, v=11,
+    )
+    # Shape the lower face directly in the head topology. A separate muzzle
+    # produced an obvious lip/chin island; this subtle 14 mm projection creates
+    # profile rhythm while retaining one continuous facial surface.
+    lower_face_z = neck + 0.155
+    nose_face_z = neck + 0.214
+    for vertex in head_vertices:
+        if vertex.co.y > 0.04:
+            rear = max(0.0, min(1.0, (vertex.co.y - 0.04) / 0.18))
+            vertex.co.y -= 0.010 * rear
+            continue
+        if vertex.co.y >= -0.04:
+            continue
+        vertical = max(0.0, 1.0 - abs(vertex.co.z - lower_face_z) / 0.115)
+        lateral = max(0.0, 1.0 - abs(vertex.co.x) / 0.180)
+        nose = max(0.0, 1.0 - abs(vertex.co.z - nose_face_z) / 0.055)
+        vertex.co.y -= (0.018 * vertical + 0.006 * nose) * lateral
 
-    eye_y, eye_z = -0.162, neck + 0.252
+    # The larger chibi head pushes its front surface farther toward -Y. Keep
+    # every facial island just proud of that surface so the expression does
+    # not disappear into the cheeks after the proportion pass.
+    eye_y, eye_z = -0.190, neck + 0.252
     for sx in (-1, 1):
         # Sclera, then iris in front of it. Depth-sorted by position rather
         # than by transparency, so it is one opaque mesh like everything else.
@@ -1076,50 +1264,96 @@ def character_farmer():
         # the pupil reads as alarm or vacancy, never as calm. Filling the eye
         # vertically and leaving white only as slivers at the corners is what
         # makes a stylised eye look like it is looking at something.
-        b.sphere("eye_white", 0.040, loc=(sx * 0.080, eye_y, eye_z),
-                 scale=(1.0, 0.42, 1.12), u=8, v=5)
-        b.sphere("brow_brown", 0.031, loc=(sx * 0.082, eye_y - 0.016, eye_z),
-                 scale=(0.88, 0.55, 1.18), u=8, v=5)
-        b.sphere("eye_dark", 0.0215, loc=(sx * 0.082, eye_y - 0.032, eye_z - 0.002),
-                 scale=(0.88, 0.55, 1.22), u=7, v=4)
+        # Horizontal sclera plus a clean iris. The deleted intermediate brown
+        # globe used to leave a dark ring around every eye, which read as a
+        # deep empty socket in the gameplay camera. White now survives at the
+        # corners while the tall iris still gives an unambiguous gaze.
+        eye_outline = [(-0.046, 0.000), (-0.042, 0.014),
+                       (-0.032, 0.025), (-0.016, 0.032),
+                       (0.004, 0.033), (0.023, 0.029),
+                       (0.039, 0.018), (0.047, 0.004),
+                       (0.043, -0.012), (0.030, -0.024),
+                       (0.010, -0.030), (-0.012, -0.029),
+                       (-0.031, -0.021), (-0.044, -0.009)]
+        eye_outline = mirrored_outline(eye_outline, sx)
+        front_prism("eye_white", eye_outline, 0.001,
+                    (sx * 0.078, eye_y - 0.017, eye_z),
+                    scale=(0.90, 1.0, 0.90))
+        gaze_x = sx * 0.077 + 0.004
+        b.cylinder("eye_dark", 0.025, 0.004,
+                   loc=(gaze_x, eye_y - 0.021, eye_z - 0.001),
+                   rot=(math.pi / 2, 0, 0), segments=12,
+                   scale=(0.92, 1.02, 1.0))
+        # A skin-coloured upper lid overlaps the sclera rather than outlining
+        # it. Besides softening the stare, this produces a directional eye
+        # aperture that still reads after the face is reduced to gameplay size.
+        lid_outline = [(-0.046, 0.020), (-0.039, 0.028),
+                       (-0.025, 0.034), (-0.008, 0.037),
+                       (0.010, 0.036), (0.028, 0.031),
+                       (0.042, 0.022), (0.046, 0.016),
+                       (0.028, 0.020), (0.008, 0.024),
+                       (-0.014, 0.024), (-0.034, 0.018)]
+        lid_outline = mirrored_outline(lid_outline, sx)
+        front_prism("skin", lid_outline, 0.001,
+                    (sx * 0.078, eye_y - 0.019, eye_z),
+                    scale=(0.91, 1.0, 0.91))
         # A catchlight, high and inboard. Small enough to read as wet, not as
         # a second pupil - the previous 8 mm ball at v=3 was a visible facet.
-        b.sphere("trim_white", 0.0075, loc=(sx * 0.072, eye_y - 0.030, eye_z + 0.017),
+        b.sphere("trim_white", 0.0075,
+                 loc=(gaze_x - 0.006, eye_y - 0.024, eye_z + 0.012),
                  scale=(1.0, 0.6, 1.0), u=6, v=4)
         # Brow, angled slightly inward for a friendly, alert read. It now sits
         # BELOW the hairline (see the fringe note) instead of behind it.
-        b.box("brow_brown", size=(0.074, 0.020, 0.016),
-              loc=(sx * 0.082, eye_y - 0.014, eye_z + 0.050), rot=(0, 0, sx * -0.16))
+        brow_lift = 0.0
+        brow_angle = sx * -0.04
+        brow_outline = [(-0.041, -0.004), (-0.031, 0.002),
+                        (-0.015, 0.006), (0.004, 0.008),
+                        (0.023, 0.006), (0.040, 0.001),
+                        (0.034, -0.004), (0.014, 0.001),
+                        (-0.011, 0.001), (-0.034, -0.006)]
+        brow_outline = mirrored_outline(brow_outline, sx)
+        front_prism("brow_brown", brow_outline, 0.008,
+                    (sx * 0.080, eye_y - 0.015,
+                     eye_z + 0.058 + brow_lift),
+                    rot=(0, 0, brow_angle), scale=(1.0, 1.0, 1.15))
         # Blush: flatter, smaller and further down the cheek. The first pass
         # sat proud of the face and read as a graze rather than as warmth.
-        b.sphere("blush", 0.026, loc=(sx * 0.132, -0.132, eye_z - 0.062),
-                 scale=(1.0, 0.26, 0.55), u=6, v=4)
+        blush_outline = [
+            (math.cos(index * TAU / 12) * 0.024,
+             math.sin(index * TAU / 12) * 0.010)
+            for index in range(12)
+        ]
+        front_prism("blush", blush_outline, 0.002,
+                    (sx * 0.135, -0.174, eye_z - 0.064))
 
-    # Mouth: three small pieces curving upward at the corners. A single wide
-    # box in this colour read as an open gash; the curve is what turns it into
-    # a closed, faintly pleased expression.
+    # One shallow curved prism reads as a continuous expression mark. The old
+    # three cubes had visible joins and square ends in the portrait.
     mouth_z = eye_z - 0.086
-    b.box("mouth_dark", size=(0.024, 0.016, 0.012), loc=(0, -0.186, mouth_z))
-    for sx in (-1, 1):
-        b.box("mouth_dark", size=(0.020, 0.016, 0.011),
-              loc=(sx * 0.019, -0.183, mouth_z + 0.005), rot=(0, sx * -0.40, 0))
+    mouth_outline = [(-0.040, 0.006), (-0.030, 0.000),
+                     (-0.016, -0.004), (0.000, -0.005),
+                     (0.016, -0.004), (0.030, 0.000),
+                     (0.040, 0.006), (0.032, 0.011),
+                     (0.016, 0.007), (0.000, 0.005),
+                     (-0.016, 0.007), (-0.032, 0.011)]
+    front_prism("mouth_dark", mouth_outline, 0.002,
+                (0, -0.220, mouth_z), scale=(1.0, 1.0, 1.15))
     # Nose as a soft shadowed wedge rather than a protruding ball. A skin-toned
     # sphere sticking out of the face catches the key light and renders almost
     # white, which is why the first version looked like a beak.
-    b.sphere("skin_shadow", 0.023, loc=(0, -0.188, eye_z - 0.038),
-             scale=(0.85, 0.55, 0.62), u=7, v=4)
+    b.sphere("skin_shadow", 0.019, loc=(0, -0.228, eye_z - 0.038),
+             scale=(0.72, 0.45, 0.50), u=9, v=5)
 
     # A compact knot keeps the kerchief identity hook visible through torso
     # twists and makes it feel tied rather than printed onto the shirt.
-    b.sphere("scarf_red", 0.027, loc=(0, -0.162, 1.112),
+    b.sphere("scarf_red", 0.027, loc=(0, -0.162, 1.052),
              scale=(0.86, 0.48, 0.72), u=6, v=3)
 
     # --- hair -------------------------------------------------------------
     # The crown is pushed back so the forehead is skin, not hair. Previously
     # the sphere reached y = -0.204, in front of the face surface at -0.193,
     # so it swallowed the forehead and the brows with it.
-    b.sphere("hair_brown", 0.212, loc=(0, 0.030, neck + 0.275),
-             scale=(1.0, 0.98, 0.88), u=12, v=7)
+    b.sphere("hair_brown", 0.225, loc=(0, 0.040, neck + 0.275),
+             scale=(0.98, 0.96, 0.86), u=16, v=9)
     # Fringe: five overlapping flattened lobes, not boxes.
     #
     # Two earlier attempts failed here for the same underlying reason. A single
@@ -1139,14 +1373,17 @@ def character_farmer():
                  scale=(1.15, 0.75, 0.62), u=7, v=4)
     # Sideburns/volume at the temples so the hair is a shape, not a cap.
     for sx in (-1, 1):
-        b.sphere("hair_brown", 0.070, loc=(sx * 0.175, -0.045, neck + 0.235),
-                 scale=(0.7, 1.05, 1.2), u=6, v=4)
+        # Keep the clumps behind the cheek surface. At negative Y their front
+        # pole pierced the smoother head and rendered as a dark triangle on
+        # each cheek, defeating the intended integrated hairline.
+        b.sphere("hair_brown", 0.070, loc=(sx * 0.183, 0.080, neck + 0.230),
+                 scale=(0.88, 0.95, 1.18), u=8, v=5)
     # One side ponytail provides a memorable profile and visible secondary
     # motion when the whole upper region lags during locomotion.
     b.sphere("hair_brown", 0.090, loc=(0.205, 0.105, neck + 0.205),
-             rot=(0.12, 0.0, -0.22), scale=(0.72, 0.88, 1.25), u=7, v=4)
+             rot=(0.12, 0.0, -0.22), scale=(0.72, 0.88, 1.25), u=8, v=5)
     b.sphere("hair_highlight", 0.060, loc=(0.225, 0.135, neck + 0.125),
-             rot=(0.18, 0.0, -0.28), scale=(0.62, 0.78, 1.18), u=6, v=4)
+             rot=(0.18, 0.0, -0.28), scale=(0.62, 0.78, 1.18), u=7, v=5)
 
     # Low-poly ears complete the profile without competing with the face at
     # gameplay distance. They sit behind the temple masses, so only a warm rim
@@ -1157,11 +1394,12 @@ def character_farmer():
                  scale=(0.48, 0.42, 0.82), u=5, v=3)
 
     # --- straw hat, last so it sits proud of the hair ---------------------
-    b.cylinder("straw_hat", 0.40, 0.035, loc=(0, 0, neck + 0.40), segments=14,
-               radius_top=0.385)
-    b.cylinder("straw_hat", 0.20, 0.17, loc=(0, 0, neck + 0.49), segments=14,
-               radius_top=0.175)
-    b.cylinder("straw_hat_band", 0.205, 0.045, loc=(0, 0, neck + 0.435), segments=14)
+    b.cylinder("straw_hat", 0.365, 0.030, loc=(0, 0, neck + 0.40), segments=19,
+               radius_top=0.355)
+    b.cylinder("straw_hat", 0.190, 0.17, loc=(0, 0, neck + 0.49), segments=19,
+               radius_top=0.170)
+    b.cylinder("straw_hat_band", 0.195, 0.042, loc=(0, 0, neck + 0.435),
+               segments=19, caps=False)
     return b.build(collection("CHARACTERS"), smooth=True)
 
 
@@ -1297,6 +1535,74 @@ def animal_cow():
     b.sphere("cow_patch", 0.080, loc=(0.075, 0.80, 0.40),
              scale=(0.74, 0.96, 1.16), rot=(0.2, 0, 0.28), u=5, v=3)
     return b.build(collection("ANIMALS"), smooth=True)
+
+
+def animal_sheep():
+    """Merino-inspired sheep with a cloud silhouette and grounded dark face.
+
+    The wool is built as overlapping broad masses rather than surface noise:
+    at gameplay distance the scalloped outline reads as fleece, while the long
+    face, lateral ears, four planted legs and short lifted tail keep it from
+    collapsing into a white cow or an anonymous sphere.
+    """
+    b = MeshBuilder("SM_animal_sheep", budget="animal")
+    b.sphere("sheep_wool", 0.34, loc=(0, 0.03, 0.49),
+             scale=(1.18, 1.48, 0.92), u=8, v=5)
+    b.sphere("sheep_wool", 0.25, loc=(0, -0.27, 0.54),
+             scale=(1.17, 1.02, 1.04), u=6, v=4)
+    b.sphere("sheep_wool_shadow", 0.26, loc=(0, 0.30, 0.51),
+             scale=(1.17, 1.02, 1.00), u=6, v=4)
+
+    # Seven large fleece rosettes create an irregular wool edge without
+    # spending triangles on close-up curls the shipping camera cannot resolve.
+    for x, y, z, scale in (
+        (-0.27, -0.12, 0.65, 1.00), (0.27, -0.08, 0.63, 0.96),
+        (-0.29, 0.18, 0.55, 0.92), (0.29, 0.20, 0.57, 0.95),
+        (-0.16, 0.28, 0.70, 0.82), (0.12, 0.05, 0.78, 0.86),
+        (0.0, -0.25, 0.74, 0.80),
+    ):
+        b.sphere("sheep_wool", 0.145, loc=(x, y, z),
+                 scale=(scale, scale * 1.06, scale * 0.92), u=5, v=3)
+
+    b.sphere("sheep_wool_shadow", 0.19, loc=(0, -0.42, 0.62),
+             scale=(1.02, 0.90, 1.12), u=7, v=4)
+    b.sphere("sheep_face", 0.18, loc=(0, -0.64, 0.63),
+             scale=(0.86, 1.16, 0.94), u=7, v=4)
+    b.sphere("sheep_face", 0.105, loc=(0, -0.81, 0.54),
+             scale=(1.00, 0.78, 0.62), u=6, v=3)
+
+    for sx in (-1, 1):
+        b.sphere("sheep_face", 0.090, loc=(sx * 0.195, -0.62, 0.70),
+                 scale=(1.30, 0.46, 0.34), rot=(0, sx * 0.16, sx * 0.12),
+                 u=5, v=3)
+        b.sphere("sheep_inner_ear", 0.052, loc=(sx * 0.218, -0.637, 0.703),
+                 scale=(1.18, 0.32, 0.22), rot=(0, sx * 0.16, sx * 0.12),
+                 u=5, v=3)
+        b.sphere("eye_dark", 0.019, loc=(sx * 0.087, -0.785, 0.665),
+                 scale=(0.88, 0.52, 1.0), u=5, v=3)
+
+    # Dark tapered legs remain visually separate from the pale fleece and end
+    # in broad split hooves, so the animal feels planted instead of floating.
+    for sx in (-1, 1):
+        for fy in (-0.24, 0.27):
+            leg_x = sx * 0.19
+            hoof_y = fy - 0.035 if fy < 0 else fy + 0.035
+            b.cylinder_between("sheep_face", (leg_x, fy, 0.38),
+                               (sx * 0.205, hoof_y, 0.085), 0.056,
+                               segments=5, radius_top=0.043)
+            b.box("sheep_hoof", size=(0.13, 0.18, 0.070),
+                  loc=(sx * 0.205, hoof_y - 0.018, 0.035),
+                  rot=(0, 0, sx * 0.035))
+
+    b.sphere("sheep_wool", 0.095, loc=(0, 0.54, 0.64),
+             rot=(0.34, 0, 0), scale=(0.72, 1.18, 0.82), u=5, v=3)
+    obj = b.build(collection("ANIMALS"), smooth=True)
+    # The low-quality model pack is intentionally frozen so established
+    # chicken/cow geometry cannot drift during Ultra rebuilds. Link only the
+    # new sheep into a small supplementary collection that low can load beside
+    # that immutable pack.
+    collection("ANIMALS_SHEEP").objects.link(obj)
+    return obj
 
 
 def animal_fox():
@@ -2052,6 +2358,7 @@ BUILD_ORDER = (
         ("char_farmer", character_farmer),
         ("animal_chicken", animal_chicken),
         ("animal_cow", animal_cow),
+        ("animal_sheep", animal_sheep),
         ("animal_fox", animal_fox),
         ("prop_rock", prop_rock),
         ("prop_grass_tuft", prop_grass_tuft),

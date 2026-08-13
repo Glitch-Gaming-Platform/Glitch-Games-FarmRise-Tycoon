@@ -10,6 +10,7 @@ import {
   requireUnlock,
   stageProgress,
   unlocksUpToStage,
+  type MilestoneRequirement,
   type ProgressionState,
 } from '../src/index.js';
 
@@ -92,6 +93,31 @@ describe('milestoneProgress', () => {
     expect(rows.every((row) => row.met)).toBe(true);
     expect(isMilestoneMet(milestone, satisfying(0))).toBe(true);
   });
+
+  it('marks every individual task complete independently at every career stage', () => {
+    for (const milestone of MILESTONES) {
+      const keys = Object.keys(milestone.requirement) as (keyof MilestoneRequirement)[];
+      for (const key of keys) {
+        const target = milestone.requirement[key];
+        if (target === undefined) throw new Error(`Missing target for ${milestone.id}:${key}.`);
+        const progress = milestoneProgress(
+          milestone,
+          state({ stage: milestone.stage, [key]: target }),
+        );
+
+        expect(progress.find((entry) => entry.key === key)?.met, `${milestone.id}:${key}`).toBe(
+          true,
+        );
+        expect(
+          progress.filter((entry) => entry.key !== key).every((entry) => !entry.met),
+          `${milestone.id}:${key} should not complete another task`,
+        ).toBe(true);
+        expect(isMilestoneMet(milestone, state({ stage: milestone.stage, [key]: target }))).toBe(
+          keys.length === 1,
+        );
+      }
+    }
+  });
 });
 
 describe('stageProgress', () => {
@@ -113,14 +139,14 @@ describe('stageProgress', () => {
 });
 
 describe('claimMilestone', () => {
-  it('advances the stage and grants that milestone’s unlocks', () => {
-    const milestone = milestoneForStage(0);
-    if (!milestone) throw new Error('No opening milestone.');
-    const result = claimMilestone(milestone.id, satisfying(0));
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.value.stage).toBe(1);
-    expect(result.value.unlocked).toEqual(milestone.unlocks);
+  it('advances every stage only after its complete checklist and grants its unlocks', () => {
+    for (const milestone of MILESTONES) {
+      const result = claimMilestone(milestone.id, satisfying(milestone.stage));
+      expect(result.ok, milestone.id).toBe(true);
+      if (!result.ok) continue;
+      expect(result.value.stage).toBe(milestone.advancesToStage);
+      expect(result.value.unlocked).toEqual(milestone.unlocks);
+    }
   });
 
   it('refuses a milestone the farm has not earned', () => {

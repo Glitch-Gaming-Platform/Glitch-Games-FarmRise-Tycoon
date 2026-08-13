@@ -41,26 +41,30 @@ art/source/farmrise_assets.blend ──art:ui-icons──▶ apps/game/public/as
 
 ## Current inventory (measured)
 
-102 world assets, **37,712 triangles**, one authored-world material, vertex-colour hue and one
+103 world assets, **37,428 triangles**, one authored-world material, vertex-colour hue and one
 runtime-generated 256 × 256 greyscale detail atlas selected through UVs. The 48 new crop meshes are
 split into one pack per season; common crops remain in the base pack.
 
 | Family | Assets | Raw GLB | gzip | Phase |
 | --- | ---: | ---: | ---: | --- |
-| crops (year-round) | 16 | 594,980 | 192,488 | critical |
-| crops-spring | 12 | 469,812 | 140,810 | seasonal |
-| crops-summer | 12 | 467,408 | 134,364 | seasonal |
-| crops-autumn | 12 | 443,560 | 111,215 | seasonal |
-| crops-winter | 12 | 369,684 | 107,131 | seasonal |
-| buildings | 17 | 672,932 | 126,415 | critical |
-| animals | 3 | 138,816 | 41,042 | critical |
-| characters | 1 | 150,164 | 41,581 | critical |
-| props | 16 | 219,636 | 75,417 | preload |
+| crops (year-round) | 16 | 607,128 | 197,565 | critical |
+| crops-spring | 12 | 377,792 | 113,390 | seasonal |
+| crops-summer | 12 | 351,176 | 109,476 | seasonal |
+| crops-autumn | 12 | 334,172 | 89,486 | seasonal |
+| crops-winter | 12 | 342,452 | 100,453 | seasonal |
+| buildings | 17 | 758,656 | 142,520 | critical |
+| animals | 4 | 194,428 | 56,817 | critical |
+| characters | 1 | 194,592 | 62,095 | critical |
+| props | 16 | 257,868 | 85,618 | preload |
 | ground | 1 | 28,248 | 8,296 | critical |
-| **Total catalog** | **102** | **3,555,240** | **978,759** | not loaded at once |
+| **Total catalog** | **103** | **3,446,512** | **965,716** | not loaded at once |
 
-The DOM interface also ships 44 transparent WebP illustrations rendered from these meshes:
-**166,366 bytes total**, all lazy and guarded by a **175 KB** budget.
+The DOM interface also ships 48 transparent WebP illustrations rendered from these meshes:
+**165,104 bytes total**, all lazy and guarded by a **175 KB** budget.
+
+The low tier keeps its established chicken/cow pack byte-for-byte immutable and loads a separate
+sheep-only GLB beside it: **53,716 raw bytes / 14,585 gzip bytes**. This supplement is recorded in
+`low_supplement_bytes` rather than duplicated into the Ultra catalog totals above.
 
 ## World detail atlas
 
@@ -83,30 +87,30 @@ comparison of raw payloads alone is misleading.
 
 | Family | raw + gzip | Draco + gzip | Meshopt + gzip |
 | --- | ---: | ---: | ---: |
-| crops | 192,488 | 168,775 | 155,889 |
-| crops-spring | 140,810 | 132,492 | 124,236 |
-| crops-summer | 134,364 | 129,144 | 136,429 |
-| crops-autumn | 111,215 | 111,546 | 105,932 |
-| crops-winter | 107,131 | 99,986 | 83,614 |
-| buildings | 126,415 | 148,067 | 115,541 |
-| animals | 41,042 | 40,065 | 47,397 |
-| characters | 41,581 | 39,029 | 47,044 |
-| props | 75,417 | 61,406 | 69,486 |
+| crops | 197,565 | 172,940 | 159,707 |
+| crops-spring | 113,390 | 107,865 | 97,675 |
+| crops-summer | 109,476 | 99,504 | 105,822 |
+| crops-autumn | 89,486 | 89,304 | 84,933 |
+| crops-winter | 100,453 | 92,568 | 78,141 |
+| buildings | 142,520 | 167,736 | 134,009 |
+| animals | 56,817 | 54,427 | 66,862 |
+| characters | 62,095 | 49,160 | 61,053 |
+| props | 85,618 | 76,056 | 84,787 |
 | ground | 8,296 | 8,076 | 8,992 |
-| **Total catalog** | **978,759** | **938,586** | **894,560** |
+| **Total catalog** | **965,716** | **917,636** | **881,981** |
 
 Add the decoder each option requires:
 
 | Option | Complete catalog transport | Decoder | **Catalog total** |
 | --- | ---: | ---: | ---: |
-| **Plain GLB + gzip** | 978,759 | 0 | **978,759** |
-| Meshopt + gzip | 894,560 | ~5,000 | **899,560** |
-| Draco + gzip | 938,586 | ~230,000 | **1,168,586** |
+| **Plain GLB + gzip** | 965,716 | 0 | **965,716** |
+| Meshopt + gzip | 881,981 | ~5,000 | **886,981** |
+| Draco + gzip | 917,636 | ~230,000 | **1,147,636** |
 
 ### Decision: ship plain GLB with gzip/brotli. No mesh compression.
 
 - **Draco is still worse than doing nothing.** The decoder remains larger than its catalog saving.
-- **Meshopt saves about 79.2 KB net across the whole catalog**, but seasonal pack results vary: the
+- **Meshopt saves about 78.7 KB net across the whole catalog**, but seasonal pack results vary: the
   summer pack grows after Meshopt while winter benefits substantially. Compression stays deferred
   until cold-load profiling proves a loaded pack is the bottleneck.
 - Vertex-colour meshes with UVs and no tangents still gzip well enough for the current loading plan.
@@ -125,8 +129,8 @@ Re-run `npm run art:build`; `art/build_report.json` records raw and gzip bytes f
 
 ## LODs: not implemented, and deliberately so
 
-At 37,712 triangles across lazy packs, catalog total is no longer the runtime geometry count. The
-heaviest single asset is still the 2,310-triangle farmer; ready grapes are the heaviest crop at 894.
+At 37,428 triangles across lazy packs, catalog total is no longer the runtime geometry count. The
+heaviest single asset is the 3,488-triangle ULTRA farmer; ready grapes are the heaviest crop at 894.
 
 **Revisit if** a profiling session shows geometry-bound frames on a target device. Three.js has no
 built-in LOD authoring, so this would mean either `THREE.LOD` with script-generated decimations or
@@ -164,7 +168,7 @@ Draw calls are proportional to distinct **meshes**, not to object count.
 | Plot beds (any number) | 1 |
 | Crops | ≤ 22 active crop/stage draws (estate bed count); 64 buckets are preallocated and empty buckets draw nothing |
 | Terrain scatter (grass carpets, dirt clods, tufts, flowers, scrub, bushes) | 6 |
-| Chickens (any number) | 1 |
+| Livestock (chickens, cows and sheep; any supported count) | ≤ 3 |
 | Buildings | 1 per placed building |
 | Ground, player, foxes | 1 each |
 
@@ -195,12 +199,12 @@ Before broad release, run a Chrome DevTools performance trace on a constrained A
 
 | Metric | Budget | Current |
 | --- | ---: | ---: |
-| Triangles, whole asset set | 40,000 | 37,712 |
-| Triangles, single asset | see class budgets | 2,310 worst case |
+| Triangles, whole asset set | 40,000 | 37,428 |
+| Triangles, single asset | see class budgets | 3,488 worst case |
 | Materials | 1 | 1 |
 | Generated world detail atlases | 1 × 256 px | 1 × 256 px, no network file |
-| DOM interface illustrations | 175 KB | 166,366 bytes |
-| Model payload, gzipped | loaded-season target to profile | about 626 KB for spring common art; 979 KB complete catalog |
+| DOM interface illustrations | 175 KB | 165,104 bytes |
+| Model payload, gzipped | loaded-season target to profile | about 581 KB for the critical Spring model path, plus an 86 KB props preload; 966 KB complete catalog |
 | Client JS bundle, gzipped | 200 KB | about 285 KB (about 132 app + 154 Three.js) — over budget |
 | Client JS chunks, raw | 1 MB | about 1.05 MB — over budget |
 

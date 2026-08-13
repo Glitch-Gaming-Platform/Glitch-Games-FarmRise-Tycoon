@@ -38,6 +38,7 @@ function findRepoFile(relative: string): string {
 
 const PALETTE_PY = findRepoFile('tools/blender/palette.py');
 const REVIEW_RENDER_PY = findRepoFile('tools/blender/review_render.py');
+const RIG_PREVIEW_PY = findRepoFile('tools/blender/rig_preview.py');
 
 function pythonConstant(source: string, name: string): number {
   const match = new RegExp(`^${name}\\s*=\\s*(-?[0-9.]+)`, 'm').exec(source);
@@ -48,6 +49,7 @@ function pythonConstant(source: string, name: string): number {
 describe('gameplay camera framing', () => {
   const source = readFileSync(PALETTE_PY, 'utf8');
   const reviewSource = readFileSync(REVIEW_RENDER_PY, 'utf8');
+  const rigPreviewSource = readFileSync(RIG_PREVIEW_PY, 'utf8');
 
   it('has not drifted from the Blender review renderer', () => {
     expect(GAMEPLAY_CAMERA.distance).toBe(pythonConstant(source, 'GAMEPLAY_REVIEW_DISTANCE'));
@@ -71,6 +73,46 @@ describe('gameplay camera framing', () => {
     expect(reviewSource).toContain('math.cos(yaw) * math.cos(pitch) * distance');
     expect(reviewSource).not.toContain('-math.cos(yaw) * math.cos(pitch) * distance');
     expect(reviewSource).toContain('lens_for_vertical_fov(GAMEPLAY_REVIEW_FOV_DEGREES, aspect)');
+  });
+
+  it('keeps the avatar readability proof on the shipping camera contract', () => {
+    const start = reviewSource.indexOf('def character_gameplay_read()');
+    const end = reviewSource.indexOf('\ndef actors_focus()', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const avatarProof = reviewSource.slice(start, end);
+
+    expect(avatarProof).toContain('distance = GAMEPLAY_REVIEW_DISTANCE');
+    expect(avatarProof).toContain('pitch = math.radians(GAMEPLAY_REVIEW_PITCH_DEGREES)');
+    expect(avatarProof).toContain('lens_for_vertical_fov(GAMEPLAY_REVIEW_FOV_DEGREES, aspect)');
+    expect(reviewSource).toContain('paths["character_gameplay_read"] = character_gameplay_read()');
+  });
+
+  it('proves contextual avatar readability without the accessibility outline', () => {
+    const start = reviewSource.indexOf('def character_gameplay_context_no_outline()');
+    const end = reviewSource.indexOf('\ndef character_side_profile()', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    const contextualProof = reviewSource.slice(start, end);
+
+    expect(contextualProof).toContain('distance = GAMEPLAY_REVIEW_DISTANCE');
+    expect(contextualProof).toContain('pitch = math.radians(GAMEPLAY_REVIEW_PITCH_DEGREES)');
+    expect(contextualProof).toContain('lens_for_vertical_fov(GAMEPLAY_REVIEW_FOV_DEGREES, aspect)');
+    expect(contextualProof).not.toContain('add_player_outline');
+    expect(contextualProof).toContain('SM_crop_wheat_s4');
+    expect(contextualProof).toContain('SM_crop_corn_s4');
+    expect(reviewSource).toContain(
+      'paths["character_gameplay_context_no_outline"] = character_gameplay_context_no_outline()',
+    );
+  });
+
+  it('keeps enlarged deformation evidence for the ULTRA avatar review', () => {
+    expect(rigPreviewSource).toContain('render.resolution_x = 480');
+    expect(rigPreviewSource).toContain('render.resolution_y = 780');
+    expect(rigPreviewSource).toContain('def key_pose_proof()');
+    expect(rigPreviewSource).toContain('"plant_side"');
+    expect(rigPreviewSource).toContain('"plant_three_quarter"');
+    expect(rigPreviewSource).toContain('"wave_apex"');
+    expect(rigPreviewSource).toContain('"walk_stride"');
+    expect(rigPreviewSource).toContain('main()\n    key_pose_proof()');
   });
 
   it('keeps the pitch in the range this art direction was built for', () => {

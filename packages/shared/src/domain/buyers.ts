@@ -17,6 +17,7 @@
  * the career save and validated by the server.
  */
 import { cents, type Cents } from './ids.js';
+import type { UnlockId } from './milestones.js';
 import { secondsToTicks, type Ticks } from './time.js';
 
 export type BuyerId =
@@ -29,6 +30,8 @@ export interface BuyerDefinition {
   readonly displayName: string;
   /** Career stage at which this buyer becomes contactable. */
   readonly unlocksAtStage: number;
+  /** Introduction earned from a milestone, if this is not the opening buyer. */
+  readonly requiresUnlock: UnlockId | null;
   /** Trust needed before this buyer offers its contracts, 0..100. */
   readonly minimumTrust: number;
   /** Multiplier on spot price for contracts from this buyer. */
@@ -54,6 +57,7 @@ export const BUYER_DEFINITIONS: Readonly<Record<BuyerId, BuyerDefinition>> = Obj
     id: 'millbrook_grocers',
     displayName: 'Millbrook Grocers',
     unlocksAtStage: 0,
+    requiresUnlock: null,
     minimumTrust: 0,
     priceMultiplier: 1.25,
     orderSize: { min: 6, max: 18 },
@@ -86,6 +90,7 @@ export const BUYER_DEFINITIONS: Readonly<Record<BuyerId, BuyerDefinition>> = Obj
     id: 'valley_cannery',
     displayName: 'Valley Cannery',
     unlocksAtStage: 1,
+    requiresUnlock: 'buyer_cannery',
     minimumTrust: 0,
     priceMultiplier: 1.1,
     orderSize: { min: 40, max: 90 },
@@ -111,8 +116,9 @@ export const BUYER_DEFINITIONS: Readonly<Record<BuyerId, BuyerDefinition>> = Obj
   thornwood_restaurant: {
     id: 'thornwood_restaurant',
     displayName: 'Thornwood Restaurant',
-    unlocksAtStage: 2,
-    minimumTrust: 35,
+    unlocksAtStage: 3,
+    requiresUnlock: 'buyer_restaurant',
+    minimumTrust: 0,
     priceMultiplier: 2.1,
     orderSize: { min: 4, max: 12 },
     deadlineTicks: secondsToTicks(420),
@@ -139,6 +145,7 @@ export const BUYER_DEFINITIONS: Readonly<Record<BuyerId, BuyerDefinition>> = Obj
     id: 'growers_co_op',
     displayName: "Growers' Co-op",
     unlocksAtStage: 1,
+    requiresUnlock: 'buyer_co_op',
     minimumTrust: 0,
     priceMultiplier: 0.95,
     orderSize: { min: 15, max: 40 },

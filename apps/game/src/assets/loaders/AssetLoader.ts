@@ -65,6 +65,11 @@ export class AssetLoader implements Disposable {
     return this.#cache.get(id) as T | undefined;
   }
 
+  /** True when this quality tier declares an asset, without starting a load. */
+  declares(id: string): boolean {
+    return findAsset(this.manifest, id) !== undefined;
+  }
+
   /**
    * Loads one asset. Concurrent calls for the same id share a single request,
    * which matters because several scene objects routinely want the same texture.

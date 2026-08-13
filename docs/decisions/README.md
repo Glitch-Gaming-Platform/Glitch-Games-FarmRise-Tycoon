@@ -30,3 +30,5 @@ to change its decision — write a new one and mark the old one superseded.
 | [0023](0023-shared-procedural-surface-detail-atlas.md) | One generated surface-detail atlas while retaining one world material | Accepted |
 | [0024](0024-seasonal-crops-and-return-tiers.md) | Seasonal crop packs and crop-specific return tiers | Accepted |
 | [0025](0025-lazy-runtime-localization.md) | Lazy runtime localization with English fallback | Accepted |
+| [0026](0026-multi-shelter-livestock-and-save-v3.md) | Stable multi-shelter livestock assignment and career save v3 | Superseded in part by 0027 |
+| [0027](0027-per-shelter-livestock-capacity.md) | Per-shelter livestock capacity and visible occupancy | Accepted |

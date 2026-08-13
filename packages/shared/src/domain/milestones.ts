@@ -22,6 +22,7 @@ export type CareerStage = 0 | 1 | 2 | 3 | 4 | 5;
 export type UnlockId =
   | 'land_purchase'
   | 'hauling'
+  | 'animal_shelters'
   | 'handcart'
   | 'buyer_cannery'
   | 'buyer_co_op'
@@ -85,7 +86,15 @@ export const MILESTONES: readonly MilestoneDefinition[] = Object.freeze([
     displayName: 'Buy the North Field',
     roleName: 'Smallholder',
     requirement: { lifetimeEarned: cents(15_000), parcelsOwned: 3 },
-    unlocks: ['land_purchase', 'hauling', 'handcart', 'buyer_cannery', 'buyer_co_op', 'contracts'],
+    unlocks: [
+      'land_purchase',
+      'hauling',
+      'animal_shelters',
+      'handcart',
+      'buyer_cannery',
+      'buyer_co_op',
+      'contracts',
+    ],
     reward: cents(1_000),
     summary: 'You earned enough to buy the land beyond the north gate, and the gate is now open.',
     newProblem:

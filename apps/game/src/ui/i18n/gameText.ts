@@ -14,6 +14,7 @@ export function localizeGameText(
   if (!text) return null;
   const exact: Readonly<Record<string, string>> = {
     'Change seed': 'interaction.changeSeed',
+    'Choose seed': 'interaction.changeSeed',
     Harvest: 'interaction.harvest',
     Tend: 'interaction.tend',
     Repair: 'interaction.repair',

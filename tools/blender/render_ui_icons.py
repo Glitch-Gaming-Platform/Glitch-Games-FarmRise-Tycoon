@@ -157,6 +157,29 @@ def add_milk():
     return [can, neck, lid]
 
 
+def add_wool():
+    bundle = []
+    for index, (x, y, z, scale) in enumerate((
+        (-0.42, 0.02, 0.48, 0.82),
+        (0.0, -0.04, 0.56, 1.0),
+        (0.43, 0.04, 0.47, 0.78),
+        (-0.22, 0.02, 0.88, 0.72),
+        (0.23, 0.02, 0.86, 0.68),
+    )):
+        bpy.ops.mesh.primitive_uv_sphere_add(
+            segments=12,
+            ring_count=7,
+            location=(x, y, z),
+            scale=(0.40 * scale, 0.30 * scale, 0.37 * scale),
+        )
+        tuft = mark(bpy.context.active_object)
+        tuft.name = f"UI_Wool_{index}"
+        tuft.data.materials.append(material("M_UI_Wool", "sheep_wool", 0.96))
+        bundle.append(tuft)
+    bundle.append(add_cube("UI_WoolBand", (0, -0.27, 0.60), (0.12, 0.05, 0.54), "timber_warm"))
+    return bundle
+
+
 def add_flour():
     sack = add_cube("UI_FlourSack", (0, 0, 0.62), (0.62, 0.30, 0.70), "trim_white")
     tie = add_cube("UI_FlourTie", (0, 0, 1.36), (0.25, 0.20, 0.12), "timber_warm", 0.12)
@@ -254,7 +277,10 @@ def add_camera(width: int, height: int, hero=False):
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "WEBP"
     scene.render.image_settings.color_mode = "RGBA"
-    scene.render.image_settings.quality = 80
+    # Keep the complete interface-art catalog below its 175 KB hard budget.
+    # WebP 75 preserves the authored silhouettes and palette at these small
+    # display sizes while leaving room for new progression icons.
+    scene.render.image_settings.quality = 75
     scene.render.film_transparent = True
     scene.render.resolution_percentage = 100
     scene.view_settings.view_transform = "Standard"
@@ -353,6 +379,7 @@ ICONS = {
     "garlic.webp": (single("SM_crop_garlic_s4"), 192, 192, False),
     "eggs.webp": (add_eggs, 192, 192, False),
     "milk.webp": (add_milk, 192, 192, False),
+    "wool.webp": (add_wool, 160, 160, False),
     "flour.webp": (add_flour, 192, 192, False),
     "cheese.webp": (add_cheese, 192, 192, False),
     "preserves.webp": (add_preserves, 192, 192, False),
@@ -360,8 +387,11 @@ ICONS = {
     "irrigation.webp": (single("SM_building_irrigation"), 192, 192, False),
     "road.webp": (single("SM_building_road"), 192, 192, False),
     "fence.webp": (single("SM_building_fence"), 192, 192, False),
+    "animal-shelter.webp": (single("SM_building_coop"), 192, 192, False),
+    "water-trough.webp": (single("SM_prop_water_trough"), 192, 192, False),
     "chicken.webp": (single("SM_animal_chicken"), 192, 192, False),
     "cow.webp": (single("SM_animal_cow"), 192, 192, False),
+    "sheep.webp": (single("SM_animal_sheep"), 160, 160, False),
     "loading-pad.webp": (single("SM_building_loading_pad"), 192, 192, False),
     "cold-store.webp": (single("SM_building_cold_store"), 192, 192, False),
     "worker-hut.webp": (single("SM_building_worker_hut"), 192, 192, False),
@@ -380,12 +410,27 @@ ICONS = {
 def main():
     started = time.time()
     os.makedirs(OUT_DIR, exist_ok=True)
+    only = {
+        filename.strip()
+        for filename in os.environ.get("FARMISE_UI_ICON_ONLY", "").split(",")
+        if filename.strip()
+    }
+    unknown = sorted(only.difference(ICONS))
+    if unknown:
+        raise RuntimeError(f"Unknown UI icon filename(s): {', '.join(unknown)}")
     for obj in bpy.data.objects:
         obj.hide_render = True
 
-    outputs = []
     for filename, (factory, width, height, hero) in ICONS.items():
-        path = render_icon(filename, factory, width, height, hero)
+        if only and filename not in only:
+            continue
+        render_icon(filename, factory, width, height, hero)
+
+    outputs = []
+    for filename in ICONS:
+        path = os.path.join(OUT_DIR, filename)
+        if not os.path.exists(path):
+            raise RuntimeError(f"UI icon output is missing: {path}")
         outputs.append({"file": filename, "bytes": os.path.getsize(path)})
 
     report = {

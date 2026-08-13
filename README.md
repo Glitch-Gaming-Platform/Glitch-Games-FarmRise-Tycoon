@@ -82,10 +82,11 @@ controls and quality remain unchanged.
 
 `npm run verify` is what CI runs and what you should run before opening a pull request.
 
-For focused live progression review in a development build, append `?debug=progression` for the
-Local Supplier acceptance career or `?debug=estate` for the completed Agricultural Estate. These
-fixtures load through the normal v2 save hydration path, never run in production, and disable
-autosave so they cannot overwrite a player's farm.
+For focused live progression review in a development build, append `?debug=licensed`,
+`?debug=progression`, `?debug=regional` or `?debug=estate` for the Licensed Producer, Local
+Supplier, Regional Enterprise or completed Agricultural Estate careers. These fixtures load through
+the normal v3 save hydration path, never run in production, and disable autosave so they cannot
+overwrite a player's farm.
 
 Focused incident review uses the same path. Append one catalogue id, for example
 `?debug=incident-drought` or `?debug=incident-processor-breakdown`; the player starts beside the

@@ -8,6 +8,9 @@
  * Run with `npm run test:e2e` after a one-time `npx playwright install`.
  */
 import { expect, test, type Page } from '@playwright/test';
+import { ESTATE_PARCELS, asPlotId, newCareer, type CareerSaveState } from '@farmrise/shared';
+
+const LOCAL_CAREER_KEY = 'farmrise:save:v1';
 
 test.beforeEach(async ({ page }) => {
   // Fail loudly on a page error rather than passing with a broken canvas.
@@ -27,6 +30,62 @@ async function enterFarm(page: Page, path = '/') {
   // The HUD intentionally hides before onboarding reveals its first feature;
   // the gameplay shortcut dock is the stable signal that the farm is ready.
   await expect(page.getByTestId('menu-shortcuts')).toBeVisible({ timeout: 30_000 });
+}
+
+function openingMilestoneCareer(options: {
+  readonly earned: boolean;
+  readonly parcelsOwned: boolean;
+}): CareerSaveState {
+  const state = newCareer({ careerId: 'opening-milestone-e2e', seed: 0x51a9e });
+  const site = state.sites[0]!;
+  const ownedParcels = options.parcelsOwned
+    ? ESTATE_PARCELS.slice(0, 3)
+    : ESTATE_PARCELS.slice(0, 1);
+  return {
+    ...state,
+    onboardingCompleted: true,
+    statistics: {
+      ...state.statistics,
+      lifetimeEarned: options.earned ? 15_000 : 0,
+    },
+    sites: [
+      {
+        ...site,
+        ownedParcelIds: ownedParcels.map((parcel) => parcel.id),
+        plots: ownedParcels.flatMap((parcel) =>
+          parcel.beds.map((bed) => ({
+            id: asPlotId(bed.id),
+            cropId: null,
+            grownTicks: 0,
+            tendCount: 0,
+            water: 1,
+            irrigated: false,
+            diseased: false,
+            eventMultiplier: 1,
+            soil: 1,
+            quality: 1,
+            previousCropId: null,
+          })),
+        ),
+      },
+    ],
+  };
+}
+
+async function enterSavedCareer(page: Page, state: CareerSaveState) {
+  const envelope = JSON.stringify({
+    schemaVersion: 1,
+    savedAt: Date.now(),
+    revision: 0,
+    state,
+  });
+  await page.addInitScript(({ key, value }) => window.localStorage.setItem(key, value), {
+    key: LOCAL_CAREER_KEY,
+    value: envelope,
+  });
+  await enterFarm(page);
+  await page.getByTestId('menu-shortcut-career').dispatchEvent('click');
+  await expect(page.getByTestId('career-panel')).toBeVisible();
 }
 
 test('boots to the main menu', async ({ page }) => {
@@ -111,6 +170,41 @@ test('starts a session and shows the gameplay interface', async ({ page }) => {
 
   await expect(page.getByTestId('menu-shortcuts')).toBeVisible();
   await expect(page.getByTestId('coach-mark')).toContainText(/brown plots/i);
+});
+
+test('the Farm Office marks the earnings task complete independently', async ({ page }) => {
+  await enterSavedCareer(page, openingMilestoneCareer({ earned: true, parcelsOwned: false }));
+  const office = page.getByTestId('career-panel');
+  await expect(page.getByTestId('career-next-stage')).toHaveText('Next stage: Homestead');
+  await expect(office).toContainText('Complete every requirement to advance to Homestead:');
+  await expect(page.getByTestId('career-requirements')).toContainText('✓ Earned: $150.00/$150.00');
+  await expect(page.getByTestId('career-requirements')).toContainText('○ Parcels owned: 1/3');
+  await expect(page.getByTestId('career-claim-milestone-smallholder')).toHaveText(
+    'Requirements not met',
+  );
+  await expect(page.getByTestId('career-claim-milestone-smallholder')).toBeDisabled();
+});
+
+test('the Farm Office marks the parcel task complete independently', async ({ page }) => {
+  await enterSavedCareer(page, openingMilestoneCareer({ earned: false, parcelsOwned: true }));
+  await expect(page.getByTestId('career-requirements')).toContainText('○ Earned: $0.00/$150.00');
+  await expect(page.getByTestId('career-requirements')).toContainText('✓ Parcels owned: 3/3');
+  await expect(page.getByTestId('career-claim-milestone-smallholder')).toBeDisabled();
+});
+
+test('the full milestone checklist advances Smallholding to Homestead', async ({ page }) => {
+  await enterSavedCareer(page, openingMilestoneCareer({ earned: true, parcelsOwned: true }));
+  const office = page.getByTestId('career-panel');
+  await expect(page.getByTestId('career-requirements')).toContainText('✓ Earned: $150.00/$150.00');
+  await expect(page.getByTestId('career-requirements')).toContainText('✓ Parcels owned: 3/3');
+  const advance = page.getByTestId('career-claim-milestone-smallholder');
+  await expect(advance).toBeEnabled();
+  await expect(advance).toHaveText('Advance to Homestead');
+  await advance.click();
+
+  await expect(office).toContainText(/Homestead\s+·\s+Healthy/i);
+  await expect(page.getByTestId('career-next-stage')).toHaveText('Next stage: Licensed Producer');
+  await expect(page.getByTestId('career-claim-milestone-working-farm')).toBeDisabled();
 });
 
 test('runs the game loop, so the tick counter advances', async ({ page }) => {

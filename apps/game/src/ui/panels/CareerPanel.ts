@@ -7,7 +7,7 @@ import { localizedButton, localizedText } from '../i18n/localizedDom.js';
 export interface CareerMilestoneSnapshot {
   readonly id: string;
   readonly title: string;
-  readonly roleName: string;
+  readonly nextStageName: string;
   readonly summary: string;
   readonly progress: number;
   readonly ready: boolean;
@@ -28,19 +28,24 @@ export interface ProcessorActionRow extends CareerActionRow {
   readonly recipeId: string;
 }
 
+export interface WorkerActionRow extends CareerActionRow {
+  readonly workerId?: string;
+}
+
 export interface LoanRow extends CareerActionRow {
   readonly loanId?: string;
   readonly amount?: number;
 }
 
 export interface CareerPanelSnapshot {
+  readonly context?: 'processing' | 'workforce' | null;
   readonly balance: Cents;
   readonly stageName: string;
   readonly health: string;
   readonly milestone: CareerMilestoneSnapshot | null;
   readonly specializations: readonly CareerActionRow[];
   readonly processors: readonly ProcessorActionRow[];
-  readonly workers: readonly CareerActionRow[];
+  readonly workers: readonly WorkerActionRow[];
   readonly loans: readonly LoanRow[];
   readonly insurance: readonly CareerActionRow[];
 }
@@ -50,6 +55,7 @@ export interface CareerPanelCallbacks {
   readonly onChooseSpecialization: (id: string) => void;
   readonly onQueueProcessing: (buildingId: string, recipeId: string) => void;
   readonly onHireWorker: (role: string) => void;
+  readonly onPrioritizeWorker: (workerId: string) => void;
   readonly onTakeLoan: (offerId: string) => void;
   readonly onRepayLoan: (loanId: string, amount: number) => void;
   readonly onBuyInsurance: (policyId: string) => void;
@@ -123,29 +129,38 @@ export class CareerPanel {
     });
     clear(this.#body);
 
-    this.#body.append(
-      localizedText(this.i18n, 'h3', 'career.currentMilestone', {
-        class: 'fr-panel-card__section',
-      }),
-    );
-    this.#body.append(this.#milestone(snapshot.milestone));
-    this.#appendRows('career.specialization', snapshot.specializations, (row) =>
-      this.callbacks.onChooseSpecialization(row.id),
-    );
-    this.#appendRows('career.processing', snapshot.processors, (row) =>
-      this.callbacks.onQueueProcessing(row.buildingId, row.recipeId),
-    );
-    this.#appendRows('career.workers', snapshot.workers, (row) =>
-      this.callbacks.onHireWorker(row.id),
-    );
-    this.#appendRows('career.finance', snapshot.loans, (row) => {
-      if (row.loanId && row.amount) this.callbacks.onRepayLoan(row.loanId, row.amount);
-      else this.callbacks.onTakeLoan(row.id);
-    });
-    this.#appendRows('career.insurance', snapshot.insurance, (row) => {
-      if (row.id === 'cancel-policy') this.callbacks.onCancelInsurance();
-      else this.callbacks.onBuyInsurance(row.id);
-    });
+    if (!snapshot.context) {
+      this.#body.append(
+        localizedText(this.i18n, 'h3', 'career.currentMilestone', {
+          class: 'fr-panel-card__section',
+        }),
+      );
+      this.#body.append(this.#milestone(snapshot.milestone));
+      this.#appendRows('career.specialization', snapshot.specializations, (row) =>
+        this.callbacks.onChooseSpecialization(row.id),
+      );
+    }
+    if (snapshot.context !== 'workforce') {
+      this.#appendRows('career.processing', snapshot.processors, (row) =>
+        this.callbacks.onQueueProcessing(row.buildingId, row.recipeId),
+      );
+    }
+    if (snapshot.context !== 'processing') {
+      this.#appendRows('career.workers', snapshot.workers, (row) => {
+        if (row.workerId) this.callbacks.onPrioritizeWorker(row.workerId);
+        else this.callbacks.onHireWorker(row.id);
+      });
+    }
+    if (!snapshot.context) {
+      this.#appendRows('career.finance', snapshot.loans, (row) => {
+        if (row.loanId && row.amount) this.callbacks.onRepayLoan(row.loanId, row.amount);
+        else this.callbacks.onTakeLoan(row.id);
+      });
+      this.#appendRows('career.insurance', snapshot.insurance, (row) => {
+        if (row.id === 'cancel-policy') this.callbacks.onCancelInsurance();
+        else this.callbacks.onBuyInsurance(row.id);
+      });
+    }
   }
 
   #milestone(milestone: CareerMilestoneSnapshot | null): HTMLElement {
@@ -159,16 +174,27 @@ export class CareerPanel {
       { class: `fr-career__milestone${milestone.ready ? ' fr-career__milestone--ready' : ''}` },
       el('strong', { text: milestone.title }),
       el('span', {
-        class: 'fr-market__meta',
-        text: this.i18n.t('career.nextRole', { role: milestone.roleName }),
+        class: 'fr-career__next-stage',
+        text: this.i18n.t('career.nextStage', { stage: milestone.nextStageName }),
+        testId: 'career-next-stage',
       }),
       el('div', { class: 'fr-objective__track' }, fill),
-      ...milestone.requirements.map((requirement) =>
-        el('span', { class: 'fr-career__requirement', text: requirement }),
+      el('p', {
+        class: 'fr-career__requirements-intro',
+        text: this.i18n.t('career.advanceRequirements', { stage: milestone.nextStageName }),
+      }),
+      el(
+        'ul',
+        { class: 'fr-career__requirements', testId: 'career-requirements' },
+        ...milestone.requirements.map((requirement) =>
+          el('li', { class: 'fr-career__requirement', text: requirement }),
+        ),
       ),
       el('span', { class: 'fr-market__meta', text: milestone.summary }),
       button(
-        this.i18n.t(milestone.ready ? 'career.claim' : 'career.notReady'),
+        milestone.ready
+          ? this.i18n.t('career.advance', { stage: milestone.nextStageName })
+          : this.i18n.t('career.notReady'),
         () => {
           this.callbacks.onClaimMilestone(milestone.id);
         },

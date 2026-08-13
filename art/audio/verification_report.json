@@ -1,11 +1,13 @@
 {
-  "verifiedAt": "2026-08-10T16:36:27.962Z",
+  "verifiedAt": "2026-08-13T05:09:34.786Z",
   "thresholds": {
     "minimumDurationSeconds": 240,
     "maximumSampleJump": 0.05,
     "maximumNearSilentRunMs": 5,
     "minimumEdgeRmsDb": -60,
-    "maximumEndFadeDb": -18
+    "maximumEndFadeDb": -18,
+    "minimumSfxActivityDb": -22,
+    "maximumSfxTailDb": -25
   },
   "tracks": [
     {
@@ -61,6 +63,729 @@
       "endRmsDb": -23.190836219879415,
       "endFadeDb": -1.80976873461195,
       "maximumNearSilentRunMs": 0,
+      "failures": []
+    }
+  ],
+  "soundEffects": [
+    {
+      "file": "animal_bee_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -1.3876580010015271,
+      "tailRmsDb": -62.20609743529832,
+      "failures": []
+    },
+    {
+      "file": "animal_bee_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -2.313894142706116,
+      "tailRmsDb": -50.62825853037752,
+      "failures": []
+    },
+    {
+      "file": "animal_bee_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -4.407522033988373,
+      "tailRmsDb": -73.82953895814518,
+      "failures": []
+    },
+    {
+      "file": "animal_cat_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -4.465654829171799,
+      "tailRmsDb": -79.24062779657636,
+      "failures": []
+    },
+    {
+      "file": "animal_cat_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.688359146418267,
+      "tailRmsDb": -79.40451755898208,
+      "failures": []
+    },
+    {
+      "file": "animal_cat_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -14.76744551805977,
+      "tailRmsDb": -60.77619513392611,
+      "failures": []
+    },
+    {
+      "file": "animal_chick_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -4.6392120199225255,
+      "tailRmsDb": -68.76114022921169,
+      "failures": []
+    },
+    {
+      "file": "animal_chick_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.664655063051508,
+      "tailRmsDb": -82.22074013035797,
+      "failures": []
+    },
+    {
+      "file": "animal_chick_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -4.919084007448174,
+      "tailRmsDb": -61.061403325968826,
+      "failures": []
+    },
+    {
+      "file": "animal_chicken.mp3",
+      "durationSeconds": 0.7467573696145124,
+      "maximumActivityRmsDb": -1.5261630653587859,
+      "tailRmsDb": -64.0703297066883,
+      "failures": []
+    },
+    {
+      "file": "animal_cow.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -1.9839777357051975,
+      "tailRmsDb": -82.49056774632591,
+      "failures": []
+    },
+    {
+      "file": "animal_cow_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.661337861834349,
+      "tailRmsDb": -57.0432980792811,
+      "failures": []
+    },
+    {
+      "file": "animal_cow_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.351631594657128,
+      "tailRmsDb": -68.9597039174498,
+      "failures": []
+    },
+    {
+      "file": "animal_deer_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -4.531464197788689,
+      "tailRmsDb": -76.92014361822119,
+      "failures": []
+    },
+    {
+      "file": "animal_deer_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -4.076383599355897,
+      "tailRmsDb": -65.63561065940536,
+      "failures": []
+    },
+    {
+      "file": "animal_deer_3.mp3",
+      "durationSeconds": 1.5893650793650793,
+      "maximumActivityRmsDb": -4.779475662207257,
+      "tailRmsDb": -81.74609369789671,
+      "failures": []
+    },
+    {
+      "file": "animal_dog_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -2.935014844959614,
+      "tailRmsDb": -58.20845397719027,
+      "failures": []
+    },
+    {
+      "file": "animal_dog_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -2.969887001156073,
+      "tailRmsDb": -72.9221458309236,
+      "failures": []
+    },
+    {
+      "file": "animal_dog_3.mp3",
+      "durationSeconds": 1.531156462585034,
+      "maximumActivityRmsDb": -15.004982450192744,
+      "tailRmsDb": -81.78083661958284,
+      "failures": []
+    },
+    {
+      "file": "animal_donkey_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -1.7063755746577667,
+      "tailRmsDb": -69.13979564760952,
+      "failures": []
+    },
+    {
+      "file": "animal_donkey_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -1.678268499838563,
+      "tailRmsDb": -56.13014134113772,
+      "failures": []
+    },
+    {
+      "file": "animal_donkey_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.072763238034433,
+      "tailRmsDb": -68.80974858032745,
+      "failures": []
+    },
+    {
+      "file": "animal_dove_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -6.22005988629597,
+      "tailRmsDb": -78.57375243504946,
+      "failures": []
+    },
+    {
+      "file": "animal_dove_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.785349077582301,
+      "tailRmsDb": -67.30525475438085,
+      "failures": []
+    },
+    {
+      "file": "animal_dove_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.1775882973078264,
+      "tailRmsDb": -73.7884770697505,
+      "failures": []
+    },
+    {
+      "file": "animal_duck_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.2643945469257405,
+      "tailRmsDb": -79.17876693711571,
+      "failures": []
+    },
+    {
+      "file": "animal_duck_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.9270478363991987,
+      "tailRmsDb": -80.11420162657245,
+      "failures": []
+    },
+    {
+      "file": "animal_duck_3.mp3",
+      "durationSeconds": 1.5899773242630386,
+      "maximumActivityRmsDb": -3.987568086892977,
+      "tailRmsDb": -55.434166963073146,
+      "failures": []
+    },
+    {
+      "file": "animal_duckling_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -6.27242467077029,
+      "tailRmsDb": -60.88922579109982,
+      "failures": []
+    },
+    {
+      "file": "animal_duckling_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.5461208894500458,
+      "tailRmsDb": -83.03022604789108,
+      "failures": []
+    },
+    {
+      "file": "animal_duckling_3.mp3",
+      "durationSeconds": 1.5899546485260772,
+      "maximumActivityRmsDb": -7.566003383530245,
+      "tailRmsDb": -76.74121836164181,
+      "failures": []
+    },
+    {
+      "file": "animal_fox_alert.mp3",
+      "durationSeconds": 0.75,
+      "maximumActivityRmsDb": -3.988788851397609,
+      "tailRmsDb": -57.34866169131753,
+      "failures": []
+    },
+    {
+      "file": "animal_fox_flee.mp3",
+      "durationSeconds": 0.95,
+      "maximumActivityRmsDb": -18.061787265332683,
+      "tailRmsDb": -70.72396057913473,
+      "failures": []
+    },
+    {
+      "file": "animal_goat_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -8.422225694071708,
+      "tailRmsDb": -66.62898030928822,
+      "failures": []
+    },
+    {
+      "file": "animal_goat_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -4.637373413537799,
+      "tailRmsDb": -72.72398537657332,
+      "failures": []
+    },
+    {
+      "file": "animal_goat_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -7.695742486979883,
+      "tailRmsDb": -76.0765071086938,
+      "failures": []
+    },
+    {
+      "file": "animal_hen_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -2.5051580029147873,
+      "tailRmsDb": -76.80706454473177,
+      "failures": []
+    },
+    {
+      "file": "animal_hen_3.mp3",
+      "durationSeconds": 1.5454421768707483,
+      "maximumActivityRmsDb": -16.555514344211737,
+      "tailRmsDb": -65.83712518038907,
+      "failures": []
+    },
+    {
+      "file": "animal_horse_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.698512651017702,
+      "tailRmsDb": -54.86829490919918,
+      "failures": []
+    },
+    {
+      "file": "animal_horse_2.mp3",
+      "durationSeconds": 1.589705215419501,
+      "maximumActivityRmsDb": -3.0999570393341207,
+      "tailRmsDb": -70.95664215478168,
+      "failures": []
+    },
+    {
+      "file": "animal_horse_3.mp3",
+      "durationSeconds": 1.57578231292517,
+      "maximumActivityRmsDb": -8.056589041659615,
+      "tailRmsDb": -72.83462363231334,
+      "failures": []
+    },
+    {
+      "file": "animal_parrot_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -6.183435023162986,
+      "tailRmsDb": -79.24458249438725,
+      "failures": []
+    },
+    {
+      "file": "animal_parrot_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -6.902729153587357,
+      "tailRmsDb": -82.83370378729849,
+      "failures": []
+    },
+    {
+      "file": "animal_parrot_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.903329942151083,
+      "tailRmsDb": -61.42623207121355,
+      "failures": []
+    },
+    {
+      "file": "animal_pig_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -6.463001727389503,
+      "tailRmsDb": -73.98267740151391,
+      "failures": []
+    },
+    {
+      "file": "animal_pig_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -10.381336091831477,
+      "tailRmsDb": -80.42954433130711,
+      "failures": []
+    },
+    {
+      "file": "animal_pig_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.741905100945384,
+      "tailRmsDb": -79.98868893477055,
+      "failures": []
+    },
+    {
+      "file": "animal_pigeon_1.mp3",
+      "durationSeconds": 1.5765986394557823,
+      "maximumActivityRmsDb": -1.9308656062280714,
+      "tailRmsDb": -80.37763940218468,
+      "failures": []
+    },
+    {
+      "file": "animal_pigeon_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -0.8391383963185985,
+      "tailRmsDb": -82.30349662045468,
+      "failures": []
+    },
+    {
+      "file": "animal_pigeon_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.400247336669047,
+      "tailRmsDb": -74.83834044854352,
+      "failures": []
+    },
+    {
+      "file": "animal_rabbit_1.mp3",
+      "durationSeconds": 1.5472108843537415,
+      "maximumActivityRmsDb": -5.729620785760852,
+      "tailRmsDb": -81.70387045666507,
+      "failures": []
+    },
+    {
+      "file": "animal_rabbit_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.3574965599521467,
+      "tailRmsDb": -80.33701198910991,
+      "failures": []
+    },
+    {
+      "file": "animal_rabbit_3.mp3",
+      "durationSeconds": 1.112562358276644,
+      "maximumActivityRmsDb": -5.753535816470161,
+      "tailRmsDb": -83.63577410214658,
+      "failures": []
+    },
+    {
+      "file": "animal_raid_loss.mp3",
+      "durationSeconds": 1.3,
+      "maximumActivityRmsDb": -2.8715379102095024,
+      "tailRmsDb": -82.53851002933229,
+      "failures": []
+    },
+    {
+      "file": "animal_rooster_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -6.580637744704502,
+      "tailRmsDb": -63.904721418518236,
+      "failures": []
+    },
+    {
+      "file": "animal_rooster_2.mp3",
+      "durationSeconds": 1.561609977324263,
+      "maximumActivityRmsDb": -3.9427973024304865,
+      "tailRmsDb": -82.70932416807685,
+      "failures": []
+    },
+    {
+      "file": "animal_rooster_3.mp3",
+      "durationSeconds": 1.5179818594104308,
+      "maximumActivityRmsDb": -2.7813607713426314,
+      "tailRmsDb": -79.35618695554277,
+      "failures": []
+    },
+    {
+      "file": "animal_sheep.mp3",
+      "durationSeconds": 1.19,
+      "maximumActivityRmsDb": -4.980151150673327,
+      "tailRmsDb": -67.41075266629947,
+      "failures": []
+    },
+    {
+      "file": "animal_sheep_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.199810799835378,
+      "tailRmsDb": -68.60476897375636,
+      "failures": []
+    },
+    {
+      "file": "animal_sheep_3.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -8.26242063890218,
+      "tailRmsDb": -73.80487236798012,
+      "failures": []
+    },
+    {
+      "file": "animal_turkey_1.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -1.7616305796095997,
+      "tailRmsDb": -77.46180331538417,
+      "failures": []
+    },
+    {
+      "file": "animal_turkey_2.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.7483029825367655,
+      "tailRmsDb": -74.74824334829418,
+      "failures": []
+    },
+    {
+      "file": "animal_turkey_3.mp3",
+      "durationSeconds": 1.5887981859410432,
+      "maximumActivityRmsDb": -15.36690349077687,
+      "tailRmsDb": -51.074627602444274,
+      "failures": []
+    },
+    {
+      "file": "event_impact.mp3",
+      "durationSeconds": 1.9868707482993198,
+      "maximumActivityRmsDb": -8.479783770101212,
+      "tailRmsDb": -74.37719560061088,
+      "failures": []
+    },
+    {
+      "file": "event_prevented.mp3",
+      "durationSeconds": 1.2,
+      "maximumActivityRmsDb": 0.005882910488167188,
+      "tailRmsDb": -55.11669955454196,
+      "failures": []
+    },
+    {
+      "file": "event_warning.mp3",
+      "durationSeconds": 1.8,
+      "maximumActivityRmsDb": -6.110016815414734,
+      "tailRmsDb": -54.2070257906418,
+      "failures": []
+    },
+    {
+      "file": "farm_build_complete.mp3",
+      "durationSeconds": 1.5,
+      "maximumActivityRmsDb": -3.225876705123359,
+      "tailRmsDb": -47.04263228579517,
+      "failures": []
+    },
+    {
+      "file": "farm_build_place.mp3",
+      "durationSeconds": 0.7,
+      "maximumActivityRmsDb": -13.966650677695217,
+      "tailRmsDb": -61.278400856834054,
+      "failures": []
+    },
+    {
+      "file": "farm_cart_roll.mp3",
+      "durationSeconds": 0.79,
+      "maximumActivityRmsDb": -5.589801554972482,
+      "tailRmsDb": -75.09362722230156,
+      "failures": []
+    },
+    {
+      "file": "farm_deposit.mp3",
+      "durationSeconds": 0.87,
+      "maximumActivityRmsDb": -4.445360473601711,
+      "tailRmsDb": -80.15689118081701,
+      "failures": []
+    },
+    {
+      "file": "farm_footstep.mp3",
+      "durationSeconds": 0.35,
+      "maximumActivityRmsDb": -10.616461207615398,
+      "tailRmsDb": -81.72573775252874,
+      "failures": []
+    },
+    {
+      "file": "farm_harvest.mp3",
+      "durationSeconds": 1.1,
+      "maximumActivityRmsDb": -4.413924112743705,
+      "tailRmsDb": -54.60162815565645,
+      "failures": []
+    },
+    {
+      "file": "farm_pickup.mp3",
+      "durationSeconds": 0.87,
+      "maximumActivityRmsDb": -11.46299575320268,
+      "tailRmsDb": -80.96084685853373,
+      "failures": []
+    },
+    {
+      "file": "farm_plant.mp3",
+      "durationSeconds": 0.75,
+      "maximumActivityRmsDb": -19.067471299144266,
+      "tailRmsDb": -82.37555113143623,
+      "failures": []
+    },
+    {
+      "file": "farm_repair.mp3",
+      "durationSeconds": 1.27,
+      "maximumActivityRmsDb": -8.675477178845094,
+      "tailRmsDb": -76.28422115813856,
+      "failures": []
+    },
+    {
+      "file": "farm_shoo_animals.mp3",
+      "durationSeconds": 1.19,
+      "maximumActivityRmsDb": -9.206487016734316,
+      "tailRmsDb": -82.24907130558039,
+      "failures": []
+    },
+    {
+      "file": "farm_tend.mp3",
+      "durationSeconds": 0.95,
+      "maximumActivityRmsDb": -15.041814636603181,
+      "tailRmsDb": -60.59030788336492,
+      "failures": []
+    },
+    {
+      "file": "goal_land_purchased.mp3",
+      "durationSeconds": 2.3,
+      "maximumActivityRmsDb": -13.624687325079158,
+      "tailRmsDb": -83.25088415909761,
+      "failures": []
+    },
+    {
+      "file": "incident_blight_impact.mp3",
+      "durationSeconds": 1.67,
+      "maximumActivityRmsDb": -19.517785443040452,
+      "tailRmsDb": -56.653383743862705,
+      "failures": []
+    },
+    {
+      "file": "incident_blight_warning.mp3",
+      "durationSeconds": 1.47,
+      "maximumActivityRmsDb": -15.969120352776036,
+      "tailRmsDb": -79.62183336158479,
+      "failures": []
+    },
+    {
+      "file": "incident_cart_axle_impact.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -3.837867363226311,
+      "tailRmsDb": -66.95115802981233,
+      "failures": []
+    },
+    {
+      "file": "incident_cart_axle_warning.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.986378481707382,
+      "tailRmsDb": -77.6451046936897,
+      "failures": []
+    },
+    {
+      "file": "incident_cold_snap_impact.mp3",
+      "durationSeconds": 1.75,
+      "maximumActivityRmsDb": -3.2308013208845576,
+      "tailRmsDb": -36.417756246789935,
+      "failures": []
+    },
+    {
+      "file": "incident_cold_snap_warning.mp3",
+      "durationSeconds": 1.7499319727891156,
+      "maximumActivityRmsDb": -7.795726936356926,
+      "tailRmsDb": -81.83750308977977,
+      "failures": []
+    },
+    {
+      "file": "incident_drought_impact.mp3",
+      "durationSeconds": 1.75,
+      "maximumActivityRmsDb": -5.104487262224396,
+      "tailRmsDb": -62.253957764931684,
+      "failures": []
+    },
+    {
+      "file": "incident_drought_warning.mp3",
+      "durationSeconds": 2.47,
+      "maximumActivityRmsDb": -8.648023042505237,
+      "tailRmsDb": -62.35642761952967,
+      "failures": []
+    },
+    {
+      "file": "incident_fox_raid_warning.mp3",
+      "durationSeconds": 1.35,
+      "maximumActivityRmsDb": -7.757182999253473,
+      "tailRmsDb": -53.655406018001386,
+      "failures": []
+    },
+    {
+      "file": "incident_processor_breakdown_impact.mp3",
+      "durationSeconds": 1.75,
+      "maximumActivityRmsDb": -6.495307183405745,
+      "tailRmsDb": -60.27181618369508,
+      "failures": []
+    },
+    {
+      "file": "incident_processor_breakdown_warning.mp3",
+      "durationSeconds": 1.67,
+      "maximumActivityRmsDb": -7.875757898313845,
+      "tailRmsDb": -58.437603565471875,
+      "failures": []
+    },
+    {
+      "file": "incident_road_washout_impact.mp3",
+      "durationSeconds": 1.9382766439909298,
+      "maximumActivityRmsDb": -4.606455873017184,
+      "tailRmsDb": -79.36774366633148,
+      "failures": []
+    },
+    {
+      "file": "incident_road_washout_warning.mp3",
+      "durationSeconds": 1.75,
+      "maximumActivityRmsDb": -5.37619436399015,
+      "tailRmsDb": -80.75907993645842,
+      "failures": []
+    },
+    {
+      "file": "market_big_payout.mp3",
+      "durationSeconds": 1.7,
+      "maximumActivityRmsDb": -10.059787597051418,
+      "tailRmsDb": -80.93053574998576,
+      "failures": []
+    },
+    {
+      "file": "market_contract.mp3",
+      "durationSeconds": 1.3,
+      "maximumActivityRmsDb": -7.959482079570476,
+      "tailRmsDb": -82.24993126776475,
+      "failures": []
+    },
+    {
+      "file": "market_sell.mp3",
+      "durationSeconds": 0.95,
+      "maximumActivityRmsDb": -3.764166860564078,
+      "tailRmsDb": -76.60521212161933,
+      "failures": []
+    },
+    {
+      "file": "processing_complete.mp3",
+      "durationSeconds": 2.39,
+      "maximumActivityRmsDb": -4.292421458828295,
+      "tailRmsDb": -28.29436138049315,
+      "failures": []
+    },
+    {
+      "file": "processing_start.mp3",
+      "durationSeconds": 1.59,
+      "maximumActivityRmsDb": -5.443781083773943,
+      "tailRmsDb": -66.82176883816393,
+      "failures": []
+    },
+    {
+      "file": "run_fail.mp3",
+      "durationSeconds": 2.2,
+      "maximumActivityRmsDb": -3.202188126857087,
+      "tailRmsDb": -83.197998846381,
+      "failures": []
+    },
+    {
+      "file": "run_success.mp3",
+      "durationSeconds": 2.5,
+      "maximumActivityRmsDb": -2.4242111269268656,
+      "tailRmsDb": -79.25113222362624,
+      "failures": []
+    },
+    {
+      "file": "season_transition.mp3",
+      "durationSeconds": 3.19,
+      "maximumActivityRmsDb": -4.9616715169887815,
+      "tailRmsDb": -77.82460441518646,
+      "failures": []
+    },
+    {
+      "file": "ui_click.mp3",
+      "durationSeconds": 0.18,
+      "maximumActivityRmsDb": -14.60407606353612,
+      "tailRmsDb": -47.46935183519072,
+      "failures": []
+    },
+    {
+      "file": "ui_confirm.mp3",
+      "durationSeconds": 0.65,
+      "maximumActivityRmsDb": -16.424507255004627,
+      "tailRmsDb": -64.81368219528085,
+      "failures": []
+    },
+    {
+      "file": "ui_deny.mp3",
+      "durationSeconds": 0.5,
+      "maximumActivityRmsDb": -13.12615811868798,
+      "tailRmsDb": -46.46494108649824,
+      "failures": []
+    },
+    {
+      "file": "ui_open.mp3",
+      "durationSeconds": 0.65,
+      "maximumActivityRmsDb": -9.202241727945353,
+      "tailRmsDb": -66.22990129341802,
       "failures": []
     }
   ],

@@ -31,7 +31,13 @@ export interface ContractRow {
   readonly ticksRemaining: number;
   readonly held: number;
   readonly canFulfil: boolean;
+  readonly minimumQuality: number;
+  readonly recurringEveryTicks: number;
+  readonly ticksUntilWindow: number;
+  readonly canSchedule: boolean;
 }
+
+export type ContractAction = 'accept' | 'schedule' | 'deliver' | 'cancel';
 
 export interface MarketSnapshot {
   readonly balance: Cents;
@@ -44,11 +50,7 @@ export interface MarketSnapshot {
 
 export interface MarketPanelCallbacks {
   readonly onSellSpot: (itemId: string, quantity: number) => void;
-  /**
-   * Takes an offer, or delivers against a promise already made. One callback
-   * because from the player's side both are "yes, that one".
-   */
-  readonly onFulfil: (orderId: string, action: ContractRow['action']) => void;
+  readonly onContract: (orderId: string, action: ContractAction) => void;
   readonly onClose: () => void;
 }
 
@@ -159,6 +161,25 @@ export class MarketPanel {
 
   #contractRow(contract: ContractRow): HTMLElement {
     const premium = Math.round(contract.premiumPercent * 100);
+    const waiting = contract.ticksUntilWindow > 0;
+    const terms = [
+      contract.minimumQuality > 0
+        ? this.i18n.t('market.qualityRequirement', {
+            quality: this.i18n.formatNumber(Math.round(contract.minimumQuality * 100)),
+          })
+        : null,
+      contract.recurringEveryTicks > 0
+        ? this.i18n.t('market.standingCadence', {
+            time: this.i18n.formatDurationSeconds(ticksToSeconds(contract.recurringEveryTicks)),
+          })
+        : null,
+      waiting
+        ? this.i18n.t('market.nextWindow', {
+            time: this.i18n.formatDurationSeconds(ticksToSeconds(contract.ticksUntilWindow)),
+          })
+        : null,
+    ].filter((term): term is string => Boolean(term));
+    const primaryEnabled = contract.action === 'accept' || (contract.canFulfil && !waiting);
     return el(
       'div',
       { class: `fr-market__row${contract.canFulfil ? '' : ' fr-market__row--blocked'}` },
@@ -178,23 +199,56 @@ export class MarketPanel {
             held: this.i18n.formatNumber(contract.held),
           }),
         }),
+        ...(terms.length > 0
+          ? [el('span', { class: 'fr-market__meta', text: terms.join('  ·  ') })]
+          : []),
       ),
-      button(
-        contract.action === 'accept'
-          ? this.i18n.t('market.accept')
-          : contract.canFulfil
-            ? this.i18n.t('market.deliver', {
-                quantity: this.i18n.formatNumber(Math.min(contract.held, contract.quantity)),
-              })
-            : this.i18n.t('market.needMore', {
-                quantity: this.i18n.formatNumber(contract.quantity - contract.held),
-              }),
-        () => this.callbacks.onFulfil(contract.orderId, contract.action),
-        {
-          class: 'fr-btn fr-btn--small',
-          testId: `market-fulfil-${contract.itemId}`,
-          attrs: contract.canFulfil ? {} : { disabled: 'true' },
-        },
+      el(
+        'div',
+        { class: 'fr-market__actions' },
+        button(
+          contract.action === 'accept'
+            ? this.i18n.t('market.accept')
+            : waiting
+              ? this.i18n.t('market.waiting')
+              : contract.canFulfil
+                ? this.i18n.t('market.deliver', {
+                    quantity: this.i18n.formatNumber(Math.min(contract.held, contract.quantity)),
+                  })
+                : this.i18n.t('market.needMore', {
+                    quantity: this.i18n.formatNumber(contract.quantity - contract.held),
+                  }),
+          () => this.callbacks.onContract(contract.orderId, contract.action),
+          {
+            class: 'fr-btn fr-btn--small',
+            testId: `market-fulfil-${contract.itemId}`,
+            attrs: primaryEnabled ? {} : { disabled: 'true' },
+          },
+        ),
+        ...(contract.action === 'accept' && contract.canSchedule
+          ? [
+              button(
+                this.i18n.t('market.schedule'),
+                () => this.callbacks.onContract(contract.orderId, 'schedule'),
+                {
+                  class: 'fr-btn fr-btn--small fr-btn--ghost',
+                  testId: `market-schedule-${contract.orderId}`,
+                },
+              ),
+            ]
+          : []),
+        ...(contract.action === 'deliver' && contract.recurringEveryTicks > 0
+          ? [
+              button(
+                this.i18n.t('market.endSchedule'),
+                () => this.callbacks.onContract(contract.orderId, 'cancel'),
+                {
+                  class: 'fr-btn fr-btn--small fr-btn--ghost',
+                  testId: `market-cancel-${contract.orderId}`,
+                },
+              ),
+            ]
+          : []),
       ),
     );
   }
@@ -205,7 +259,7 @@ export class MarketPanel {
     // "how many exactly".
     return el(
       'div',
-      { class: 'fr-market__row' },
+      { class: 'fr-market__row', testId: `market-inventory-row-${row.itemId}` },
       uiIcon(itemIcon(row.itemId), '', 'fr-market__icon'),
       el(
         'div',

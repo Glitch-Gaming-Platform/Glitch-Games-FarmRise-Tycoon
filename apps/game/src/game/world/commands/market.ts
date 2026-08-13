@@ -10,6 +10,7 @@
  * than a label.
  */
 import {
+  acceptedContractDeadline,
   blendQuality,
   cents,
   getBuyer,
@@ -39,6 +40,21 @@ export function spotQuote(career: Career, itemId: string): Cents {
   return cents(
     spotPriceFor(itemId) *
       qualityPriceMultiplier(quality) *
+      projectDeliveryBonus(career.town.completedProjectIds),
+  );
+}
+
+/** What a contract delivery would pay for the farm's currently held grade. */
+export function contractQuote(
+  career: Career,
+  itemId: string,
+  unitPrice: Cents,
+  quantity: number,
+): Cents {
+  return cents(
+    unitPrice *
+      Math.max(0, quantity) *
+      qualityPriceMultiplier(sellableQuality(career, itemId)) *
       projectDeliveryBonus(career.town.completedProjectIds),
   );
 }
@@ -134,9 +150,17 @@ export interface ContractOffer {
  * cannery, money. Nothing is reserved, so the player may still sell the goods
  * elsewhere - and then has to live with that.
  */
-export function acceptContract(career: Career, offer: ContractOffer): Result<void> {
+export function acceptContract(
+  career: Career,
+  offer: ContractOffer,
+  recurring = false,
+): Result<void> {
   const unlocked = requireUnlock(career.unlocks, 'contracts');
   if (!unlocked.ok) return unlocked;
+  if (recurring) {
+    const scheduled = requireUnlock(career.unlocks, 'scheduled_delivery');
+    if (!scheduled.ok) return scheduled;
+  }
   const buyer = getBuyer(offer.buyerId);
   if (!buyer) return ruleViolation('That buyer is not taking orders.');
   if (career.contracts.some((contract) => contract.id === offer.id)) {
@@ -157,8 +181,8 @@ export function acceptContract(career: Career, offer: ContractOffer): Result<voi
       unitPrice: offer.unitPrice,
       minimumQuality: offer.minimumQuality,
       acceptedTick: career.tick,
-      deadlineTick: offer.deadlineTick,
-      recurringEveryTicks: 0,
+      deadlineTick: acceptedContractDeadline(offer.buyerId, career.tick),
+      recurringEveryTicks: recurring ? buyer.deadlineTicks : 0,
       status: 'open',
     },
   ]);
@@ -186,6 +210,9 @@ export function deliverContract(
   const contract = career.contracts.find((entry) => entry.id === contractId);
   if (!contract) return ruleViolation('No such contract.');
   if (contract.status !== 'open') return ruleViolation(`That contract is ${contract.status}.`);
+  if (career.tick < contract.acceptedTick) {
+    return ruleViolation('The next scheduled delivery window has not opened yet.');
+  }
   if (career.tick > contract.deadlineTick) return ruleViolation('That deadline has passed.');
 
   const outstanding = contract.quantity - contract.delivered;
@@ -201,15 +228,10 @@ export function deliverContract(
     return ruleViolation('That buyer will not take produce of this grade.');
   }
 
+  const payout = contractQuote(career, contract.itemId, contract.unitPrice, wanted);
   const taken = withdrawSellable(career, contract.itemId, wanted);
   if (!taken.ok) return taken;
 
-  const payout = cents(
-    contract.unitPrice *
-      wanted *
-      qualityPriceMultiplier(quality) *
-      projectDeliveryBonus(career.town.completedProjectIds),
-  );
   career.adjustBalance(payout, 'contract', true);
   career.bump('itemsSold', wanted);
 
@@ -219,7 +241,15 @@ export function deliverContract(
   career.setContracts(
     career.contracts.map((entry) =>
       entry.id === contractId
-        ? { ...entry, delivered, status: complete ? 'fulfilled' : 'open' }
+        ? complete && entry.recurringEveryTicks > 0
+          ? {
+              ...entry,
+              delivered: 0,
+              acceptedTick: entry.deadlineTick,
+              deadlineTick: entry.deadlineTick + entry.recurringEveryTicks,
+              status: 'open',
+            }
+          : { ...entry, delivered, status: complete ? 'fulfilled' : 'open' }
         : entry,
     ),
   );
@@ -241,6 +271,22 @@ export function deliverContract(
   return ok({ payout, delivered: wanted, complete });
 }
 
+/** Ends a standing delivery without pretending another occurrence was fulfilled. */
+export function cancelStandingContract(career: Career, contractId: string): Result<void> {
+  const contract = career.contracts.find((entry) => entry.id === contractId);
+  if (!contract) return ruleViolation('No such contract.');
+  if (contract.status !== 'open') return ruleViolation(`That contract is ${contract.status}.`);
+  if (contract.recurringEveryTicks <= 0) {
+    return ruleViolation('That is a one-off contract, not a delivery schedule.');
+  }
+  career.setContracts(
+    career.contracts.map((entry) =>
+      entry.id === contractId ? { ...entry, status: 'cancelled' as const } : entry,
+    ),
+  );
+  return ok(undefined);
+}
+
 /** Marks a contract failed once its deadline passes. Called by the season director. */
 export function failContract(career: Career, contractId: string): void {
   const contract = career.contracts.find((entry) => entry.id === contractId);
@@ -250,7 +296,17 @@ export function failContract(career: Career, contractId: string): void {
   const buyer = getBuyer(buyerId);
   career.setContracts(
     career.contracts.map((entry) =>
-      entry.id === contractId ? { ...entry, status: 'failed' } : entry,
+      entry.id === contractId
+        ? entry.recurringEveryTicks > 0
+          ? {
+              ...entry,
+              delivered: 0,
+              acceptedTick: career.tick,
+              deadlineTick: career.tick + entry.recurringEveryTicks,
+              status: 'open',
+            }
+          : { ...entry, status: 'failed' }
+        : entry,
     ),
   );
   career.setRelationship(buyerId, {

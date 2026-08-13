@@ -10,6 +10,7 @@ import {
   CARRIERS,
   cents,
   getCarrier,
+  getItem,
   ok,
   ruleViolation,
   type CarrierKind,
@@ -38,8 +39,18 @@ export function depositCarried(
   const world = career.world;
   if (world.carry.isEmpty) return ruleViolation('You are not carrying anything.');
 
+  const targetStore = targetStoreId ? world.stores.get(targetStoreId) : undefined;
   const store = targetStoreId
-    ? storeInRange(world.stores.get(targetStoreId), tileX, tileZ, 2)
+    ? targetStore?.buildingId
+      ? world.structures.nearest(
+          tileX,
+          tileZ,
+          2,
+          (building) => building.id === targetStore.buildingId && building.remainingBuildTicks <= 0,
+        )
+        ? targetStore
+        : undefined
+      : storeInRange(targetStore, tileX, tileZ, 2)
     : world.stores.nearestStored(tileX, tileZ, 2);
   if (!store) return ruleViolation('There is nowhere to put this here.');
 
@@ -93,6 +104,45 @@ export function collectStack(
   if (taken === 0) return ruleViolation('Your hands are full.');
   world.events.emit('world:stack-collected', { items, total: taken });
   return ok({ taken, items });
+}
+
+/** Takes a chosen item from a completed storage building into the active carrier. */
+export function withdrawStored(
+  career: Career,
+  buildingId: string,
+  tileX: number,
+  tileZ: number,
+  itemId: string,
+  quantity: number,
+): Result<{ taken: number }> {
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return ruleViolation('Choose a positive whole quantity to take.');
+  }
+
+  const world = career.world;
+  const building = world.structures.nearest(
+    tileX,
+    tileZ,
+    2,
+    (candidate) => candidate.id === buildingId && candidate.remainingBuildTicks <= 0,
+  );
+  if (!building) return ruleViolation('Move back beside that storage building.');
+
+  const store = world.stores.stores.find((candidate) => candidate.buildingId === buildingId);
+  if (!store) return ruleViolation('That building does not hold goods.');
+
+  const held = store.items[itemId] ?? 0;
+  if (held <= 0) return ruleViolation('There is none of that item here.');
+  const weight = getItem(itemId)?.storageWeight ?? 1;
+  const capacity = Math.floor(world.carry.free / weight);
+  const taken = Math.min(quantity, held, capacity);
+  if (taken <= 0) return ruleViolation('Your hands are full.');
+
+  const removed = world.stores.withdraw(store.id, itemId, taken);
+  if (!removed.ok) return removed;
+  const picked = world.carry.pickUp(itemId, taken, removed.value.quality);
+  if (picked.taken !== taken) return ruleViolation('Your hands are full.');
+  return ok({ taken });
 }
 
 function storeInRange<T extends { tileX: number; tileZ: number }>(

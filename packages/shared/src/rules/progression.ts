@@ -19,6 +19,9 @@ import {
   type MilestoneRequirement,
   type UnlockId,
 } from '../domain/milestones.js';
+import { BUILDINGS, type BuildingKind } from '../domain/buildings.js';
+import { getProcessor } from '../domain/processing.js';
+import { hasProcessorAccess, type ProcessorAccessContract } from './processing.js';
 import { ok, ruleViolation, type Result } from './result.js';
 
 /**
@@ -164,6 +167,18 @@ export function activeMilestone(state: ProgressionState): MilestoneDefinition | 
 
 export function hasUnlock(unlocks: readonly string[], unlock: UnlockId): boolean {
   return unlocks.includes(unlock);
+}
+
+/** One source of truth for build-menu, command and server blueprint access. */
+export function hasBuildingAccess(
+  kind: BuildingKind,
+  unlocks: readonly string[],
+  contracts: readonly ProcessorAccessContract[],
+): boolean {
+  const required = BUILDINGS[kind].requiresUnlock;
+  if (required === null || unlocks.includes(required)) return true;
+  const processor = getProcessor(kind);
+  return processor ? hasProcessorAccess(processor.id, unlocks, contracts) : false;
 }
 
 /** Guard for any command gated behind an unlock. */

@@ -88,6 +88,20 @@ test('held touch controls move the player and Work changes authoritative game st
     await page.mouse.up();
   }
 
+  const seed = page.getByTestId('touch-cycle');
+  const seedBox = await seed.boundingBox();
+  if (!seedBox) throw new Error('Touch seed control has no layout box.');
+  await page.touchscreen.tap(seedBox.x + seedBox.width / 2, seedBox.y + seedBox.height / 2);
+  await expect(page.getByTestId('seed-panel')).toBeVisible();
+  await expect(page.getByTestId('touch-controls')).toBeHidden();
+  await page.waitForTimeout(300);
+  const radish = page.getByTestId('seed-option-radish');
+  const radishBox = await radish.boundingBox();
+  if (!radishBox) throw new Error('Radish seed choice has no layout box.');
+  await page.touchscreen.tap(radishBox.x + radishBox.width / 2, radishBox.y + radishBox.height / 2);
+  await expect(page.getByTestId('seed-panel')).toBeHidden();
+  await expect(page.getByTestId('hud-prompt')).toContainText('Plant Radish');
+
   const work = page.getByTestId('touch-interact');
   const workBox = await work.boundingBox();
   if (!workBox) throw new Error('Touch work control has no layout box.');

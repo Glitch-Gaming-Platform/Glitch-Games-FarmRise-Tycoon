@@ -36,7 +36,7 @@ export interface EngineBundle {
   readonly debugEnabled: boolean;
   readonly actionReview: boolean;
   readonly reviewCamera: ReviewCameraOverride | null;
-  readonly progressionReviewStage: 3 | 5 | null;
+  readonly progressionReviewStage: 2 | 3 | 4 | 5 | null;
   readonly incidentReviewId: string | null;
   readonly mobileOptimized: boolean;
   readonly quality: QualityTier;

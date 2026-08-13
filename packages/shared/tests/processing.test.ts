@@ -7,6 +7,7 @@ import {
   batchTicksFor,
   cents,
   getRecipe,
+  hasProcessorAccess,
   processorBuildCost,
   queueBatches,
   queueDuration,
@@ -38,6 +39,32 @@ describe('the recipe table', () => {
   it('belongs to a processor that exists', () => {
     for (const recipe of RECIPES) {
       expect(PROCESSORS[recipe.processor]).toBeDefined();
+    }
+  });
+});
+
+describe('processor access', () => {
+  it('maps every processed-goods contract to only its required machine', () => {
+    for (const recipe of RECIPES) {
+      const contracts = [{ itemId: recipe.outputItemId, status: 'open' }];
+      for (const processor of Object.values(PROCESSORS)) {
+        expect(
+          hasProcessorAccess(processor.id, [], contracts),
+          `${recipe.outputItemId} -> ${processor.id}`,
+        ).toBe(processor.id === recipe.processor);
+      }
+    }
+  });
+
+  it('does not keep a temporary blueprint after the promise has closed', () => {
+    expect(
+      hasProcessorAccess('preserve_kitchen', [], [{ itemId: 'preserves', status: 'fulfilled' }]),
+    ).toBe(false);
+  });
+
+  it('makes every processor available after the normal progression unlock', () => {
+    for (const processor of Object.values(PROCESSORS)) {
+      expect(hasProcessorAccess(processor.id, ['processing'], [])).toBe(true);
     }
   });
 });

@@ -7,9 +7,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   CAREER_SCHEMA_VERSION,
+  CAREER_SCHEMA_VERSION_V2,
+  BUYER_DEFINITIONS,
   HOMESTEAD_PARCEL_ID,
   NORTH_FIELD_PARCEL_ID,
   STARTER_EXTENSION_PARCEL_ID,
+  STARTER_SHELTER_ID,
   V1_SECOND_PARCEL_ID,
   V1_TILE_OFFSET,
   careerSaveStateSchema,
@@ -58,7 +61,7 @@ const V1_FIXTURE: LegacySaveStateV1 = {
 const migrate = (overrides: Partial<LegacySaveStateV1> = {}) =>
   migrateSave({ ...V1_FIXTURE, ...overrides }, 'career-under-test');
 
-describe('migrateSave, version 1 to 2', () => {
+describe('migrateSave, version 1 to current', () => {
   it('produces a document that satisfies the current schema', () => {
     const result = migrate();
     expect(result.ok).toBe(true);
@@ -116,6 +119,7 @@ describe('migrateSave, version 1 to 2', () => {
     if (!result.ok) throw new Error(result.reason);
     expect(result.value.state.sites[0]?.animals[0]?.count).toBe(5);
     expect(result.value.state.sites[0]?.animals[0]?.cycleTicks).toBe(900);
+    expect(result.value.state.sites[0]?.animals[0]?.shelterId).toBe(STARTER_SHELTER_ID);
   });
 
   it('owns only the homestead when v1 recorded one parcel', () => {
@@ -152,6 +156,44 @@ describe('migrateSave, version 1 to 2', () => {
 });
 
 describe('migrateSave, other inputs', () => {
+  it('assigns every version 2 animal group to the inherited shelter', () => {
+    const current = newCareer({ careerId: 'career-v2', seed: 11 });
+    const v2 = {
+      ...current,
+      schemaVersion: CAREER_SCHEMA_VERSION_V2,
+      sites: current.sites.map((site) => ({
+        ...site,
+        animals: site.animals.map(({ shelterId: _shelterId, ...group }) => group),
+      })),
+    };
+
+    const result = migrateSave(v2, current.careerId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.fromVersion).toBe(CAREER_SCHEMA_VERSION_V2);
+    expect(result.value.state.sites[0]?.animals[0]?.shelterId).toBe(STARTER_SHELTER_ID);
+    expect(careerSaveStateSchema.safeParse(result.value.state).success).toBe(true);
+  });
+
+  it('grants the shelter blueprint to version 2 careers already at Stage 1', () => {
+    const current = newCareer({ careerId: 'career-v2-stage-1', seed: 12 });
+    const v2 = {
+      ...current,
+      schemaVersion: CAREER_SCHEMA_VERSION_V2,
+      stage: 1,
+      unlocks: current.unlocks.filter((unlock) => unlock !== 'animal_shelters'),
+      sites: current.sites.map((site) => ({
+        ...site,
+        animals: site.animals.map(({ shelterId: _shelterId, ...group }) => group),
+      })),
+    };
+
+    const result = migrateSave(v2, current.careerId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.state.unlocks).toContain('animal_shelters');
+  });
+
   it('passes a current document through untouched', () => {
     const current = newCareer({ careerId: 'career-current', seed: 7 });
     const result = migrateSave(current, 'career-current');
@@ -160,6 +202,38 @@ describe('migrateSave, other inputs', () => {
     expect(result.value.fromVersion).toBe(CAREER_SCHEMA_VERSION);
     expect(result.value.notes).toHaveLength(0);
     expect(result.value.state).toEqual(current);
+  });
+
+  it('restores the full buyer window to accepted contracts from the old deadline rule', () => {
+    const current = newCareer({ careerId: 'career-short-contract', seed: 8 });
+    const acceptedTick = 10_000;
+    const shortened = {
+      ...current,
+      tick: acceptedTick + 100,
+      contracts: [
+        {
+          id: 'offer-growers-co-op-short',
+          buyerId: 'growers_co_op' as const,
+          itemId: 'preserves',
+          quantity: 21,
+          delivered: 0,
+          unitPrice: 342,
+          minimumQuality: 0,
+          acceptedTick,
+          deadlineTick: acceptedTick + 1_000,
+          recurringEveryTicks: 0,
+          status: 'open' as const,
+        },
+      ],
+    };
+
+    const result = migrateSave(shortened, current.careerId);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.state.contracts[0]?.deadlineTick).toBe(
+      acceptedTick + BUYER_DEFINITIONS.growers_co_op.deadlineTicks,
+    );
+    expect(result.value.notes.some((note) => note.field.includes('deadlineTick'))).toBe(true);
   });
 
   it('keeps the connecting strip and new beds for an old North Field owner', () => {

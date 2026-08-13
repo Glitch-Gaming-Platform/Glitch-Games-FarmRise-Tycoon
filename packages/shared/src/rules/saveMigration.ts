@@ -20,8 +20,11 @@
 import { z } from 'zod';
 import {
   CAREER_SCHEMA_VERSION,
+  CAREER_SCHEMA_VERSION_V2,
   careerSaveStateSchema,
+  careerSaveStateSchemaV2,
   type CareerSaveState,
+  type CareerSaveStateV2,
 } from '../schemas/career.js';
 import type { FarmSiteSaveState } from '../schemas/site.js';
 import {
@@ -39,9 +42,12 @@ import {
   normalizeOwnedParcelIds,
 } from '../domain/parcels.js';
 import { isBuildingKind } from '../domain/buildings.js';
+import type { BuyerId } from '../domain/buyers.js';
+import { STARTER_SHELTER_ID } from '../domain/shelters.js';
 import { newCareer, newCareerSite, STARTER_SITE_ID, YARD_STORE_ID } from './newCareer.js';
 import { ok, ruleViolation, type Result } from './result.js';
 import { emptyPlot } from './growth.js';
+import { acceptedContractDeadline } from './reputation.js';
 
 /** Tile offset applied to v1 coordinates: the 16x16 farm became the middle of a 32x32 estate. */
 export const V1_TILE_OFFSET = 8;
@@ -72,7 +78,7 @@ function readVersion(document: unknown): number | null {
 }
 
 /**
- * v1 -> v2.
+ * v1 -> v3.
  *
  * The shape of the loss is worth stating plainly: v1 did not record who trusted
  * the player, what they had chosen to specialise in, or which incident was
@@ -80,7 +86,7 @@ function readVersion(document: unknown): number | null {
  * career resumes at stage 0 with whatever land, buildings, animals and money
  * the player actually had.
  */
-export function migrateV1ToV2(legacy: LegacySaveStateV1, careerId: string): MigrationOutcome {
+export function migrateV1ToV3(legacy: LegacySaveStateV1, careerId: string): MigrationOutcome {
   const notes: MigrationNote[] = [];
   const base = newCareer({ careerId, seed: legacy.rngState });
   const site = newCareerSite(legacy.rngState);
@@ -149,6 +155,7 @@ export function migrateV1ToV2(legacy: LegacySaveStateV1, careerId: string): Migr
       species: group.species,
       count: group.count,
       cycleTicks: group.cycleTicks,
+      shelterId: STARTER_SHELTER_ID,
       tileX: site.animals[0]?.tileX ?? 19,
       tileZ: site.animals[0]?.tileZ ?? 16,
       sheltered: false,
@@ -197,6 +204,47 @@ export function migrateV1ToV2(legacy: LegacySaveStateV1, careerId: string): Migr
   };
 
   return { state, fromVersion: SAVE_SCHEMA_VERSION_V1, notes };
+}
+
+/**
+ * v2 -> v3.
+ *
+ * Version 2 stored an animal group's shelter only as coordinates. Every v2
+ * career had exactly one fixed shelter, so assigning that stable id is lossless.
+ * Careers that had already reached Stage 1 also receive the new shelter
+ * blueprint that a freshly claimed first milestone now grants.
+ */
+export function migrateV2ToV3(legacy: CareerSaveStateV2): MigrationOutcome {
+  const notes: MigrationNote[] = [
+    {
+      field: 'sites[].animals[].shelterId',
+      reason:
+        'Version 2 had one inherited shelter, so every existing animal group is assigned to its new stable shelter id.',
+    },
+  ];
+  const unlocks = [...legacy.unlocks];
+  if (legacy.stage >= 1 && !unlocks.includes('animal_shelters')) {
+    unlocks.push('animal_shelters');
+    notes.push({
+      field: 'unlocks',
+      reason:
+        'Careers already at Stage 1 or later receive the animal-shelter blueprint now granted by the first milestone.',
+    });
+  }
+
+  const state: CareerSaveState = {
+    ...legacy,
+    schemaVersion: CAREER_SCHEMA_VERSION,
+    unlocks,
+    sites: legacy.sites.map((site) => ({
+      ...site,
+      animals: site.animals.map((group) => ({
+        ...group,
+        shelterId: STARTER_SHELTER_ID,
+      })),
+    })),
+  };
+  return { state, fromVersion: CAREER_SCHEMA_VERSION_V2, notes };
 }
 
 /**
@@ -252,6 +300,51 @@ export function normalizeEstateLayout(state: CareerSaveState): MigrationOutcome 
 }
 
 /**
+ * Repairs current-version contracts accepted under the old offer-deadline rule.
+ *
+ * Those contracts inherited time already spent sitting on the market board,
+ * which could make a processor contract impossible before construction even
+ * began. The repair is deterministic: it restores the buyer's normal window
+ * from the recorded acceptance tick and never extends a completed contract.
+ */
+export function normalizeContractDeadlines(state: CareerSaveState): MigrationOutcome {
+  const notes: MigrationNote[] = [];
+  let changed = false;
+  const contracts = state.contracts.map((contract) => {
+    if (contract.status !== 'open') return contract;
+    const minimumDeadline = acceptedContractDeadline(
+      contract.buyerId as BuyerId,
+      contract.acceptedTick,
+    );
+    if (contract.deadlineTick >= minimumDeadline) return contract;
+    changed = true;
+    notes.push({
+      field: `contracts.${contract.id}.deadlineTick`,
+      reason:
+        'This accepted contract had lost part of its delivery window while it was still an offer, so its full buyer deadline was restored from the recorded acceptance tick.',
+    });
+    return { ...contract, deadlineTick: minimumDeadline };
+  });
+
+  return {
+    state: changed ? { ...state, contracts } : state,
+    fromVersion: CAREER_SCHEMA_VERSION,
+    notes,
+  };
+}
+
+/** Applies every wire-compatible repair required by the current career schema. */
+export function normalizeCareerCompatibility(state: CareerSaveState): MigrationOutcome {
+  const estate = normalizeEstateLayout(state);
+  const contracts = normalizeContractDeadlines(estate.state);
+  return {
+    state: contracts.state,
+    fromVersion: CAREER_SCHEMA_VERSION,
+    notes: [...estate.notes, ...contracts.notes],
+  };
+}
+
+/**
  * Reads any supported save document and returns the current one.
  *
  * The caller keeps the original document until the migrated one has been
@@ -268,7 +361,7 @@ export function migrateSave(document: unknown, careerId: string): Result<Migrati
     if (!parsed.success) {
       return ruleViolation(`Save is version ${version} but does not match the schema.`);
     }
-    return ok(normalizeEstateLayout(parsed.data));
+    return ok(normalizeCareerCompatibility(parsed.data));
   }
 
   if (version === SAVE_SCHEMA_VERSION_V1) {
@@ -276,8 +369,26 @@ export function migrateSave(document: unknown, careerId: string): Result<Migrati
     if (!parsed.success) {
       return ruleViolation('This version 1 save is damaged and cannot be upgraded safely.');
     }
-    const outcome = migrateV1ToV2(parsed.data, careerId);
-    const normalized = normalizeEstateLayout(outcome.state);
+    const outcome = migrateV1ToV3(parsed.data, careerId);
+    const normalized = normalizeCareerCompatibility(outcome.state);
+    const revalidated = careerSaveStateSchema.safeParse(normalized.state);
+    if (!revalidated.success) {
+      return ruleViolation('Upgrading this save produced an invalid career document.');
+    }
+    return ok({
+      ...outcome,
+      state: revalidated.data,
+      notes: [...outcome.notes, ...normalized.notes],
+    });
+  }
+
+  if (version === CAREER_SCHEMA_VERSION_V2) {
+    const parsed = careerSaveStateSchemaV2.safeParse(document);
+    if (!parsed.success) {
+      return ruleViolation('This version 2 save is damaged and cannot be upgraded safely.');
+    }
+    const outcome = migrateV2ToV3(parsed.data);
+    const normalized = normalizeCareerCompatibility(outcome.state);
     const revalidated = careerSaveStateSchema.safeParse(normalized.state);
     if (!revalidated.success) {
       return ruleViolation('Upgrading this save produced an invalid career document.');

@@ -10,5 +10,6 @@ describe('item quantity labels', () => {
     expect(formatItemQuantity('eggs', 1)).toBe('1 Egg');
     expect(formatItemQuantity('eggs', 8)).toBe('8 Eggs');
     expect(itemNameForQuantity('milk', 12)).toBe('Milk');
+    expect(itemNameForQuantity('wool', 4)).toBe('Wool');
   });
 });

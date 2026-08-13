@@ -77,9 +77,10 @@ hard-coding it means editing the pose table cannot silently desynchronise the fe
 There is a scale conflict this rig cannot dissolve, and it is stated here rather than hidden:
 
 - The farmer is 1.60 m tall with **0.385 m legs**.
-- The player's walk speed is **6.5 m/s**, and sprint multiplies it by 1.6.
-- Tying cadence strictly to distance at that speed demands roughly **19 gait cycles per second**
-  after blending toward the longer run pose.
+- The player's walk speed is **2.1252 m/s**, and sprint multiplies it by 2.45 to
+  **5.20674 m/s**.
+- Tying cadence strictly to distance still exceeds the short-legged walk's 2.9-cycle/s safety cap,
+  but the mismatch is now a fraction of the original 6.5/10.4 m/s arcade tuning.
 
 The rest of the codebase already assumes an arcade stride - `PlayerController` fires a footstep every
 1.35 m, several times what this character's legs can cover. So cadence is capped (2.7 cycles/s
@@ -99,19 +100,18 @@ speed), not a rendering one, and the renderer should not make it unilaterally.
 
 ### The walk/run blend window is anchored to the two speeds the game can produce
 
-`Player.walkSpeed` is 6.5 m/s and `sprintMultiplier` is 1.6, so the character moves at exactly 6.5 or
-10.4 - nothing else. The blend window used to run from 3.4 to 7.4, which put an ordinary walk at
-**78% of the RUN clip**. The farmer was effectively running whenever they moved, and the run's hip
-flexion is more than twice the walk's, so most of the "feet kicking out in front" was simply the
-wrong clip playing. The window is now 6.9 to 10.4: held W plays the walk, Shift+W plays the run.
+`Player.walkSpeed` is 2.1252 m/s and `sprintMultiplier` is 2.45, so the two steady-state speeds are
+2.1252 and 5.20674 m/s. The blend thresholds derive from those defaults rather than hard-coded legacy
+numbers: held W remains pure WALK, Shift+W reaches pure RUN, and only acceleration crosses the blend.
+This prevents an ordinary walk from silently becoming the forward-heavier run clip.
 
 ### Why the legs vibrated, and why the foot lock now fades
 
 The jitter was the foot lock, and it had a cause and an aggravator.
 
 The cause was a unit mismatch that looked correct. The lock advanced its IK target by **real ground
-distance**, `speed * dt` - 0.108 m in a 60 Hz frame at 6.5 m/s. But cadence is capped, so the *pose*
-only advances about 0.010 m of authored stride in that same frame. The solver was therefore dragging
+distance**, `speed * dt` - 0.108 m in a 60 Hz frame at the former 6.5 m/s tuning. But cadence was
+capped, so the *pose* only advanced about 0.010 m of authored stride in that same frame. The solver was therefore dragging
 its target backwards ten times faster than the clip moved the leg: one frame of violent correction,
 then the target left the leg's reach, `solveTwoBone` clamped, and the lock released. The next frame
 it re-planted and did it again. Sixty times a second, that is a vibration. The lock now derives its
@@ -196,6 +196,7 @@ posed. The primitives now overlap.
 | Work actions | Distinct anticipation/contact/follow-through beats: planting crouch/press, watering pour, harvest pull/recoil, tool-free pickup/deposit transfer, shooing animals and tool-free repair. Farm particles begin on authored tool-contact beats rather than during anticipation. | `Player`, `PlayerView`, `PlayerToolView`, `PlayerActionEffects` |
 | Chicken movement | Deterministic wandering with the authored +Z beak aligned to the obstacle-adjusted path tangent, plus a 62%-stance gait, impact-timed squash and head bobbing (the head holds in world space while the body walks under it) | `chickenMotion.ts`, `animationMaterials.ts` |
 | Cow movement | Deterministic walk/graze/rest states, four-beat leg gait, body compression, isolated head-lowering graze, tail swish and ear flick | `cowMotion.ts`, `animationMaterials.ts` |
+| Sheep movement | Deterministic walk/graze/rest states, diagonal-pair gait, fleece compression, head-lowering graze, short-tail flick and ear motion | `sheepMotion.ts`, `SheepView.ts`, `animationMaterials.ts` |
 | Fox movement | Diagonal-pair trot with a 55% stance, spine flex twice per cycle, tail swish; raiding adds a pounce and a successful scare triggers a player wave clip | `FarmView`, `animationMaterials.ts` |
 | Crops and field dressing | Height-weighted gusts with per-instance phase; all sixteen crops have species-height wind profiles, crop stage changes use a rooted overshoot, and drought/disease visibly wilt and tint the plant | `PlotView`, `FarmView`, `animationMaterials.ts` |
 | Terrain dressing and access | Meadow carpets, tufts, flowers and bushes use rooted gusts; parcel gates open as physical paired leaves; road, tilled-soil, grass and scrub contact dust differ in colour, height, spread and lifetime | `FarmView`, `ParcelView`, `PlayerView`, `terrainContact.ts` |
@@ -230,6 +231,7 @@ state has presentation, even though the command has no player-facing UI in the c
 | Drought warning and impact | Lighting transition plus targeted wilt/tint/lean | Covered |
 | Fox approach / raid / flee | Travel gait, raid pounce, faster flee posture and player shoo response | Covered |
 | Chicken purchase / production | Flock introduction scale and production hop; deterministic walk/rest/peck cycles continue with collision using the same path; eggs appear in a pale basket in front of the shelter | Covered |
+| Sheep purchase / wool production | Flock introduction scale and wool-production recoil; deterministic walk/graze/rest cycles continue with collision using the same path; wool enters normal site storage and market presentation | Covered |
 | Build selection and positioning | A pulsing translucent footprint follows the pointer, green where buildable and red where blocked, with a banner naming the cancel key | Covered |
 | Building placed / constructing / completed | Ghost pulse, progress rise, overhead progress/time bar, delayed mechanism reveal, completion pop and dust | Covered |
 | Building idle / busy / broken | State-dependent wheel/fan/crank/steam motion; broken mechanisms stop and the structure shakes | Covered |
@@ -283,9 +285,9 @@ RendererSystem
    `instanceMatrix`, dynamic instance transforms or one shared time uniform.
 6. **No gameplay decisions in shaders.** Shaders may present state but never decide speed, reach,
    growth, yields or collisions.
-7. **Animated contact must share one path.** Chicken rendering and collision both evaluate the same
-   deterministic `chickenPose` function from simulation time. This prevents an invisible collider
-   from lagging behind a visible animal while preserving one instanced draw call for the flock.
+7. **Animated contact must share one path.** Chicken and sheep rendering/collision both evaluate their
+   species' deterministic pose function from simulation time. This prevents an invisible collider
+   from lagging behind a visible animal while preserving one instanced draw call per visible species.
 
 ## Verification
 
@@ -296,13 +298,15 @@ RendererSystem
 - `apps/game/tests/unit/characterRig.test.ts` verifies compact forward foot excursion, gait continuity,
   foot lock, root arcs, two-handed scare motion and rigid accessory binding. Two guards were added
   after the second locomotion audit and both were watched failing against the exact defect they
-  describe: one bounds peak hip flexion and forward ankle reach at 6.5 m/s (0.59 rad against the old
-  blend window, 0.42 allowed), the other bounds per-frame angular *acceleration* and direction
-  reversals at 1.5, 6.5 and 10.4 m/s (0.31 against the old foot lock, 0.30 allowed). Acceleration is
+  describe: one bounds peak hip flexion and forward ankle reach at the shipping walk/sprint speeds,
+  while retaining 6.5 m/s as a legacy saturation stress case; the other bounds per-frame angular
+  *acceleration* and direction reversals across shipping and legacy speeds. Acceleration is
   the right measure for jitter: a smooth cycle keeps frame-to-frame velocity change small however
   fast it runs, while one snapped IK correction spikes it.
 - `apps/game/tests/unit/animationMaterials.test.ts` verifies wind, character and water shader hooks
   plus their time/motion uniforms without stubbing WebGL.
+- `apps/game/tests/unit/sheepMotion.test.ts` verifies deterministic state, stationary grazing,
+  tangent-facing travel and purchase-introduction timing for the sheep's shared render/collision pose.
 - `apps/game/tests/unit/plotVisuals.test.ts` verifies crop stage overshoot and drought/disease stress.
 - `apps/game/tests/unit/worldAnimation.test.ts` verifies construction progress/time presentation and completion,
   building idle/busy/broken mechanism motion, drought lighting and the raid-pounce silhouette.
@@ -339,10 +343,10 @@ species-specific crop wind, living/dead tree wind and operational building mecha
 whole-game 9.8/10 claim is still not defensible because the remaining gains require
 new contact art or gameplay decisions rather than another generic motion system:
 
-1. **Resolve the locomotion scale conflict at the design level.** The 6.5 m/s arcade walk speed is
-   much faster than the chibi legs can cover honestly. The rig caps cadence and stride-warps instead
-   of strobing, but fully planted feet at top speed require slower gameplay movement or new character
-   proportions. The second audit pass took the rendering side of this as far as it goes: the walk
+1. **Track the intentional locomotion-scale compromise.** The final 2.1252 m/s walk and 5.20674 m/s
+   sprint are far closer to the chibi legs' reach than the former 6.5/10.4 m/s arcade speeds, but
+   sprint still exceeds what the short legs can plant with zero slip. The rig caps cadence and
+   stride-warps instead of strobing. The second audit pass took the rendering side of this as far as it goes: the walk
    clip now covers 0.258 m of the 0.32 m its legs geometrically allow, the blend window and the swing
    bias stop the shortfall being paid for with a forward kick, and the foot lock stands down rather
    than fighting a contact that is not happening. What remains is genuinely the gameplay number.

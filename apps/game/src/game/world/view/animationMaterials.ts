@@ -361,6 +361,92 @@ export function createCowMotionMaterial(base: THREE.MeshStandardMaterial): TimeM
   };
 }
 
+/** Virtual sheep rig: compact four-beat walk, wool recoil, grazing and ear/tail flicks. */
+export function createSheepMotionMaterial(base: THREE.MeshStandardMaterial): TimeMaterial {
+  const material = base.clone();
+  material.name = 'M_FarmRise_SheepMotion';
+  const time = { value: 0 };
+
+  material.onBeforeCompile = (shader) => {
+    const source = shader as unknown as ShaderSource;
+    source.uniforms['uAnimalTime'] = time;
+    source.vertexShader = `
+      uniform float uAnimalTime;
+      #ifdef USE_INSTANCING
+        attribute float farmMotion;
+        attribute float farmAction;
+        attribute float farmGaitPhase;
+      #endif
+      ${GAIT_GLSL}
+    ${source.vertexShader}`.replace(
+      '#include <begin_vertex>',
+      `#include <begin_vertex>
+       float farmSheepMotion = 1.0;
+       float farmSheepGraze = 0.0;
+       float farmSheepPhase = fract(uAnimalTime * 0.78);
+       #ifdef USE_INSTANCING
+         farmSheepMotion = farmMotion;
+         farmSheepGraze = farmAction;
+         farmSheepPhase = farmGaitPhase;
+       #endif
+
+       float farmSheepSide = position.x < 0.0 ? -1.0 : 1.0;
+       float farmSheepFore = position.z > 0.02 ? 1.0 : -1.0;
+       float farmSheepQuarter = farmSheepFore > 0.0
+         ? (farmSheepSide < 0.0 ? 0.0 : 0.5)
+         : (farmSheepSide < 0.0 ? 0.75 : 0.25);
+       float farmSheepLegFwd, farmSheepLegLift;
+       farmGait(farmSheepPhase + farmSheepQuarter, 0.64,
+         farmSheepLegFwd, farmSheepLegLift);
+       float farmSheepLeg = (1.0 - smoothstep(0.34, 0.44, position.y))
+         * smoothstep(0.10, 0.17, abs(position.x));
+       transformed.z += farmSheepLegFwd * 0.088 * farmSheepLeg * farmSheepMotion;
+       transformed.y += farmSheepLegLift * 0.043 * farmSheepLeg * farmSheepMotion;
+
+       float farmSheepWool = smoothstep(0.35, 0.48, position.y)
+         * (1.0 - smoothstep(0.80, 0.92, position.y));
+       float farmSheepRecoil = sin(farmSheepPhase * 6.283) * 0.006
+         * farmSheepMotion;
+       transformed.x *= 1.0 + farmSheepRecoil * farmSheepWool;
+       transformed.y -= farmSheepLegLift * 0.012 * farmSheepWool * farmSheepMotion;
+
+       float farmSheepHead = smoothstep(0.30, 0.50, position.z)
+         * smoothstep(0.48, 0.68, position.y);
+       float farmSheepGrazeAngle = farmSheepGraze * 0.92 * farmSheepHead;
+       vec2 farmSheepHeadOffset = vec2(transformed.z - 0.29, transformed.y - 0.64);
+       float farmSheepGrazeCos = cos(farmSheepGrazeAngle);
+       float farmSheepGrazeSin = sin(farmSheepGrazeAngle);
+       transformed.z = 0.29 + farmSheepHeadOffset.x * farmSheepGrazeCos
+         + farmSheepHeadOffset.y * farmSheepGrazeSin;
+       transformed.y = 0.64 - farmSheepHeadOffset.x * farmSheepGrazeSin
+         + farmSheepHeadOffset.y * farmSheepGrazeCos;
+
+       float farmSheepTail = (1.0 - smoothstep(-0.32, -0.15, position.z))
+         * smoothstep(0.48, 0.68, position.y);
+       transformed.x += sin(uAnimalTime * 4.1 - position.z * 5.0)
+         * 0.048 * farmSheepTail;
+       transformed.y += max(0.0, sin(uAnimalTime * 3.4)) * 0.014 * farmSheepTail;
+
+       float farmSheepEar = smoothstep(0.15, 0.22, abs(position.x))
+         * smoothstep(0.68, 0.79, position.y)
+         * smoothstep(0.42, 0.58, position.z);
+       transformed.y += max(0.0, sin(uAnimalTime * 5.3 + farmSheepSide * 1.9))
+         * 0.024 * farmSheepEar;`,
+    );
+  };
+  material.customProgramCacheKey = () => 'farmrise-sheep-motion-v1';
+
+  return {
+    material,
+    setTime(seconds): void {
+      time.value = seconds;
+    },
+    dispose(): void {
+      material.dispose();
+    },
+  };
+}
+
 /** Virtual fox rig: alternating paws, breathing head motion and a swishing plume. */
 export function createFoxMotionMaterial(base: THREE.MeshStandardMaterial): FoxMotionMaterial {
   const material = base.clone();

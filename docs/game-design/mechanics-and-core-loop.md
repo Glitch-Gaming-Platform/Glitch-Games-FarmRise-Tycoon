@@ -100,13 +100,13 @@ Everything below describes the code as it currently stands. It is not part of th
 | System | Current implementation | Primary owner |
 | --- | --- | --- |
 | Crops | four year-round crops plus three exclusive crops per season, with rarity returns, planting windows, soil draw, quality and freshness | `packages/shared/src/domain/crops.ts` |
-| Livestock | chickens/eggs and dairy cows/milk with feed, shelter and pasture constraints | `packages/shared/src/domain/animals.ts` |
-| Buildings | eight infrastructure types plus mill, creamery and preserve kitchen | `packages/shared/src/domain/buildings.ts` |
+| Livestock | chickens/eggs, sheep/wool and dairy cows/milk with feed, visible per-shelter capacity and stable nearest-available-shelter assignment | `packages/shared/src/domain/animals.ts`, `packages/shared/src/domain/shelters.ts` |
+| Buildings | ten infrastructure types plus mill, creamery and preserve kitchen | `packages/shared/src/domain/buildings.ts` |
 | Market | four behaviorally distinct buyers, trust, quality gates, deadlines, penalties and seeded offline offers | `packages/shared/src/domain/buyers.ts`, `game/career/ContractBoard.ts` |
 | Incidents | seven persisted incident definitions with named targets, severity, cooldowns and active responses | `packages/shared/src/domain/incidents.ts`, `game/events/IncidentDirector.ts` |
 | Land | one homestead and three purchasable gated parcels on the Millbrook estate | `packages/shared/src/domain/parcels.ts` |
 | Career | milestone stages, specialization, seasons, town projects, workers, finance and restructuring | `packages/shared/src/domain/`, `game/career/` |
-| Persistence | career save v2, v1 migration, scene hydration, local-first timed/irreversible-action autosave and server transition validation | `packages/shared/src/schemas/career.ts`, `game/platform/save/`, `server/src/services/saveValidation.ts` |
+| Persistence | career save v3, explicit v1/v2 migration, scene hydration, local-first timed/irreversible-action autosave and server transition validation | `packages/shared/src/schemas/career.ts`, `game/platform/save/`, `server/src/services/saveValidation.ts` |
 
 ## Pillars — the mechanism behind each
 

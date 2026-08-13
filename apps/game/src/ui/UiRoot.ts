@@ -18,6 +18,8 @@ import { MarketPanel, type MarketPanelCallbacks } from './panels/MarketPanel.js'
 import { BuildPanel, type BuildPanelCallbacks } from './panels/BuildPanel.js';
 import { CareerPanel, type CareerPanelCallbacks } from './panels/CareerPanel.js';
 import { TownPanel, type TownPanelCallbacks } from './panels/TownPanel.js';
+import { SeedPanel, type SeedPanelCallbacks } from './panels/SeedPanel.js';
+import { StoragePanel, type StoragePanelCallbacks } from './panels/StoragePanel.js';
 import { CoachMark } from './onboarding/CoachMark.js';
 import { OutcomeScreen, type OutcomeCallbacks } from './outcome/OutcomeScreen.js';
 import { AccountPanel, type AccountCallbacks } from './account/AccountPanel.js';
@@ -37,10 +39,12 @@ export interface UiRootOptions {
   readonly menu: MainMenuCallbacks;
   readonly pause: PauseMenuCallbacks;
   readonly settings: SettingsCallbacks;
+  readonly seed: SeedPanelCallbacks;
   readonly market: MarketPanelCallbacks;
   readonly build: BuildPanelCallbacks;
   readonly career: CareerPanelCallbacks;
   readonly town: TownPanelCallbacks;
+  readonly storage: StoragePanelCallbacks;
   readonly outcome: OutcomeCallbacks;
   readonly account: AccountCallbacks;
   readonly shortcuts: MenuShortcutCallbacks;
@@ -59,9 +63,11 @@ export class UiRoot {
    * time pressure the market decision depends on.
    */
   readonly market: MarketPanel;
+  readonly seed: SeedPanel;
   readonly build: BuildPanel;
   readonly career: CareerPanel;
   readonly town: TownPanel;
+  readonly storage: StoragePanel;
   readonly coach: CoachMark;
   readonly account: AccountPanel;
   readonly shortcuts: MenuShortcutDock;
@@ -72,7 +78,7 @@ export class UiRoot {
   readonly #screens = new Map<ScreenName, Screen>();
   readonly #layer: HTMLElement;
   #current: ScreenName = 'none';
-  #shortcutPanel: 'none' | 'market' | 'build' | 'career' | 'town' = 'none';
+  #shortcutPanel: 'none' | 'seed' | 'market' | 'build' | 'career' | 'town' | 'storage' = 'none';
   #shortcutsAvailable = false;
   #placingActive = false;
   /** Where "Back" from settings returns to. */
@@ -96,10 +102,12 @@ export class UiRoot {
 
     this.loading = new LoadingScreen(options.i18n);
     this.settings = new SettingsPanel(options.settings, options.i18n);
+    this.seed = new SeedPanel(options.seed, options.i18n);
     this.market = new MarketPanel(options.market, options.i18n);
     this.build = new BuildPanel(options.build, options.i18n);
     this.career = new CareerPanel(options.career, options.i18n);
     this.town = new TownPanel(options.town, options.i18n);
+    this.storage = new StoragePanel(options.storage, options.i18n);
     this.outcome = new OutcomeScreen(options.outcome, options.i18n);
     this.account = new AccountPanel(options.account, options.i18n);
     this.privacy = options.privacy
@@ -116,10 +124,12 @@ export class UiRoot {
     this.#register('outcome', this.outcome);
     this.#layer.append(
       this.hud.root,
+      this.seed.root,
       this.market.root,
       this.build.root,
       this.career.root,
       this.town.root,
+      this.storage.root,
       this.account.root,
       this.shortcuts.root,
     );
@@ -146,10 +156,12 @@ export class UiRoot {
     const inGame = name !== 'menu' && name !== 'loading' && name !== 'outcome';
     this.hud.root.hidden = !inGame;
     if (!inGame) {
+      this.seed.setVisible(false);
       this.market.setVisible(false);
       this.build.setVisible(false);
       this.career.setVisible(false);
       this.town.setVisible(false);
+      this.storage.setVisible(false);
       this.coach.hide();
       this.setPlacing(null);
     }
@@ -162,7 +174,9 @@ export class UiRoot {
     this.#syncShortcuts();
   }
 
-  setMenuShortcutPanel(panel: 'none' | 'market' | 'build' | 'career' | 'town'): void {
+  setMenuShortcutPanel(
+    panel: 'none' | 'seed' | 'market' | 'build' | 'career' | 'town' | 'storage',
+  ): void {
     this.#shortcutPanel = panel;
     this.#syncShortcuts();
   }

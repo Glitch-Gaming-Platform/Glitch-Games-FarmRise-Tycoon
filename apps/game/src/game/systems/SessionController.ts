@@ -10,7 +10,6 @@
  * needs: the thing that turns a keypress into a command.
  */
 import {
-  ANIMALS,
   STARTER_EXTENSION_PARCEL_ID,
   isMitigated,
   type BuildingKind,
@@ -31,6 +30,7 @@ import {
   buyLand,
   borrow,
   buyInsurance,
+  cancelStandingContract,
   collectStack,
   chooseSpecialization,
   cancelInsurance,
@@ -40,12 +40,15 @@ import {
   queueProcessing,
   repay,
   sellSpot,
+  setWorkerPriorities,
   startTownProject,
   useCarrier,
+  withdrawStored,
 } from '../world/FarmCommands.js';
 import type { Player } from '../player/Player.js';
 import type { PlayerController } from '../player/PlayerController.js';
 import type { IncidentDirector } from '../events/IncidentDirector.js';
+import type { InteractionController } from './InteractionController.js';
 import { PlacementController } from './PlacementController.js';
 import { OnboardingDirector, hasOnboardedBefore } from '../onboarding/OnboardingDirector.js';
 import { OnboardingAnimalBoost } from '../onboarding/OnboardingAnimalBoost.js';
@@ -53,7 +56,7 @@ import { OnboardingCropBoost } from '../onboarding/OnboardingCropBoost.js';
 import type { OnboardingContext } from '../onboarding/beats.js';
 import type { GameAction } from '../GameActions.js';
 
-export type PanelName = 'none' | 'market' | 'build' | 'career' | 'town';
+export type PanelName = 'none' | 'seed' | 'market' | 'build' | 'career' | 'town' | 'storage';
 
 export interface SessionEvents extends Record<string, unknown> {
   'session:panel': { panel: PanelName };
@@ -85,12 +88,17 @@ export class SessionController {
   #salesMade = 0;
   #reinvestments = 0;
   #incidentsResolved = 0;
+  #focusedProcessorBuildingId: string | null = null;
+  #focusedWorkerHutId: string | null = null;
+  #focusedShelterId: string | null = null;
+  #focusedStorageBuildingId: string | null = null;
   readonly #now: () => number;
 
   constructor(
     private readonly career: Career,
     private readonly player: Player,
     private readonly playerController: PlayerController,
+    private readonly interaction: InteractionController,
     private readonly incidents: IncidentDirector,
     private readonly careerDirector: CareerDirector,
     private readonly input: InputSystem<GameAction>,
@@ -118,10 +126,43 @@ export class SessionController {
     incidents.events.on('incident:resolved', () => {
       this.#incidentsResolved += 1;
     });
+    interaction.events.on(
+      'interaction:building-requested',
+      ({ buildingId, interaction: buildingAction }) => {
+        this.#clearBuildingFocus();
+        if (buildingAction === 'processing') this.#focusedProcessorBuildingId = buildingId;
+        if (buildingAction === 'workforce') this.#focusedWorkerHutId = buildingId;
+        if (buildingAction === 'livestock') this.#focusedShelterId = buildingId;
+        if (buildingAction === 'storage') this.#focusedStorageBuildingId = buildingId;
+        this.#setPanel(
+          buildingAction === 'storage'
+            ? 'storage'
+            : buildingAction === 'livestock'
+              ? 'build'
+              : 'career',
+        );
+      },
+    );
   }
 
   get panel(): PanelName {
     return this.#panel;
+  }
+
+  get focusedProcessorBuildingId(): string | null {
+    return this.#focusedProcessorBuildingId;
+  }
+
+  get focusedWorkerHutId(): string | null {
+    return this.#focusedWorkerHutId;
+  }
+
+  get focusedShelterId(): string | null {
+    return this.#focusedShelterId;
+  }
+
+  get focusedStorageBuildingId(): string | null {
+    return this.#focusedStorageBuildingId;
   }
 
   get contracts() {
@@ -129,6 +170,11 @@ export class SessionController {
   }
 
   openPanel(panel: PanelName): void {
+    this.#clearBuildingFocus();
+    this.#setPanel(panel);
+  }
+
+  #setPanel(panel: PanelName): void {
     if (this.#panel === panel) return;
     this.#panel = panel;
     // Opening a panel cancels a placement in progress: two modal cursors at
@@ -139,6 +185,15 @@ export class SessionController {
 
   togglePanel(panel: PanelName): void {
     this.openPanel(this.#panel === panel ? 'none' : panel);
+  }
+
+  selectSeed(cropId: string): void {
+    const result = this.interaction.selectCrop(cropId);
+    if (!result.ok) {
+      this.events.emit('session:refused', { action: 'selectSeed', reason: result.reason });
+      return;
+    }
+    this.openPanel('none');
   }
 
   // -- player-facing commands ---------------------------------------------
@@ -158,18 +213,27 @@ export class SessionController {
     });
   }
 
-  accept(offerId: string): void {
+  accept(offerId: string, recurring = false): void {
     const entry = this.board.available().find((candidate) => candidate.offer.id === offerId);
     if (!entry) {
       this.events.emit('session:refused', { action: 'accept', reason: 'That offer is gone.' });
       return;
     }
-    const result = acceptContract(this.career, entry.offer);
+    const result = acceptContract(this.career, entry.offer, recurring);
     if (!result.ok) {
       this.events.emit('session:refused', { action: 'accept', reason: result.reason });
       return;
     }
-    this.events.emit('session:career-changed', { action: 'acceptContract' });
+    this.events.emit('session:career-changed', {
+      action: recurring ? 'scheduleContract' : 'acceptContract',
+    });
+  }
+
+  cancelScheduledDelivery(contractId: string): void {
+    this.#reportCareerChange(
+      'cancelScheduledDelivery',
+      cancelStandingContract(this.career, contractId),
+    );
   }
 
   deliver(contractId: string, quantity: number): void {
@@ -194,7 +258,12 @@ export class SessionController {
   }
 
   purchaseAnimal(species = 'chicken'): void {
-    const result = buyAnimal(this.career, species, 1);
+    const tile = this.career.world.grid.worldToTile(this.player.position.x, this.player.position.z);
+    const result = buyAnimal(this.career, species, 1, {
+      tileX: tile.x,
+      tileZ: tile.z,
+      ...(this.#focusedShelterId ? { shelterId: this.#focusedShelterId } : {}),
+    });
     if (!result.ok) {
       this.events.emit('session:refused', { action: 'buyAnimal', reason: result.reason });
       return;
@@ -256,7 +325,49 @@ export class SessionController {
   }
 
   employ(role: string): void {
-    this.#reportCareerChange('hireWorker', hireWorker(this.career, role));
+    this.#reportCareerChange(
+      'hireWorker',
+      hireWorker(this.career, role, this.#focusedWorkerHutId ?? undefined),
+    );
+  }
+
+  prioritizeNext(workerId: string): void {
+    const worker = this.career.world.workforce.get(workerId);
+    if (!worker || worker.priorities.length < 2) {
+      this.events.emit('session:refused', {
+        action: 'setWorkerPriorities',
+        reason: worker
+          ? 'That worker has only one kind of job.'
+          : 'Nobody by that name works here.',
+      });
+      return;
+    }
+    const [first, ...rest] = worker.priorities;
+    this.#reportCareerChange(
+      'setWorkerPriorities',
+      setWorkerPriorities(this.career, workerId, [...rest, first!]),
+    );
+  }
+
+  withdrawFromStorage(itemId: string, quantity: number): void {
+    const buildingId = this.#focusedStorageBuildingId;
+    if (!buildingId) {
+      this.events.emit('session:refused', {
+        action: 'withdrawStorage',
+        reason: 'Open a storage building before taking goods.',
+      });
+      return;
+    }
+    const tile = this.career.world.grid.worldToTile(this.player.position.x, this.player.position.z);
+    const result = withdrawStored(this.career, buildingId, tile.x, tile.z, itemId, quantity);
+    if (!result.ok) {
+      this.events.emit('session:refused', {
+        action: 'withdrawStorage',
+        reason: result.reason,
+      });
+      return;
+    }
+    this.events.emit('session:hauled', { stored: 0, refused: 0 });
   }
 
   takeLoan(offerId: string): void {
@@ -352,6 +463,16 @@ export class SessionController {
     // Panel keys are read here rather than in InteractionController because
     // they are session-level, not plot-level. Placement swallows `cancel`
     // itself, so only close a panel when nothing is being placed.
+    if (this.input.wasPressed('cycleCrop')) {
+      if (this.#panel === 'seed') this.openPanel('none');
+      else if (
+        this.#panel === 'none' &&
+        !placementWasActive &&
+        this.interaction.seedSelectionTargetId()
+      ) {
+        this.openPanel('seed');
+      }
+    }
     if (this.input.wasPressed('openMarket')) this.togglePanel('market');
     if (this.input.wasPressed('openBuild')) this.togglePanel('build');
     if (this.input.wasPressed('openCareer')) this.togglePanel('career');
@@ -406,11 +527,14 @@ export class SessionController {
   }
 
   shelterFree(): number {
-    const used = this.career.world.animals.reduce(
-      (sum, group) => sum + group.count * (ANIMALS[group.species]?.shelterSlots ?? 1),
-      0,
-    );
-    return Math.max(0, this.career.world.shelterCapacity() - used);
+    if (this.#focusedShelterId) {
+      return Math.max(
+        0,
+        this.career.world.shelters.capacityFor(this.#focusedShelterId) -
+          this.career.world.shelterSlotsUsedAt(this.#focusedShelterId),
+      );
+    }
+    return this.career.world.maxShelterSlotsAvailable();
   }
 
   summary() {
@@ -423,6 +547,13 @@ export class SessionController {
       return;
     }
     this.events.emit('session:career-changed', { action });
+  }
+
+  #clearBuildingFocus(): void {
+    this.#focusedProcessorBuildingId = null;
+    this.#focusedWorkerHutId = null;
+    this.#focusedShelterId = null;
+    this.#focusedStorageBuildingId = null;
   }
 
   #onboardingContext(): OnboardingContext {

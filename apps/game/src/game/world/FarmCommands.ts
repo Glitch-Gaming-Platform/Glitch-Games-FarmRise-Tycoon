@@ -16,6 +16,7 @@ export { plant, tend, harvest, harvestForWorker, type HarvestOutcome } from './c
 export {
   depositCarried,
   collectStack,
+  withdrawStored,
   buyCarrier,
   useCarrier,
   parkCart,
@@ -33,9 +34,11 @@ export {
 export {
   sellSpot,
   spotQuote,
+  contractQuote,
   sellableInventory,
   sellableQuantity,
   acceptContract,
+  cancelStandingContract,
   deliverContract,
   failContract,
   offeredUnitPrice,
@@ -44,6 +47,7 @@ export {
 } from './commands/market.js';
 export {
   queueProcessing,
+  processableInventory,
   unloadProcessor,
   hireWorker,
   setWorkerPriorities,

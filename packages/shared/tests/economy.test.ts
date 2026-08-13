@@ -9,6 +9,7 @@ import {
   CROPS,
   advancePlot,
   addItems,
+  applyContractCommitmentBonus,
   asOrderId,
   asPlotId,
   canAfford,
@@ -71,6 +72,18 @@ describe('orders', () => {
   it('reports the premium over the spot price', () => {
     expect(orderPremium(order())).toBeGreaterThan(0);
     expect(spotValue('wheat', 5)).toBeLessThan(orderPayout(order()));
+  });
+
+  it('adds a 15-30% commitment bonus to the price already calculated', () => {
+    expect(applyContractCommitmentBonus(cents(100), 0)).toBe(115);
+    expect(applyContractCommitmentBonus(cents(100), 1)).toBe(130);
+    expect(applyContractCommitmentBonus(cents(100), 0.5)).toBe(123);
+  });
+
+  it('clamps invalid commitment samples to the published range', () => {
+    expect(applyContractCommitmentBonus(cents(100), -10)).toBe(115);
+    expect(applyContractCommitmentBonus(cents(100), 10)).toBe(130);
+    expect(applyContractCommitmentBonus(cents(100), Number.NaN)).toBe(115);
   });
 
   it('rejects fulfilment without enough goods', () => {

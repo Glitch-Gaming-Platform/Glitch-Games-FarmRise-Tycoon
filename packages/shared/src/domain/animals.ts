@@ -1,17 +1,16 @@
 /**
  * Animal definitions.
  *
- * The chicken exists to create the "sell the corn now, or feed it to something
- * that pays later" decision. The cow escalates exactly that decision: it eats
- * more, needs a fenced pasture and produces milk, which is worth little until
- * a creamery turns it into cheese - so buying one is a bet on building the
- * rest of the chain (docs/PROGRESSION_GAMEPLAY_PLAN.md §9).
+ * The chicken creates the first "sell the corn now, or feed it to something
+ * that pays later" decision. Sheep extend that corn chain after Stage 1 with
+ * slower, non-spoiling wool, while the cow escalates into clover, pasture and
+ * dairy processing (docs/PROGRESSION_GAMEPLAY_PLAN.md §9).
  */
 import { cents, type Cents } from './ids.js';
 import { secondsToTicks, type Ticks } from './time.js';
 
 /** The species that exist. Widened only by adding a member here. */
-export type AnimalSpecies = 'chicken' | 'cow';
+export type AnimalSpecies = 'chicken' | 'sheep' | 'cow';
 
 export interface AnimalDefinition {
   readonly id: AnimalSpecies;
@@ -56,6 +55,26 @@ export const ANIMALS: Readonly<Record<AnimalSpecies, AnimalDefinition>> = Object
     predatorVulnerability: 0.35,
     requiresUnlock: null,
     pastureTilesPerHead: 0.25,
+  },
+  sheep: {
+    id: 'sheep',
+    displayName: 'Sheep',
+    purchaseCost: cents(3_600),
+    producesItemId: 'wool',
+    produceDisplayName: 'Wool',
+    producePerCycle: 4,
+    // Wool is exactly twice the unit value of eggs, but takes much longer to
+    // arrive. Its zero spoilage is the reason to accept the slower turnover.
+    produceUnitPrice: cents(170),
+    produceStorageWeight: 1.25,
+    produceFreshnessDecayPerDay: 0,
+    cycleTicks: secondsToTicks(300),
+    feedItemId: 'corn',
+    feedPerCycle: 2,
+    shelterSlots: 2,
+    predatorVulnerability: 0.2,
+    requiresUnlock: 'animal_shelters',
+    pastureTilesPerHead: 2,
   },
   cow: {
     id: 'cow',

@@ -35,6 +35,7 @@ import { FieldModel } from './models/FieldModel.js';
 import { BuildingModel, storageContribution, type PlacedBuilding } from './models/BuildingModel.js';
 import { StoreModel, type StoreState } from './models/StoreModel.js';
 import { AnimalModel } from './models/AnimalModel.js';
+import { AnimalShelterModel } from './models/AnimalShelterModel.js';
 import { ProcessingModel } from './models/ProcessingModel.js';
 import { WorkerModel, type WorkBoard } from './models/WorkerModel.js';
 import { CarryModel } from './models/CarryModel.js';
@@ -104,6 +105,7 @@ export class FarmWorld {
   readonly structures: BuildingModel;
   readonly stores: StoreModel;
   readonly livestock: AnimalModel;
+  readonly shelters: AnimalShelterModel;
   readonly processing: ProcessingModel;
   readonly workforce: WorkerModel;
   readonly carry = new CarryModel();
@@ -124,6 +126,7 @@ export class FarmWorld {
     this.structures = new BuildingModel(this.grid);
     this.stores = new StoreModel();
     this.livestock = new AnimalModel();
+    this.shelters = new AnimalShelterModel(level, this.grid, this.structures);
     this.processing = new ProcessingModel();
     this.workforce = new WorkerModel();
 
@@ -252,13 +255,8 @@ export class FarmWorld {
       producedUnits += entry.quantity;
       // This tile is reserved but walkable, so a crop or newly placed building
       // cannot hide the basket and the yard store cannot mask its interaction.
-      this.dropAt(
-        this.level.animalProductDrop.tileX,
-        this.level.animalProductDrop.tileZ,
-        entry.itemId,
-        entry.quantity,
-        1,
-      );
+      const drop = this.shelters.productDrop(entry.shelterId);
+      this.dropAt(drop.tileX, drop.tileZ, entry.itemId, entry.quantity, 1);
       // Emitting after the stack exists keeps an already-open market/HUD from
       // refreshing one operation too early and missing the new product.
       this.events.emit('world:produce', { itemId: entry.itemId, quantity: entry.quantity });
@@ -332,12 +330,14 @@ export class FarmWorld {
    * untouched; only field baskets move to the reserved collection point.
    */
   relocateAnimalProductBaskets(): number {
-    const drop = this.level.animalProductDrop;
-    const targetId = `stack-${drop.tileX}-${drop.tileZ}`;
+    const drops = this.shelters.allProductDrops();
+    const validDropIds = new Set(drops.map((drop) => `stack-${drop.tileX}-${drop.tileZ}`));
     let moved = 0;
 
     for (const store of [...this.stores.stores]) {
-      if (!store.id.startsWith('stack-') || store.id === targetId) continue;
+      if (!store.id.startsWith('stack-') || validDropIds.has(store.id)) continue;
+      const shelter = this.shelters.nearest(store.tileX, store.tileZ);
+      const drop = this.shelters.productDrop(shelter.id);
       for (const [itemId, quantity] of Object.entries(store.items)) {
         if (quantity <= 0 || getItem(itemId)?.category !== 'animal_product') continue;
         const withdrawn = this.stores.withdraw(store.id, itemId, quantity);
@@ -392,13 +392,30 @@ export class FarmWorld {
     }
   }
 
-  /** Shelter capacity is baseline 4, plus 2 per completed fence. */
+  /** Shelter capacity comes from the inherited coop, purchased shelters and fencing. */
   shelterCapacity(): number {
-    return 4 + this.structures.completed('fence').length * 2;
+    return this.shelters.capacity();
   }
 
   animalSlotsUsed(): number {
     return this.livestock.usedSlots();
+  }
+
+  shelterSlotsUsedAt(shelterId: string): number {
+    return this.livestock.usedSlotsAt(shelterId);
+  }
+
+  shelterSlotsAvailableAt(shelterId: string): number {
+    return Math.max(
+      0,
+      this.shelters.capacityFor(shelterId) - this.livestock.usedSlotsAt(shelterId),
+    );
+  }
+
+  maxShelterSlotsAvailable(): number {
+    return this.shelters
+      .all()
+      .reduce((maximum, shelter) => Math.max(maximum, this.shelterSlotsAvailableAt(shelter.id)), 0);
   }
 
   // -- persistence ---------------------------------------------------------

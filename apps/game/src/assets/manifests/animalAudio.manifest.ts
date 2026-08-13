@@ -1,0 +1,78 @@
+/**
+ * Three-call reference library for the farm animals shown in the supplied
+ * design sheet. Implemented species preload their two extra calls; animals
+ * that do not exist in the simulation remain lazy until a future feature asks
+ * AssetLoader for one of these stable ids.
+ */
+import type { AssetEntry } from './types.js';
+
+const REFERENCE_ANIMAL_AUDIO = [
+  ['animal.cow_2', 'animal_cow_2.mp3', 'preload', 19_793, 1.59],
+  ['animal.cow_3', 'animal_cow_3.mp3', 'preload', 19_793, 1.59],
+  ['animal.pig_1', 'animal_pig_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.pig_2', 'animal_pig_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.pig_3', 'animal_pig_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.horse_1', 'animal_horse_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.horse_2', 'animal_horse_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.horse_3', 'animal_horse_3.mp3', 'lazy', 19_793, 1.576],
+  ['animal.goat_1', 'animal_goat_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.goat_2', 'animal_goat_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.goat_3', 'animal_goat_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.pigeon_1', 'animal_pigeon_1.mp3', 'lazy', 19_793, 1.577],
+  ['animal.pigeon_2', 'animal_pigeon_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.pigeon_3', 'animal_pigeon_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.rabbit_1', 'animal_rabbit_1.mp3', 'lazy', 19_480, 1.547],
+  ['animal.rabbit_2', 'animal_rabbit_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.rabbit_3', 'animal_rabbit_3.mp3', 'lazy', 14_151, 1.113],
+  ['animal.sheep_2', 'animal_sheep_2.mp3', 'preload', 19_793, 1.59],
+  ['animal.sheep_3', 'animal_sheep_3.mp3', 'preload', 19_793, 1.59],
+  ['animal.deer_1', 'animal_deer_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.deer_2', 'animal_deer_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.deer_3', 'animal_deer_3.mp3', 'lazy', 19_793, 1.589],
+  ['animal.hen_2', 'animal_hen_2.mp3', 'preload', 19_793, 1.59],
+  ['animal.hen_3', 'animal_hen_3.mp3', 'preload', 19_480, 1.545],
+  ['animal.rooster_1', 'animal_rooster_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.rooster_2', 'animal_rooster_2.mp3', 'lazy', 19_480, 1.562],
+  ['animal.rooster_3', 'animal_rooster_3.mp3', 'lazy', 19_166, 1.518],
+  ['animal.turkey_1', 'animal_turkey_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.turkey_2', 'animal_turkey_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.turkey_3', 'animal_turkey_3.mp3', 'lazy', 19_793, 1.589],
+  ['animal.dove_1', 'animal_dove_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.dove_2', 'animal_dove_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.dove_3', 'animal_dove_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.bee_1', 'animal_bee_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.bee_2', 'animal_bee_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.bee_3', 'animal_bee_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.duck_1', 'animal_duck_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.duck_2', 'animal_duck_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.duck_3', 'animal_duck_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.duckling_1', 'animal_duckling_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.duckling_2', 'animal_duckling_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.duckling_3', 'animal_duckling_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.dog_1', 'animal_dog_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.dog_2', 'animal_dog_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.dog_3', 'animal_dog_3.mp3', 'lazy', 19_166, 1.531],
+  ['animal.cat_1', 'animal_cat_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.cat_2', 'animal_cat_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.cat_3', 'animal_cat_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.donkey_1', 'animal_donkey_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.donkey_2', 'animal_donkey_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.donkey_3', 'animal_donkey_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.parrot_1', 'animal_parrot_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.parrot_2', 'animal_parrot_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.parrot_3', 'animal_parrot_3.mp3', 'lazy', 19_793, 1.59],
+  ['animal.chick_1', 'animal_chick_1.mp3', 'lazy', 19_793, 1.59],
+  ['animal.chick_2', 'animal_chick_2.mp3', 'lazy', 19_793, 1.59],
+  ['animal.chick_3', 'animal_chick_3.mp3', 'lazy', 19_793, 1.59],
+] as const;
+
+export const REFERENCE_ANIMAL_AUDIO_ASSETS: readonly AssetEntry[] = REFERENCE_ANIMAL_AUDIO.map(
+  ([id, file, phase, bytes, durationSeconds]): AssetEntry => ({
+    id,
+    kind: 'audio',
+    url: `assets/audio/sfx/${file}`,
+    phase,
+    bytes,
+    options: { durationSeconds, bus: 'sfx' },
+  }),
+);

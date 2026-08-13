@@ -62,6 +62,7 @@ describe('game localization', () => {
       'settings.title',
       'hud.money',
       'interaction.harvest',
+      'seed.title',
     ];
 
     for (const locale of SUPPORTED_LOCALES) {
@@ -95,7 +96,7 @@ describe('game localization', () => {
     const i18n = await createGameLocalization({ initialLocale: 'es', detect: false });
 
     expect(localizeGameText(i18n, 'Plant Wheat')).toBe('Plantar Trigo');
-    expect(localizeGameText(i18n, 'Change seed')).toBe('Cambiar semilla');
+    expect(localizeGameText(i18n, 'Choose seed')).toBe('Cambiar semilla');
     expect(localizeGameText(i18n, 'Put down (4)')).toBe('Dejar (4)');
   });
 });

@@ -5,7 +5,7 @@
  * mass a player should collide with (roof overhangs and the coop ramp are not
  * walls). They rasterise once into TileGrid's 0.5 m collision mask.
  */
-import { normalizeBuildingRotation, type BuildingKind } from '@farmrise/shared';
+import { buildingFootprint, normalizeBuildingRotation, type BuildingKind } from '@farmrise/shared';
 import type { TileGrid } from '@engine/physics/TileGrid.js';
 
 interface CollisionRect {
@@ -16,12 +16,6 @@ interface CollisionRect {
   readonly rotationY?: number;
 }
 
-const BUILDING_COLLIDERS: Readonly<Partial<Record<BuildingKind, readonly CollisionRect[]>>> = {
-  // Barns already block their exact 2x2 tile footprint for pathfinding too.
-  irrigation: [{ offsetX: 0.11, offsetZ: 0.22, width: 1.2, depth: 1.4 }],
-  fence: [{ width: 1.96, depth: 0.2 }],
-};
-
 const SHELTER_COLLIDERS: readonly CollisionRect[] = [
   // Main coop walls. The front ramp remains walkable.
   { width: 2.7, depth: 2.3 },
@@ -30,6 +24,15 @@ const SHELTER_COLLIDERS: readonly CollisionRect[] = [
 ];
 
 const TROUGH_COLLIDER: CollisionRect = { width: 1.1, depth: 0.48, rotationY: -0.28 };
+const BUILDABLE_TROUGH_COLLIDER: CollisionRect = { width: 1.1, depth: 0.48 };
+
+const BUILDING_COLLIDERS: Readonly<Partial<Record<BuildingKind, readonly CollisionRect[]>>> = {
+  // Barns already block their exact 2x2 tile footprint for pathfinding too.
+  irrigation: [{ offsetX: 0.11, offsetZ: 0.22, width: 1.2, depth: 1.4 }],
+  fence: [{ width: 1.96, depth: 0.2 }],
+  animal_shelter: SHELTER_COLLIDERS,
+  water_trough: [BUILDABLE_TROUGH_COLLIDER],
+};
 
 export function addBuildingCollision(
   grid: TileGrid,
@@ -40,7 +43,12 @@ export function addBuildingCollision(
 ): void {
   const profiles = BUILDING_COLLIDERS[kind];
   if (!profiles) return;
-  const center = grid.tileToWorld(tileX, tileZ);
+  const footprint = buildingFootprint(kind, rotation);
+  const origin = grid.tileToWorld(tileX, tileZ);
+  const center = {
+    x: origin.x + ((footprint.width - 1) * grid.tileSize) / 2,
+    z: origin.z + ((footprint.depth - 1) * grid.tileSize) / 2,
+  };
   const rotationY = normalizeBuildingRotation(rotation) * (Math.PI / 2);
   const cos = Math.cos(rotationY);
   const sin = Math.sin(rotationY);

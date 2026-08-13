@@ -1,5 +1,5 @@
 /**
- * Transition validation for career save v2.
+ * Transition validation for career save v3.
  *
  * Each helper owns one state domain. This is intentionally not a second game
  * simulation: it rejects impossible transitions while the shared command
@@ -27,19 +27,24 @@ import {
   STARTER_ANIMAL_PRODUCT_DROP,
   STARTER_BLOCKED_TILES,
   STARTER_SHELTER,
+  STARTER_SHELTER_ID,
   YARD_STORE_ID,
+  animalShelterProductDropTile,
   bedsForParcels,
   buildingFootprint,
   cents,
   claimMilestone,
+  hasBuildingAccess,
   getParcel,
   getWorkerRole,
   loadWeight,
-  normalizeEstateLayout,
+  normalizeCareerCompatibility,
   parcelAt,
   processorBuildCost,
   prosperityForDelivery,
   requireCrop,
+  shelterCapacitiesForBuildings,
+  shelterCapacityForBuildings,
   storageUsed,
   townStageFor,
   validateLandPurchase,
@@ -67,8 +72,8 @@ export function validateSaveTransition(
   next: SaveState,
   maxAllowedTick: number,
 ): ValidationOutcome {
-  previous = normalizeEstateLayout(previous).state;
-  next = normalizeEstateLayout(next).state;
+  previous = normalizeCareerCompatibility(previous).state;
+  next = normalizeCareerCompatibility(next).state;
   if (next.careerId !== previous.careerId) return reject('Career id changed.');
   if (next.seed !== previous.seed) return reject('Career seed changed.');
   if (next.tick < previous.tick) return reject('Save tick went backwards.');
@@ -392,8 +397,10 @@ function validateSite(
   if (!land.ok) return land;
   const plots = validatePlots(previous, next, elapsedTicks);
   if (!plots.ok) return plots;
-  const buildings = validateBuildings(previous, next, career.unlocks, elapsedTicks);
+  const buildings = validateBuildings(previous, next, career, elapsedTicks);
   if (!buildings.ok) return buildings;
+  const animals = validateAnimals(previous, next, career.unlocks);
+  if (!animals.ok) return animals;
   const stores = validateStores(next);
   if (!stores.ok) return stores;
   const carry = validateCarry(previous, next, career.unlocks);
@@ -460,7 +467,7 @@ function validatePlots(
 function validateBuildings(
   previous: FarmSiteSaveState,
   next: FarmSiteSaveState,
-  unlocks: readonly string[],
+  career: CareerSaveState,
   elapsedTicks: number,
 ): ValidationOutcome {
   const previousById = new Map(previous.buildings.map((building) => [building.id, building]));
@@ -476,15 +483,19 @@ function validateBuildings(
   ]);
 
   for (const building of next.buildings) {
+    if (building.id === STARTER_SHELTER_ID) {
+      return reject(`Building id ${STARTER_SHELTER_ID} is reserved for the inherited shelter.`);
+    }
     if (ids.has(building.id)) return reject(`Building ${building.id} is duplicated.`);
     ids.add(building.id);
     const kind = building.kind as BuildingKind;
     const definition = BUILDINGS[kind];
-    if (definition.requiresUnlock && !unlocks.includes(definition.requiresUnlock)) {
+    const before = previousById.get(building.id);
+    const existingContractProcessor = Boolean(PROCESSORS[kind as ProcessorKind] && before);
+    if (!hasBuildingAccess(kind, career.unlocks, career.contracts) && !existingContractProcessor) {
       return reject(`${definition.displayName} was built before it was unlocked.`);
     }
 
-    const before = previousById.get(building.id);
     if (before) {
       if (
         before.kind !== building.kind ||
@@ -500,6 +511,10 @@ function validateBuildings(
       if (before.remainingBuildTicks - building.remainingBuildTicks > elapsedTicks + 1) {
         return reject(`Building ${building.id} completed faster than time passed.`);
       }
+    } else if (
+      building.remainingBuildTicks < Math.max(0, definition.buildTicks - elapsedTicks - 1)
+    ) {
+      return reject(`Building ${building.id} completed faster than time passed.`);
     }
 
     const footprint = buildingFootprint(kind, building.rotation);
@@ -519,11 +534,120 @@ function validateBuildings(
         occupied.add(key);
       }
     }
+
+    if (kind === 'animal_shelter') {
+      const drop = animalShelterProductDropTile(building.tileX, building.tileZ, building.rotation);
+      const key = tileKey(drop.tileX, drop.tileZ);
+      const parcel = parcelAt(drop.tileX, drop.tileZ);
+      if (!parcel || !next.ownedParcelIds.includes(parcel.id)) {
+        return reject(`Building ${building.id} has a product area outside owned land.`);
+      }
+      if (bedTiles.has(key) || blocked.has(key)) {
+        return reject(`Building ${building.id} has a product area on a protected tile.`);
+      }
+      if (occupied.has(key)) {
+        return reject(`Building ${building.id} has an obstructed product area at tile ${key}.`);
+      }
+      occupied.add(key);
+    }
   }
   if (previous.buildings.some((building) => !ids.has(building.id))) {
     return reject('A building disappeared.');
   }
   return OK;
+}
+
+function validateAnimals(
+  previous: FarmSiteSaveState,
+  next: FarmSiteSaveState,
+  unlocks: readonly string[],
+): ValidationOutcome {
+  const previousById = new Map(previous.animals.map((group) => [group.id, group]));
+  const buildings = new Map(next.buildings.map((building) => [building.id, building]));
+  const ids = new Set<string>();
+  let usedSlots = 0;
+  const usedByShelter = new Map<string, number>();
+  const previousUsedByShelter = animalSlotsByShelter(previous);
+
+  for (const group of next.animals) {
+    if (ids.has(group.id)) return reject(`Animal group ${group.id} is duplicated.`);
+    ids.add(group.id);
+
+    const species = group.species as AnimalSpecies;
+    const definition = ANIMALS[species];
+    if (!definition) return reject(`Animal group ${group.id} has an unknown species.`);
+    if (definition.requiresUnlock && !unlocks.includes(definition.requiresUnlock)) {
+      return reject(`${definition.displayName} was bought before it was unlocked.`);
+    }
+
+    const before = previousById.get(group.id);
+    if (
+      before &&
+      (before.species !== group.species ||
+        before.shelterId !== group.shelterId ||
+        before.tileX !== group.tileX ||
+        before.tileZ !== group.tileZ)
+    ) {
+      return reject(`Animal group ${group.id} changed species or shelter.`);
+    }
+
+    if (group.shelterId === STARTER_SHELTER_ID) {
+      if (group.tileX !== STARTER_SHELTER.tileX || group.tileZ !== STARTER_SHELTER.tileZ) {
+        return reject(`Animal group ${group.id} does not match the inherited shelter.`);
+      }
+    } else {
+      const shelter = buildings.get(group.shelterId);
+      if (
+        !shelter ||
+        shelter.kind !== 'animal_shelter' ||
+        shelter.remainingBuildTicks > 0 ||
+        group.tileX !== shelter.tileX ||
+        group.tileZ !== shelter.tileZ
+      ) {
+        return reject(`Animal group ${group.id} is not assigned to a completed shelter.`);
+      }
+    }
+
+    const groupSlots = group.count * definition.shelterSlots;
+    usedSlots += groupSlots;
+    usedByShelter.set(group.shelterId, (usedByShelter.get(group.shelterId) ?? 0) + groupSlots);
+  }
+
+  if (previous.animals.some((group) => !ids.has(group.id))) {
+    return reject('An animal group disappeared.');
+  }
+  if (usedSlots > shelterCapacityForBuildings(next.buildings)) {
+    return reject('Livestock exceeds completed shelter capacity.');
+  }
+  const capacities = shelterCapacitiesForBuildings(next.buildings, {
+    id: STARTER_SHELTER_ID,
+    tileX: STARTER_SHELTER.tileX,
+    tileZ: STARTER_SHELTER.tileZ,
+  });
+  for (const [shelterId, used] of usedByShelter) {
+    const capacity = capacities[shelterId] ?? 0;
+    const previousUsed = previousUsedByShelter.get(shelterId) ?? 0;
+    // Save v3 originally enforced only site-wide capacity. Preserve an old
+    // overfilled assignment, but never allow a transition to increase that
+    // shelter's overage or create a new one.
+    if (used > capacity && used > previousUsed) {
+      return reject(`Livestock exceeds capacity at shelter ${shelterId}.`);
+    }
+  }
+  return OK;
+}
+
+function animalSlotsByShelter(site: FarmSiteSaveState): Map<string, number> {
+  const used = new Map<string, number>();
+  for (const group of site.animals) {
+    const definition = ANIMALS[group.species as AnimalSpecies];
+    if (!definition) continue;
+    used.set(
+      group.shelterId,
+      (used.get(group.shelterId) ?? 0) + group.count * definition.shelterSlots,
+    );
+  }
+  return used;
 }
 
 function validateStores(site: FarmSiteSaveState): ValidationOutcome {
@@ -611,6 +735,13 @@ function validateWorkers(
     const role = getWorkerRole(worker.role);
     if (!role || loadWeight(worker.carrying) > role.carryCapacity) {
       return reject(`Worker ${worker.id} is carrying an impossible load.`);
+    }
+    if (
+      worker.priorities.length !== role.tasks.length ||
+      new Set(worker.priorities).size !== worker.priorities.length ||
+      worker.priorities.some((priority) => !role.tasks.includes(priority as never))
+    ) {
+      return reject(`Worker ${worker.id} has an invalid task priority list.`);
     }
   }
   return OK;

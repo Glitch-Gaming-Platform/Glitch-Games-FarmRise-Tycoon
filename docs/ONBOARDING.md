@@ -113,7 +113,7 @@ seconds, the hint points directly at the gold/orange colour and the Harvest prom
 | Mechanic | Prerequisite | Taught by | Safe practice | Reinforcement | Mastery signal | Fallback hint |
 | --- | --- | --- | --- | --- | --- | --- |
 | Movement | none | Coach + key caps or joystick label | Empty farm, no threats | Every subsequent beat | Reaches a bed | Desktop names WASD; mobile names the joystick. |
-| Planting | movement | Coach + proximity prompt | 6 beds, 90 s grace before events | Repeated each cycle | Any plot planted | Desktop: `E`; mobile: **Work**. Seed changes crop. |
+| Planting | movement | Coach + proximity prompt | 6 beds, 90 s grace before events | Repeated each cycle | Any plot planted | Desktop: `E`; mobile: **Work**. `Q`/**Seed** opens the seasonal seed menu. |
 | Tending | planting | Coach; same contextual action | Cannot fail; tending only helps | Yield visibly higher | tendCount > 0 | Use `E` or **Work** on the same bed again. |
 | Watering | first planted bed | Proximity water bar with a countdown, plus the Tend prompt | Bars only show within reach; irrigation reads as "handled" | Every unirrigated bed | Water restored by tending | The bar says "dry in 40s" before it says "thirsty". |
 | Growth stages | planting | The art itself — a hue journey to gold; the first watered crop demonstrates it in about three simulation seconds | Watching costs nothing | Every crop, forever | Harvests at stage 4 | "When the prompt says Harvest, press E." |
@@ -160,7 +160,7 @@ into a two-by-two upper-left group. Clicking an icon or pressing the shown lette
 panel. The dock hides while a panel or exclusive screen is open, so menu controls are never
 duplicated.
 
-**Checkpointing.** Career save v2 is local-first and hydrated back into the active scene. A timed
+**Checkpointing.** Career save v3 is local-first and hydrated back into the active scene. A timed
 autosave covers ordinary play, irreversible choices save immediately, and `pagehide` performs a
 synchronous local checkpoint. Signed-in saves add optimistic-concurrency account durability, while a
 validated Glitch launch restores its verified cloud slot before choosing the career and carries the

@@ -41,6 +41,7 @@ import { createIncidentReviewCareer } from '@game/debug/incidentReview.js';
 import { bindRuntimeAnalytics } from './bindRuntimeAnalytics.js';
 import { createAnalyticsRuntime } from './createAnalytics.js';
 import { createGameLocalization } from '@ui/i18n/gameI18n.js';
+import { sellableQuantity } from '@game/world/FarmCommands.js';
 
 export interface StartGameOptions {
   readonly container: HTMLElement;
@@ -184,21 +185,29 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       },
       onQuit: () => machine.transitionTo('menu', 'ui-quit'),
     },
+    seed: {
+      onSelectSeed: (cropId) => activeScene?.session?.selectSeed(cropId),
+      onClose: () => activeScene?.session?.openPanel('none'),
+    },
     market: {
       onSellSpot: (itemId, quantity) => activeScene?.session?.sell(itemId, quantity),
-      // One button for two intents: an id from the board is an offer to take,
-      // anything else is a promise already made and now being delivered.
-      onFulfil: (orderId, action) => {
+      onContract: (orderId, action) => {
         const session = activeScene?.session;
         if (!session) return;
-        if (action === 'accept') {
-          session.accept(orderId);
+        if (action === 'accept' || action === 'schedule') {
+          session.accept(orderId, action === 'schedule');
+          return;
+        }
+        if (action === 'cancel') {
+          session.cancelScheduledDelivery(orderId);
           return;
         }
         const contract = activeScene?.career?.contracts.find((entry) => entry.id === orderId);
         if (contract) {
           const outstanding = contract.quantity - contract.delivered;
-          const held = activeScene?.career?.world.stores.totalOf(contract.itemId) ?? 0;
+          const held = activeScene?.career
+            ? sellableQuantity(activeScene.career, contract.itemId)
+            : 0;
           session.deliver(orderId, Math.min(held, outstanding));
         }
       },
@@ -217,6 +226,7 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
       onQueueProcessing: (buildingId, recipeId) =>
         activeScene?.session?.queueBatch(buildingId, recipeId),
       onHireWorker: (role) => activeScene?.session?.employ(role),
+      onPrioritizeWorker: (workerId) => activeScene?.session?.prioritizeNext(workerId),
       onTakeLoan: (offerId) => activeScene?.session?.takeLoan(offerId),
       onRepayLoan: (loanId, amount) => activeScene?.session?.repayLoan(loanId, amount),
       onBuyInsurance: (policyId) => activeScene?.session?.insure(policyId),
@@ -225,6 +235,10 @@ export async function startGame(options: StartGameOptions): Promise<RunningGame>
     },
     town: {
       onStartProject: (projectId) => activeScene?.session?.fundTownProject(projectId),
+      onClose: () => activeScene?.session?.openPanel('none'),
+    },
+    storage: {
+      onTake: (itemId, quantity) => activeScene?.session?.withdrawFromStorage(itemId, quantity),
       onClose: () => activeScene?.session?.openPanel('none'),
     },
     account: {

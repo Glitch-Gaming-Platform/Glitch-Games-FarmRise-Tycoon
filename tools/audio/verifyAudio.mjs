@@ -5,6 +5,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const SFX_ROOT = path.join(ROOT, 'apps/game/public/assets/audio/sfx');
 const MUSIC_ROOT = path.join(ROOT, 'apps/game/public/assets/audio/music');
 const REPORT_PATH = path.join(ROOT, 'art/audio/verification_report.json');
 const SAMPLE_RATE = 48_000;
@@ -12,12 +13,24 @@ const CHANNELS = 2;
 const EDGE_WINDOW_FRAMES = Math.round(SAMPLE_RATE * 0.1);
 const SILENCE_THRESHOLD = 1e-4;
 const MINIMUM_LOOP_SECONDS = 240;
+const SFX_SAMPLE_RATE = 44_100;
+const SFX_CHANNELS = 1;
+const SFX_TAIL_FRAMES = Math.round(SFX_SAMPLE_RATE * 0.075);
+const SFX_ACTIVITY_FRAMES = Math.round(SFX_SAMPLE_RATE * 0.01);
+const MINIMUM_SFX_ACTIVITY_DB = -22;
+const MAXIMUM_SFX_TAIL_DB = -25;
 
-const files = (await readdir(MUSIC_ROOT)).filter((file) => file.endsWith('.mp3')).sort();
-const tracks = files.map((file) => inspectTrack(path.join(MUSIC_ROOT, file)));
-const failures = tracks.flatMap((track) =>
-  track.failures.map((failure) => `${track.file}: ${failure}`),
-);
+const musicFiles = (await readdir(MUSIC_ROOT)).filter((file) => file.endsWith('.mp3')).sort();
+const tracks = musicFiles.map((file) => inspectTrack(path.join(MUSIC_ROOT, file)));
+const sfxFiles = (await readdir(SFX_ROOT)).filter((file) => file.endsWith('.mp3')).sort();
+const soundEffects = sfxFiles.map((file) => inspectSoundEffect(path.join(SFX_ROOT, file)));
+const failures = tracks
+  .flatMap((track) => track.failures.map((failure) => `${track.file}: ${failure}`))
+  .concat(
+    soundEffects.flatMap((effect) =>
+      effect.failures.map((failure) => `${effect.file}: ${failure}`),
+    ),
+  );
 
 const report = {
   verifiedAt: new Date().toISOString(),
@@ -27,8 +40,11 @@ const report = {
     maximumNearSilentRunMs: 5,
     minimumEdgeRmsDb: -60,
     maximumEndFadeDb: -18,
+    minimumSfxActivityDb: MINIMUM_SFX_ACTIVITY_DB,
+    maximumSfxTailDb: MAXIMUM_SFX_TAIL_DB,
   },
   tracks,
+  soundEffects,
   passed: failures.length === 0,
 };
 
@@ -40,10 +56,67 @@ for (const track of tracks) {
       `end-fade=${track.endFadeDb.toFixed(1)}dB`,
   );
 }
+log(
+  `${soundEffects.length} sound effects: minimum activity ${Math.min(...soundEffects.map((effect) => effect.maximumActivityRmsDb)).toFixed(1)}dB, ` +
+    `maximum tail ${Math.max(...soundEffects.map((effect) => effect.tailRmsDb)).toFixed(1)}dB`,
+);
 log(`Wrote ${path.relative(ROOT, REPORT_PATH)}`);
 
 if (failures.length > 0) {
   throw new Error(`Audio loop verification failed:\n${failures.join('\n')}`);
+}
+
+function inspectSoundEffect(file) {
+  const decoded = run(
+    'ffmpeg',
+    [
+      '-hide_banner',
+      '-loglevel',
+      'error',
+      '-i',
+      file,
+      '-f',
+      'f32le',
+      '-ac',
+      String(SFX_CHANNELS),
+      '-ar',
+      String(SFX_SAMPLE_RATE),
+      '-',
+    ],
+    null,
+  );
+  const sampleCount = Math.floor(decoded.stdout.byteLength / Float32Array.BYTES_PER_ELEMENT);
+  const aligned = decoded.stdout.subarray(0, sampleCount * Float32Array.BYTES_PER_ELEMENT);
+  const samples = new Float32Array(aligned.buffer, aligned.byteOffset, sampleCount);
+  const durationSeconds = samples.length / SFX_SAMPLE_RATE;
+  let maximumActivityRms = 0;
+  for (let start = 0; start < samples.length; start += SFX_ACTIVITY_FRAMES) {
+    maximumActivityRms = Math.max(
+      maximumActivityRms,
+      monoRms(samples, start, Math.min(samples.length, start + SFX_ACTIVITY_FRAMES)),
+    );
+  }
+  const tailRms = monoRms(samples, Math.max(0, samples.length - SFX_TAIL_FRAMES), samples.length);
+  const maximumActivityRmsDb = toDb(maximumActivityRms);
+  const tailRmsDb = toDb(tailRms);
+  const failures = [];
+  if (maximumActivityRmsDb < MINIMUM_SFX_ACTIVITY_DB) {
+    failures.push(
+      `maximum 10ms activity ${maximumActivityRmsDb.toFixed(1)}dB is below ${MINIMUM_SFX_ACTIVITY_DB}dB`,
+    );
+  }
+  if (tailRmsDb > MAXIMUM_SFX_TAIL_DB) {
+    failures.push(
+      `final 75ms tail ${tailRmsDb.toFixed(1)}dB exceeds ${MAXIMUM_SFX_TAIL_DB}dB and may be truncated`,
+    );
+  }
+  return {
+    file: path.basename(file),
+    durationSeconds,
+    maximumActivityRmsDb,
+    tailRmsDb,
+    failures,
+  };
 }
 
 function inspectTrack(file) {
@@ -141,6 +214,15 @@ function rms(samples, startFrame, endFrame) {
     }
   }
   return count === 0 ? 0 : Math.sqrt(sum / count);
+}
+
+function monoRms(samples, start, end) {
+  let sum = 0;
+  for (let index = start; index < end; index += 1) {
+    const value = samples[index] ?? 0;
+    sum += value * value;
+  }
+  return end <= start ? 0 : Math.sqrt(sum / (end - start));
 }
 
 function sampleAt(samples, frame, channel) {
