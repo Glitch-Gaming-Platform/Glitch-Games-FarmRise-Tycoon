@@ -45,8 +45,8 @@ export function upkeepForTicks(buildings: readonly BuildingKind[], dtTicks: Tick
   return cents((perDay * dtTicks) / GAME_DAY_TICKS);
 }
 
-/** Starting money for a new save. Enough for roughly two wheat cycles plus a road. */
-export const STARTING_BALANCE: Cents = cents(5000);
+/** Starting money for a new save. Enough for early seed, animal and building choices. */
+export const STARTING_BALANCE: Cents = cents(7500);
 
 /**
  * Sanity ceiling used by the server as a cheap anti-cheat heuristic: no

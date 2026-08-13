@@ -16,6 +16,7 @@ import {
   ANIMALS,
   bedsForParcels,
   careerSaveStateSchema,
+  cents,
   isUntouchedCareer,
   newCareer,
   newCareerSite,
@@ -45,7 +46,9 @@ describe('newCareer', () => {
 
   it('starts with the documented balance and no debt', () => {
     const career = newCareer({ careerId: 'career-1' });
-    expect(career.balance).toBe(STARTING_BALANCE);
+    expect(STARTING_BALANCE).toBe(cents(7_500));
+    expect(career.balance).toBe(cents(7_500));
+    expect(career.statistics.peakBalance).toBe(cents(7_500));
     expect(career.loans).toHaveLength(0);
     expect(career.insurance).toBeNull();
     expect(career.financeRemainder).toBe(0);
