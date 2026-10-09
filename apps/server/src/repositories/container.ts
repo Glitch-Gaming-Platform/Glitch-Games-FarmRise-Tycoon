@@ -9,6 +9,8 @@ import { getEnv } from '../config/env';
 import { getDb } from '../db/client';
 import { createDrizzleRepositories } from './drizzle/index';
 import { createMemoryRepositories } from './memory/index';
+import { createPostgresRepositories } from './postgres/index';
+import { getPostgresPool } from '../db/postgres';
 import type { Repositories } from './ports';
 
 let cached: Repositories | null = null;
@@ -25,9 +27,8 @@ export function getRepositories(): Repositories {
       cached = createMemoryRepositories();
       break;
     case 'postgres':
-      throw new Error(
-        'The Postgres adapter is not implemented yet. Implement repositories/postgres/ against the same ports and add a case here. See docs/BACKEND.md.',
-      );
+      cached = createPostgresRepositories(getPostgresPool());
+      break;
     default:
       throw new Error(`Unsupported DATABASE_DRIVER "${String(env.DATABASE_DRIVER)}".`);
   }
