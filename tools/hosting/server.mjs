@@ -34,6 +34,22 @@ const configuredCorsOrigins = new Set(
 );
 
 async function migrateDatabase() {
+  if (process.env.DATABASE_DRIVER === 'postgres') {
+    // Production migrations run through the explicit db:pg:migrate operator gate.
+    // Never run the SQLite migrator against a PostgreSQL connection URL.
+    const { Pool } = await import('pg');
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+    try {
+      const result = await pool.query('SELECT 1 FROM migration_history WHERE id=$1', ['0001_init']);
+      if (result.rowCount !== 1) {
+        throw new Error('Farmrise PostgreSQL schema is not initialized. Run the authorized migrator.');
+      }
+    } finally {
+      await pool.end();
+    }
+    return;
+  }
+  if (process.env.DATABASE_DRIVER === 'memory') return;
   await new Promise((resolve, reject) => {
     const migration = spawn('npm', ['run', 'db:migrate', '--workspace', '@farmrise/server'], {
       cwd: root,
